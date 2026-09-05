@@ -145,11 +145,6 @@ def evening_ritual():
 
         # 计算生产力分数
         productivity = {}
-        try:
-            import growth_service
-            productivity = growth_service.compute_productivity_score(today_str)
-        except Exception:
-            pass
 
         # 今日任务统计
         tasks_done = 0

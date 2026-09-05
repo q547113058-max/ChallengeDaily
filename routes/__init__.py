@@ -54,7 +54,6 @@ from routes.privacy_dq_routes import bp as privacy_dq_bp
 from routes.db_advanced_routes import bp as db_advanced_bp
 from routes.cache_advanced_routes import bp as cache_advanced_bp
 from routes.daily_card import bp as daily_card_bp
-from routes.growth import bp as growth_bp
 from routes.ritual import bp as ritual_bp
 from routes.scheduler import bp as scheduler_bp
 from routes.mubu_routes import bp as mubu_bp
@@ -117,7 +116,6 @@ ALL_BLUEPRINTS = [
     db_advanced_bp,
     cache_advanced_bp,
     daily_card_bp,
-    growth_bp,
     ritual_bp,
     scheduler_bp,
     mubu_bp,
