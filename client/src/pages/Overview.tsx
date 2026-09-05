@@ -34,7 +34,6 @@ import SmartCoachPanel from '../components/SmartCoachPanel'
 import BenchmarkPanel from '../components/BenchmarkPanel'
 import MorningRitual from '../components/MorningRitual'
 import EveningRitual from '../components/EveningRitual'
-import { useGrowthStore } from '../stores/growthStore'
 
 function getDisplayAppName(appName: string): string {
   const lower = appName.toLowerCase()
@@ -88,7 +87,6 @@ export default function Overview() {
     let isFirst = true
     const refresh = async () => {
       if (!isFirst) setRefreshing(true)
-      useGrowthStore.getState().fetchGrowth()
       try {
         const [s, st, actsPage] = await Promise.all([
           getTodayStats(),

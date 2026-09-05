@@ -38,7 +38,6 @@ from routes.analytics_routes import bp as analytics_bp
 from routes.ai_intel_routes import bp as ai_intel_bp
 from routes.platform_routes import bp as platform_bp
 from routes.delight_routes import bp as delight_bp
-from routes.resilience_routes import bp as resilience_bp
 from routes.advanced_data_routes import bp as advanced_data_bp
 from routes.smart_routes import bp as smart_bp
 from routes.uiux_routes import bp as uiux_bp
@@ -100,7 +99,6 @@ ALL_BLUEPRINTS = [
     ai_intel_bp,
     platform_bp,
     delight_bp,
-    resilience_bp,
     advanced_data_bp,
     smart_bp,
     uiux_bp,

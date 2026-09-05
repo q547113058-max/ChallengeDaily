@@ -80,15 +80,6 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         keywords: ['end', 'day', 'report', '结束', '日报', '总结'],
         action: () => { navigate('/report'); onClose() },
       },
-      {
-        id: 'action-view-growth',
-        label: '查看成长等级',
-        icon: TrendingUp,
-        hint: '经验值与等级仪表盘',
-        group: 'action',
-        keywords: ['growth', 'level', 'exp', '成长', '等级', '经验'],
-        action: () => { navigate('/dashboard'); onClose() },
-      },
     ]
   }, [navigate, onClose])
 
