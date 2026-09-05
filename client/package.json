@@ -1,0 +1,248 @@
+{
+  "name": "challenge-daily",
+  "version": "3.4.1",
+  "description": "ChallengeDaily Windows - AI Work Daily Report Assistant",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "build": "vite build && electron-builder",
+    "bump": "node scripts/bump-version.cjs",
+    "preview": "vite preview",
+    "start": "electron .",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings 0",
+    "lint:fix": "eslint \"src/**/*.{ts,tsx}\" --fix",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css,json}\""
+  },
+  "dependencies": {
+    "@tailwindcss/typography": "^0.5.20",
+    "canvas-confetti": "^1.9.4",
+    "dayjs": "^1.11.12",
+    "electron-updater": "^6.8.9",
+    "framer-motion": "^12.42.2",
+    "lucide-react": "^0.424.0",
+    "lunar-javascript": "^1.7.7",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^9.0.1",
+    "react-router-dom": "^6.26.0",
+    "recharts": "^2.15.4",
+    "remark-gfm": "^4.0.1",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@babel/preset-env": "^7.24.0",
+    "@babel/preset-react": "^7.24.0",
+    "@babel/preset-typescript": "^7.24.0",
+    "@testing-library/jest-dom": "^6.4.0",
+    "@testing-library/react": "^16.0.0",
+    "@testing-library/user-event": "^14.5.0",
+    "@types/canvas-confetti": "^1.9.0",
+    "@types/jest": "^29.5.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "babel-jest": "^29.7.0",
+    "caniuse-lite": "^1.0.30001805",
+    "concurrently": "^8.2.2",
+    "electron": "^31.3.1",
+    "electron-builder": "^24.13.3",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react": "^7.35.0",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "postcss": "^8.4.40",
+    "prettier": "^3.3.3",
+    "tailwindcss": "^3.4.7",
+    "typescript": "^5.5.4",
+    "vite": "^5.3.5",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.challenge.daily",
+    "productName": "ChallengeDaily",
+    "directories": {
+      "output": "dist-electron-tmp6"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "public/icon.ico",
+      "artifactName": "ChallengeDaily-${version}-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "public/icon.ico",
+      "uninstallerIcon": "public/icon.ico",
+      "installerHeaderIcon": "public/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ChallengeDaily",
+      "perMachine": false,
+      "unicode": true,
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true
+    },
+    "portable": {
+      "artifactName": "ChallengeDaily-${version}-Portable.${ext}"
+    },
+    "publish": null,
+    "extraResources": [
+      {
+        "from": "../main.py",
+        "to": "backend/main.py"
+      },
+      {
+        "from": "../mcp_server.py",
+        "to": "backend/mcp_server.py"
+      },
+      {
+        "from": "../mubu_sync.py",
+        "to": "backend/mubu_sync.py"
+      },
+      {
+        "from": "../routes/mubu_routes.py",
+        "to": "backend/routes/mubu_routes.py"
+      },
+      {
+        "from": "../config.py",
+        "to": "backend/config.py"
+      },
+      {
+        "from": "../db.py",
+        "to": "backend/db.py"
+      },
+      {
+        "from": "../screenshot.py",
+        "to": "backend/screenshot.py"
+      },
+      {
+        "from": "../app_tracker.py",
+        "to": "backend/app_tracker.py"
+      },
+      {
+        "from": "../prompt.py",
+        "to": "backend/prompt.py"
+      },
+      {
+        "from": "../ai_client.py",
+        "to": "backend/ai_client.py"
+      },
+      {
+        "from": "../collector.py",
+        "to": "backend/collector.py"
+      },
+      {
+        "from": "../report.py",
+        "to": "backend/report.py"
+      },
+      {
+        "from": "../server.py",
+        "to": "backend/server.py"
+      },
+      {
+        "from": "../context_manager.py",
+        "to": "backend/context_manager.py"
+      },
+      {
+        "from": "../system_events.py",
+        "to": "backend/system_events.py"
+      },
+      {
+        "from": "../deep_insight_engine.py",
+        "to": "backend/deep_insight_engine.py"
+      },
+      {
+        "from": "../icon_extractor.py",
+        "to": "backend/icon_extractor.py"
+      },
+      {
+        "from": "../file_utils.py",
+        "to": "backend/file_utils.py"
+      },
+      {
+        "from": "../crypto.py",
+        "to": "backend/crypto.py"
+      },
+      {
+        "from": "../classifier.py",
+        "to": "backend/classifier.py"
+      },
+      {
+        "from": "../install_deps.py",
+        "to": "backend/install_deps.py"
+      },
+      {
+        "from": "../observability.py",
+        "to": "backend/observability.py"
+      },
+      {
+        "from": "../backup_scheduler.py",
+        "to": "backend/backup_scheduler.py"
+      },
+      {
+        "from": "../db_consistency_check.py",
+        "to": "backend/db_consistency_check.py"
+      },
+      {
+        "from": "../feature_flags.py",
+        "to": "backend/feature_flags.py"
+      },
+      {
+        "from": "../screenshot_redactor.py",
+        "to": "backend/screenshot_redactor.py"
+      },
+      {
+        "from": "../event_bus.py",
+        "to": "backend/event_bus.py"
+      },
+      {
+        "from": "../requirements.txt",
+        "to": "backend/requirements.txt"
+      },
+      {
+        "from": "../routes",
+        "to": "backend/routes",
+        "filter": [
+          "**/*.py"
+        ]
+      },
+      {
+        "from": "../deep_insight_frameworks.yaml",
+        "to": "backend/deep_insight_frameworks.yaml"
+      },
+      {
+        "from": "public/icon.png",
+        "to": "icon.png"
+      },
+      {
+        "from": "public/icon.ico",
+        "to": "icon.ico"
+      }
+    ]
+  }
+}

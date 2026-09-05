@@ -1,0 +1,690 @@
+import { useEffect, useMemo, useState, useCallback, useRef, type ReactNode } from 'react'
+import dayjs from 'dayjs'
+import { Solar } from 'lunar-javascript'
+import { MapPin, Navigation, CloudSun, Cloud, CloudRain, Snowflake, Wind, Zap, Brain, RefreshCw, Lightbulb, AlertTriangle, Trophy, Sparkles, Eye, Compass } from 'lucide-react'
+import { request } from '../api/client'
+import { useGrowthStore } from '../stores/growthStore'
+
+interface HeroInfoProps {
+  todayDurationMin: number
+}
+
+interface WeatherInfo {
+  temp: number
+  code: number
+  city?: string
+}
+
+interface InsightTag {
+  type: 'mood' | 'care' | 'achievement' | 'reminder'
+  text: string
+}
+
+interface InsightData {
+  summary: string
+  structured?: {
+    headline: string
+    mood: string
+    story: string
+    tags: InsightTag[]
+    tips: string[]
+  }
+}
+
+const WEEKDAYS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
+
+const WEATHER_EMOJI: Record<number, string> = {
+  0: '☀️',
+  1: '🌤️', 2: '⛅', 3: '☁️',
+  45: '🌫️', 48: '🌫️',
+  51: '🌦️', 53: '🌦️', 55: '🌧️',
+  61: '🌧️', 63: '🌧️', 65: '🌧️',
+  71: '🌨️', 73: '🌨️', 75: '🌨️',
+  95: '⛈️', 96: '⛈️', 99: '⛈️',
+}
+
+function getWeatherIcon(code: number) {
+  if (code <= 1) return <CloudSun size={18} className="text-cd-green" />
+  if (code <= 3) return <CloudSun size={18} className="text-cd-text-secondary" />
+  if (code <= 48) return <Cloud size={18} className="text-cd-text-tertiary" />
+  if (code <= 67) return <CloudRain size={18} className="text-blue-400" />
+  if (code <= 77) return <Snowflake size={18} className="text-cyan-300" />
+  if (code <= 99) return <Zap size={18} className="text-yellow-400" />
+  return <CloudSun size={18} className="text-cd-text-secondary" />
+}
+
+function getWeatherText(code: number) {
+  if (code === 0) return '晴朗'
+  if (code <= 3) return '多云'
+  if (code <= 48) return '雾'
+  if (code <= 55) return '细雨'
+  if (code <= 65) return '降雨'
+  if (code <= 77) return '降雪'
+  if (code <= 99) return '雷阵雨'
+  return '未知'
+}
+
+const tzCity = (() => {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+    const raw = tz.split('/').pop()?.replace(/_/g, ' ') || '本地'
+    // 中国时区常见城市名→中文映射（时区兜底时使用）
+    const tzCityMap: Record<string, string> = {
+      'Shanghai': '上海',
+      'Beijing': '北京',
+      'Chongqing': '重庆',
+      'Urumqi': '乌鲁木齐',
+      'Hong Kong': '香港',
+      'Macau': '澳门',
+      'Taipei': '台北',
+    }
+    return tzCityMap[raw] || raw
+  } catch {
+    return '本地'
+  }
+})()
+
+/** 把故事里的数字、时间、百分比高亮，方便一眼看到重点 */
+function highlightStory(text: string): ReactNode[] {
+  const result: ReactNode[] = []
+  const regex = /(\d{1,2}:\d{2})|(\d+\.?\d*)\s*(小时|分钟|条|%|\/100|h|min)/g
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+  let key = 0
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      result.push(<span key={key++}>{text.slice(lastIndex, match.index)}</span>)
+    }
+    if (match[1]) {
+      result.push(<span key={key++} className="text-purple-300 font-semibold">{match[1]}</span>)
+    } else {
+      result.push(<span key={key++} className="text-cd-green font-semibold">{match[2]}{match[3]}</span>)
+    }
+    lastIndex = match.index + match[0].length
+  }
+  if (lastIndex < text.length) {
+    result.push(<span key={key++}>{text.slice(lastIndex)}</span>)
+  }
+  return result
+}
+
+export default function HeroInfo({ todayDurationMin }: HeroInfoProps) {
+  const [now, setNow] = useState(dayjs())
+  const [weather, setWeather] = useState<WeatherInfo | null>(null)
+  const [city, setCity] = useState<string>(tzCity)
+  const [preciseLocation, setPreciseLocation] = useState<string>('')
+  const [loadingWeather, setLoadingWeather] = useState(false)
+  const [insight, setInsight] = useState<InsightData | null>(null)
+  const [loadingInsight, setLoadingInsight] = useState(false)
+  // 用于在 setTimeout/setInterval 闭包中读取最新的 insight，避免陈旧闭包
+  const insightRef = useRef<InsightData | null>(null)
+  useEffect(() => { insightRef.current = insight }, [insight])
+
+  // ── 成长系统（等级 + 人生进度） ──
+  const { level, totalExp, currentLevelExp, expToNext, streakDays, lifeProgress, fetchLifeProgress } = useGrowthStore()
+
+  useEffect(() => {
+    fetchLifeProgress()
+  }, [fetchLifeProgress])
+
+  // 实时更新时间 — 每秒刷新，显示 HH:mm:ss
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(dayjs())
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  // 农历
+  const lunarText = useMemo(() => {
+    const solar = Solar.fromYmd(now.year(), now.month() + 1, now.date())
+    const lunar = solar.getLunar()
+    const month = lunar.getMonthInChinese()
+    const day = lunar.getDayInChinese()
+    const term = lunar.getJieQi()
+    return `农历${month}月${day}${term ? ` · ${term}` : ''}`
+  }, [now])
+
+  // 获取定位 + 天气（Windows 系统定位 → 浏览器 GPS → 多 IP 源 → 时区兜底）
+  useEffect(() => {
+    setLoadingWeather(true)
+    let cancelled = false
+    const done = () => { if (!cancelled) setLoadingWeather(false) }
+
+    const fetchWeather = async (lat: number, lon: number) => {
+      const res = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=auto`,
+        { signal: AbortSignal.timeout(8000) }
+      )
+      const data = await res.json()
+      if (!cancelled) {
+        setWeather({
+          temp: Math.round(data.current.temperature_2m),
+          code: data.current.weather_code,
+        })
+      }
+    }
+
+    // 逆地理编码：从坐标解析出城市 + 精确位置（街道/建筑/POI）
+    const fetchCityByCoords = async (lat: number, lon: number, precise = false) => {
+      // ── 第一层：BigDataCloud（免费，返回 neighbourhood / POI / locality 字段）──
+      try {
+        const res = await fetch(
+          `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=zh`,
+          { signal: AbortSignal.timeout(8000) }
+        )
+        const data = await res.json()
+        const cityName = data.city || data.locality || data.principalSubdivision
+        if (cityName && !cancelled) setCity(cityName)
+
+        // 提取精确位置：locality(区县) > POI > neighbourhood
+        const poiParts: string[] = []
+        // 区县级别（BigDataCloud 对中国支持较好）
+        if (data.locality && data.locality !== data.city) poiParts.push(data.locality)
+        if (data.poi) poiParts.push(data.poi)
+        if (data.neighbourhood && data.neighbourhood !== data.city && data.neighbourhood !== data.locality) {
+          poiParts.push(data.neighbourhood)
+        }
+        if (data.poiDescription) {
+          const desc = data.poiDescription
+          if (!poiParts.some(p => desc.toLowerCase().includes(p.toLowerCase()))) {
+            poiParts.push(desc)
+          }
+        }
+        if (poiParts.length > 0 && !cancelled) {
+          setPreciseLocation(poiParts.join(' · '))
+        }
+      } catch { /* ignore */ }
+
+      // ── 第二层：Nominatim（OSM，高精度坐标时解析到建筑/道路级，国内可能超时）──
+      if (!precise) return
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1&accept-language=zh-CN`,
+          {
+            signal: AbortSignal.timeout(5000),
+            headers: { 'User-Agent': 'ChallengeDaily/1.5.0' },
+          }
+        )
+        const data = await res.json()
+        const addr = data.address || {}
+
+        const place =
+          addr.building ||
+          addr.college ||
+          addr.school ||
+          addr.university ||
+          addr.hospital ||
+          addr.mall ||
+          addr.office ||
+          addr.hotel ||
+          addr.restaurant ||
+          addr.shop ||
+          addr.amenity ||
+          addr.suburb ||
+          addr.quarter ||
+          addr.neighbourhood ||
+          addr.road
+
+        if (place && !cancelled) {
+          const currentPrecise = preciseLocation
+          if (!currentPrecise) {
+            const detailParts: string[] = []
+            if (addr.road) detailParts.push(addr.road)
+            if (addr.house_number) detailParts.push(addr.house_number + '号')
+            if (addr.building && addr.building !== addr.road) detailParts.push(addr.building)
+            const detail = detailParts.join('')
+            if (detail) {
+              setPreciseLocation(detail)
+            } else {
+              setPreciseLocation(place)
+            }
+          }
+          const betterCity = addr.city || addr.town || addr.county || addr.state
+          if (betterCity && betterCity !== city) {
+            setCity(betterCity)
+          }
+        }
+      } catch { /* Nominatim 国内经常超时，静默忽略 */ }
+    }
+
+    const fetchWeatherByCityName = async (name: string) => {
+      try {
+        const res = await fetch(
+          `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1`,
+          { signal: AbortSignal.timeout(8000) }
+        )
+        const data = await res.json()
+        const r = data.results?.[0]
+        if (r) {
+          if (!cancelled) setCity(r.name || name)
+          await fetchWeather(r.latitude, r.longitude)
+          return true
+        }
+      } catch { /* ignore */ }
+      return false
+    }
+
+    const tryWindowsLocation = async (): Promise<boolean> => {
+      try {
+        const loc = await window.electronAPI?.getWindowsLocation?.()
+        if (loc && loc.lat && loc.lon) {
+          await Promise.all([
+            fetchWeather(loc.lat, loc.lon),
+            fetchCityByCoords(loc.lat, loc.lon, true),
+          ])
+          return true
+        }
+      } catch (e) {
+        console.warn('[HeroInfo] Windows location failed:', e)
+      }
+      return false
+    }
+
+    const tryBrowserGeo = async (): Promise<boolean> => {
+      return new Promise((resolve) => {
+        if (!('geolocation' in navigator)) return resolve(false)
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            try {
+              const { latitude, longitude } = pos.coords
+              await Promise.all([
+                fetchWeather(latitude, longitude),
+                fetchCityByCoords(latitude, longitude, true),
+              ])
+              resolve(true)
+            } catch {
+              resolve(false)
+            }
+          },
+          () => resolve(false),
+          { timeout: 10000, enableHighAccuracy: true }
+        )
+      })
+    }
+
+    // 百度智能云免费 IP 定位（国内最准，无需 Key，返回 WGS84 坐标）
+    const tryBaiduQifu = async (): Promise<boolean> => {
+      try {
+        const res = await fetch('https://qifu-api.baidubce.com/ip/local/geo/v1/district', {
+          signal: AbortSignal.timeout(6000),
+        })
+        const data = await res.json()
+        if (data.code === 'Success' && Array.isArray(data.data?.location)) {
+          const [lon, lat] = data.data.location
+          if (lat && lon) {
+            if (data.data.city && !cancelled) setCity(data.data.city)
+            await Promise.all([
+              fetchWeather(lat, lon),
+              fetchCityByCoords(lat, lon),
+            ])
+            return true
+          }
+        }
+      } catch { /* try next */ }
+      return false
+    }
+
+    // 腾讯 IP 定位（需要 Key 才能返回坐标，无 Key 时仅返回城市名）
+    const tryTencentIP = async (): Promise<boolean> => {
+      try {
+        const res = await fetch('https://apis.map.qq.com/ws/location/v1/ip', {
+          signal: AbortSignal.timeout(6000),
+        })
+        const data = await res.json()
+        if (data.status === 0 && data.result) {
+          const r = data.result
+          const loc = r.location
+          const adInfo = r.ad_info
+          const districtName = adInfo?.district || adInfo?.city || ''
+          if (districtName && !cancelled) setCity(districtName)
+          if (loc?.lat && loc?.lng) {
+            await Promise.all([
+              fetchWeather(loc.lat, loc.lng),
+              fetchCityByCoords(loc.lat, loc.lng),
+            ])
+            return true
+          }
+          if (districtName) return true
+        }
+        // status !== 0 说明需要 Key，静默跳过
+      } catch { /* try next */ }
+      return false
+    }
+
+    // 搜狐免费 IP 城市（只返回城市名，用 open-meteo 地理编码转坐标）
+    const trySohu = async (): Promise<boolean> => {
+      try {
+        const res = await fetch('https://pv.sohu.com/cityjson?ie=utf-8', {
+          signal: AbortSignal.timeout(6000),
+        })
+        const text = await res.text()
+        const match = text.match(/returnCitySN\s*=\s*(\{[^}]+\})/)
+        if (match) {
+          const data = JSON.parse(match[1])
+          if (data.cname) return await fetchWeatherByCityName(data.cname)
+        }
+      } catch { /* try next */ }
+      return false
+    }
+
+    // 新浪免费 IP 城市
+    const trySina = async (): Promise<boolean> => {
+      try {
+        const res = await fetch('https://int.dpool.sina.com.cn/iplookup/iplookup.php?format=js', {
+          signal: AbortSignal.timeout(6000),
+        })
+        const text = await res.text()
+        const match = text.match(/remote_ip_info\s*=\s*(\{[^}]+\})/)
+        if (match) {
+          const data = JSON.parse(match[1])
+          if (data.city) return await fetchWeatherByCityName(data.city)
+        }
+      } catch { /* try next */ }
+      return false
+    }
+
+    // 海外 IP 定位兜底
+    // ipinfo.io 对国内 IP 最准确（实测返回真实城市），优先使用
+    // ipapi.co / ip-api.com 对国内 IP 经常 403 或返回笼统城市
+    const tryOverseasIP = async (): Promise<boolean> => {
+      const services = [
+        {
+          url: 'https://ipinfo.io/json',
+          parse: (d: any) => {
+            if (!d.loc) return null
+            const [lat, lon] = d.loc.split(',').map(Number)
+            return { lat, lon, city: d.city }
+          },
+        },
+        {
+          url: 'https://ipapi.co/json/',
+          parse: (d: any) => (d.latitude && d.longitude ? { lat: d.latitude, lon: d.longitude, city: d.city } : null),
+        },
+        {
+          url: 'https://ip-api.com/json/',
+          parse: (d: any) => (d.lat && d.lon ? { lat: d.lat, lon: d.lon, city: d.city } : null),
+        },
+      ]
+      for (const svc of services) {
+        try {
+          const res = await fetch(svc.url, { signal: AbortSignal.timeout(6000) })
+          const data = await res.json()
+          const info = svc.parse(data)
+          if (info && info.lat && info.lon) {
+            if (info.city && !cancelled) setCity(info.city)
+            await fetchWeather(info.lat, info.lon)
+            return true
+          }
+        } catch { /* try next */ }
+      }
+      return false
+    }
+
+    const run = async () => {
+      if (await tryWindowsLocation()) return done()
+      if (await tryBrowserGeo()) return done()
+      // 国内 IP 定位源：腾讯 → 新浪 → 搜狐 → 百度（百度 Qifu 常返回 403 放后面）
+      if (await tryTencentIP()) return done()
+      if (await trySina()) return done()
+      if (await trySohu()) return done()
+      if (await tryBaiduQifu()) return done()
+      // 海外 IP（ipinfo.io 对国内 IP 实测最准）
+      if (await tryOverseasIP()) return done()
+      // 最终兜底：时区城市
+      await fetchWeatherByCityName(tzCity)
+      done()
+    }
+
+    run()
+    return () => { cancelled = true }
+  }, [])
+
+  // 获取 AI 洞察（基于真实活动数据的分析，非空话寄语）
+  // silent=true 时为后台轮询，不显示loading闪烁；silent=false 为用户主动刷新或首次加载
+  const fetchInsight = useCallback((force = false, silent = false) => {
+    if (!silent) setLoadingInsight(true)
+    const url = force ? '/api/ai/overview-summary?refresh=1' : '/api/ai/overview-summary'
+    // AI 生成可能耗时较长，给 30 秒超时
+    request(url, {}, 30000)
+      .then((raw) => {
+        const data = raw as InsightData
+        if (data.summary || data.structured) setInsight(data)
+      })
+      .catch((err) => {
+        console.error('[AI洞察] 获取失败:', err)
+      })
+      .finally(() => { if (!silent) setLoadingInsight(false) })
+  }, [])
+
+  useEffect(() => {
+    fetchInsight()
+    // 启动后 3 秒再拉一次，避免后端初始化未完成导致空数据
+    const retryTimer = setTimeout(() => {
+      // 通过 ref 读取最新值，避免闭包陈旧导致重复拉取
+      if (!insightRef.current) fetchInsight(false, true)
+    }, 3000)
+    // 5 分钟刷新一次（与后端缓存 TTL 对齐），静默轮询不闪loading
+    const timer = setInterval(() => fetchInsight(false, true), 300000)
+    return () => {
+      clearTimeout(retryTimer)
+      clearInterval(timer)
+    }
+  }, [fetchInsight])
+
+  // 日/周/月进度
+  const progressData = useMemo(() => {
+    const nowMin = now.hour() * 60 + now.minute()
+    const dayPct = Math.round(nowMin / (24 * 60) * 100)
+
+    // 周进度：周一 00:00 为起点，周日 23:59 为终点
+    const dayOfWeek = now.day() === 0 ? 6 : now.day() - 1  // 周一=0 ... 周日=6
+    const weekPct = Math.round(((dayOfWeek * 24 * 60 + nowMin) / (7 * 24 * 60)) * 100)
+
+    // 月进度
+    const daysInMonth = now.daysInMonth()
+    const dayOfMonth = now.date()
+    const monthPct = Math.round(((dayOfMonth - 1 + nowMin / (24 * 60)) / daysInMonth) * 100)
+
+    return { dayPct, weekPct, monthPct }
+  }, [now])
+
+  return (
+    <div>
+      {/* 第一行：时间日期 + 天气位置 + 进度 — 自适应布局 */}
+      <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+        {/* 时间日期 */}
+        <div className="flex items-center gap-7 shrink-0">
+          <div className="text-5xl font-bold text-cd-text tracking-tight font-brand leading-none tabular-nums w-[14.5rem]">
+            {now.format('HH:mm:ss')}
+          </div>
+          <div className="flex flex-col justify-center leading-tight">
+            <div className="text-base text-cd-text font-semibold font-display">{now.format('M月D日')}</div>
+            <div className="text-sm text-cd-text-secondary font-display">{WEEKDAYS[now.day()]}</div>
+            <div className="text-sm text-cd-text-tertiary font-display">{lunarText}</div>
+          </div>
+        </div>
+
+        {/* 分隔线 */}
+        <div className="h-10 w-px bg-cd-border shrink-0 hidden sm:block" />
+
+        {/* 位置 + 天气 — 纵向排列 */}
+        <div className="flex flex-col gap-1 shrink-0">
+          <div className="flex items-center gap-1.5 text-sm text-cd-text-secondary">
+            <MapPin size={15} className="text-cd-green shrink-0" />
+            <span className="font-display font-medium">{city || tzCity}</span>
+            {preciseLocation && (
+              <span className="text-xs text-cd-text-tertiary font-display flex items-center gap-0.5">
+                <Navigation size={10} className="shrink-0" />
+                {preciseLocation}
+              </span>
+            )}
+          </div>
+          {loadingWeather ? (
+            <div className="flex items-center gap-1.5 text-sm text-cd-text-tertiary">
+              <Wind size={15} className="animate-spin" />
+              <span className="font-display">获取天气...</span>
+            </div>
+          ) : weather ? (
+            <div className="flex items-center gap-1.5 text-sm text-cd-text">
+              {getWeatherIcon(weather.code)}
+              <span className="font-brand font-semibold">{weather.temp}°C</span>
+              <span className="text-cd-text-secondary font-display">{getWeatherText(weather.code)}</span>
+            </div>
+          ) : null}
+        </div>
+
+        {/* 分隔线 */}
+        <div className="h-10 w-px bg-cd-border shrink-0 hidden sm:block" />
+
+        {/* 日/周/月进度 — 纵向排列 */}
+        <div className="flex flex-col gap-1 shrink-0">
+          {[
+            { label: '今日', pct: progressData.dayPct },
+            { label: '本周', pct: progressData.weekPct },
+            { label: '本月', pct: progressData.monthPct },
+          ].map((p) => (
+            <div key={p.label} className="flex items-center gap-2">
+              <span className="text-xs text-cd-text-tertiary font-display whitespace-nowrap w-6">{p.label}</span>
+              <div className="w-20 sm:w-24 h-1.5 rounded-full bg-cd-bg-tertiary overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{
+                    width: `${p.pct}%`,
+                    background: `linear-gradient(90deg, var(--cd-green), var(--cd-blue))`,
+                  }}
+                />
+              </div>
+              <span className="text-xs font-brand font-semibold text-cd-text-secondary whitespace-nowrap w-8 text-right">{p.pct}%</span>
+            </div>
+          ))}
+        </div>
+
+        {/* 分隔线 */}
+        <div className="h-10 w-px bg-cd-border shrink-0 hidden sm:block" />
+
+        {/* 等级 + 人生进度 */}
+        <div className="flex flex-col gap-1.5 shrink-0">
+          {/* 等级 */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-cd-text-tertiary font-display whitespace-nowrap w-6">等级</span>
+            <div className="w-20 sm:w-24 h-1.5 rounded-full bg-cd-bg-tertiary overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${expToNext > 0 ? Math.min(currentLevelExp / expToNext * 100, 100) : 0}%`,
+                  background: `linear-gradient(90deg, #af52de, #ff9500)`,
+                }}
+              />
+            </div>
+            <span className="text-xs font-brand font-semibold text-cd-text-secondary whitespace-nowrap">
+              Lv.{level}
+            </span>
+          </div>
+
+          {/* 人生进度（QuantLife 灵感） */}
+          {lifeProgress && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-cd-text-tertiary font-display whitespace-nowrap w-6">人生</span>
+              <div className="w-20 sm:w-24 h-1.5 rounded-full bg-cd-bg-tertiary overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{
+                    width: `${lifeProgress.pct}%`,
+                    background: `linear-gradient(90deg, #5ac8fa, #34c759)`,
+                  }}
+                />
+              </div>
+              <span className="text-xs font-brand font-semibold text-cd-text-secondary whitespace-nowrap">
+                {lifeProgress.pct}%
+              </span>
+            </div>
+          )}
+
+          {/* 连续天数 */}
+          {streakDays > 0 && (
+            <div className="flex items-center gap-1.5">
+              <Zap size={11} className="text-amber-400 shrink-0" />
+              <span className="text-[11px] text-amber-500 font-brand font-medium">连续 {streakDays} 天</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 第二行：AI 洞察（温柔朋友风格） */}
+      <div className="mt-4">
+        <div className="flex items-center gap-1.5 mb-2">
+          <Brain size={16} className="text-cd-green" />
+          <span className="text-xs text-cd-green font-medium uppercase tracking-wider">AI 洞察</span>
+          {!loadingInsight && insight && (
+            <button onClick={() => fetchInsight(true)} className="text-cd-text-tertiary hover:text-cd-text transition" title="刷新">
+              <RefreshCw size={12} />
+            </button>
+          )}
+        </div>
+        {loadingInsight ? (
+          <p className="text-base text-cd-text-tertiary animate-pulse">正在分析今日工作数据...</p>
+        ) : insight ? (
+          <div className="rounded-2xl bg-gradient-to-br from-purple-500/10 via-indigo-500/10 to-blue-500/10 dark:from-[#1E1E2E] dark:to-[#252538] border border-purple-200/30 dark:border-white/5 p-4 shadow-sm">
+            {insight.structured ? (
+              <div className="space-y-4">
+                {/* 顶部：心情 emoji + headline */}
+                <div className="flex items-start gap-2.5">
+                  <span className="text-2xl shrink-0 leading-none mt-0.5">
+                    {insight.structured.mood === 'proud' && '🌟'}
+                    {insight.structured.mood === 'tired' && '😴'}
+                    {insight.structured.mood === 'focused' && '🎯'}
+                    {insight.structured.mood === 'balanced' && '☕'}
+                    {insight.structured.mood === 'scattered' && '🍃'}
+                    {insight.structured.mood === 'excited' && '✨'}
+                    {(!insight.structured.mood || insight.structured.mood === 'warm') && '🌸'}
+                  </span>
+                  <p className="text-xl text-cd-text font-semibold leading-snug">{insight.structured.headline || insight.summary}</p>
+                </div>
+
+                {/* 主体：朋友式小作文，字号加大、行距宽松，数字高亮 */}
+                {insight.structured.story && (
+                  <p className="text-lg text-cd-text-secondary leading-[1.8]">{highlightStory(insight.structured.story)}</p>
+                )}
+
+                {/* 可爱的情绪/关怀标签 */}
+                {insight.structured.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {insight.structured.tags.map((tag, idx) => {
+                      const styles = {
+                        mood: 'text-pink-300 bg-pink-400/10 border-pink-400/20',
+                        care: 'text-orange-300 bg-orange-400/10 border-orange-400/20',
+                        achievement: 'text-green-300 bg-green-400/10 border-green-400/20',
+                        reminder: 'text-sky-300 bg-sky-400/10 border-sky-400/20',
+                      }
+                      return (
+                        <span
+                          key={idx}
+                          className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium border ${styles[tag.type]}`}
+                        >
+                          {tag.text}
+                        </span>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* 温柔小建议 */}
+                {insight.structured.tips.length > 0 && (
+                    <div className="flex items-start gap-2.5 pt-2 border-t border-purple-200/30 dark:border-white/5">
+                    <Sparkles size={16} className="shrink-0 mt-1 text-purple-500 dark:text-purple-400" />
+                    <p className="text-base text-purple-700 dark:text-purple-300 leading-relaxed">{insight.structured.tips[0]}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-lg text-cd-text leading-relaxed">{insight.summary}</p>
+            )}
+          </div>
+        ) : (
+          <p className="text-base text-cd-text-tertiary">配置 AI 后，这里会基于真实工作数据给出温柔洞察。</p>
+        )}
+      </div>
+    </div>
+  )
+}

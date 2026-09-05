@@ -1,0 +1,682 @@
+import { useState, useRef } from 'react'
+import { BarChart3, TrendingUp, Calendar, Database, Download, Loader2, CheckCircle, FileText, ListTree, Upload, AlertCircle, Trash2, AlertTriangle } from 'lucide-react'
+import { getApiToken, getBaseUrl, ensureBaseUrl, importTogglCsv, importRescueTimeCsv, wipeAllData, type WipeResult } from '../api/client'
+import { useToast } from '../components/Toast'
+
+// ── 下载状态 ──
+type DownloadState = 'idle' | 'loading' | 'success' | 'error'
+
+// ── 通用下载函数：调用后端导出接口并触发文件下载 ──
+async function downloadExport(endpoint: string, params: Record<string, string>): Promise<void> {
+  await ensureBaseUrl()
+  const token = await getApiToken()
+  const url = new URL(getBaseUrl() + endpoint)
+  for (const [k, v] of Object.entries(params)) {
+    if (v) url.searchParams.set(k, v)
+  }
+  const res = await fetch(url.toString(), {
+    method: 'GET',
+    headers: {
+      ...(token ? { 'X-API-Token': token } : {}),
+    },
+  })
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '')
+    throw new Error(errText || `HTTP ${res.status}`)
+  }
+  // 从 Content-Disposition 提取文件名
+  const cd = res.headers.get('Content-Disposition') || ''
+  let filename = `export_${Date.now()}`
+  const m = cd.match(/filename="?([^"]+)"?/)
+  if (m) filename = m[1]
+  // 根据 mimetype 推断扩展名
+  const ct = res.headers.get('Content-Type') || ''
+  if (!filename.includes('.') && ct.includes('markdown')) filename += '.md'
+  else if (!filename.includes('.') && ct.includes('csv')) filename += '.csv'
+  else if (!filename.includes('.') && ct.includes('json')) filename += '.json'
+
+  const blob = await res.blob()
+  const objUrl = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = objUrl
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(objUrl)
+}
+
+// ── 单个格式按钮 ──
+function FormatButton({
+  format,
+  state,
+  onClick,
+}: {
+  format: string
+  state: DownloadState
+  onClick: () => void
+}) {
+  const labelMap: Record<string, string> = {
+    markdown: 'Markdown',
+    json: 'JSON',
+    csv: 'CSV',
+  }
+  return (
+    <button
+      onClick={onClick}
+      disabled={state === 'loading'}
+      className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+        state === 'loading'
+          ? 'bg-cd-bg-secondary text-cd-text-tertiary cursor-wait'
+          : state === 'success'
+            ? 'bg-cd-green/15 text-cd-green border border-cd-green/30'
+            : 'bg-cd-bg-secondary text-cd-text-secondary hover:bg-cd-hover hover:text-cd-text border border-cd-border'
+      }`}
+    >
+      {state === 'loading' ? (
+        <Loader2 size={13} className="animate-spin" />
+      ) : state === 'success' ? (
+        <CheckCircle size={13} />
+      ) : (
+        <Download size={13} />
+      )}
+      {labelMap[format] || format}
+    </button>
+  )
+}
+
+// ── 导出卡片 ──
+interface ExportCardProps {
+  icon: typeof BarChart3
+  title: string
+  description: string
+  accentColor: string
+  children: React.ReactNode
+}
+
+function ExportCard({ icon: Icon, title, description, accentColor, children }: ExportCardProps) {
+  return (
+    <div className="bg-cd-bg-secondary border border-cd-border rounded-xl p-5 hover:border-cd-green/30 transition-colors">
+      <div className="flex items-start gap-3 mb-4">
+        <div
+          className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+          style={{ background: `${accentColor}22`, color: accentColor }}
+        >
+          <Icon size={20} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-semibold text-cd-text">{title}</h3>
+          <p className="text-xs text-cd-text-tertiary mt-0.5 leading-relaxed">{description}</p>
+        </div>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+export default function ExportCenter() {
+  // 周报告
+  const [weekStart, setWeekStart] = useState(() => {
+    const now = new Date()
+    const day = now.getDay() === 0 ? 7 : now.getDay()
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - day + 1)
+    return monday.toISOString().slice(0, 10)
+  })
+  const [weekStates, setWeekStates] = useState<Record<string, DownloadState>>({})
+
+  // 月报告
+  const [monthKey, setMonthKey] = useState(() => new Date().toISOString().slice(0, 7))
+  const [monthStates, setMonthStates] = useState<Record<string, DownloadState>>({})
+
+  // 年度总结
+  const [year, setYear] = useState(() => String(new Date().getFullYear()))
+  const [yearStates, setYearStates] = useState<Record<string, DownloadState>>({})
+
+  // 全部数据
+  const [allStates, setAllStates] = useState<Record<string, DownloadState>>({})
+
+  // P8-4：报告导出 + 活动明细聚合导出
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const monthAgoStr = (() => {
+    const d = new Date()
+    d.setDate(d.getDate() - 29)
+    return d.toISOString().slice(0, 10)
+  })()
+  const [reportsRange, setReportsRange] = useState({ start: monthAgoStr, end: todayStr })
+  const [reportsStates, setReportsStates] = useState<Record<string, DownloadState>>({})
+  const [activitiesRange, setActivitiesRange] = useState({ start: monthAgoStr, end: todayStr })
+  const [activitiesStates, setActivitiesStates] = useState<Record<string, DownloadState>>({})
+
+  const [errorMsg, setErrorMsg] = useState('')
+
+  const handleDownload = async (
+    endpoint: string,
+    params: Record<string, string>,
+    stateKey: string,
+    setStates: React.Dispatch<React.SetStateAction<Record<string, DownloadState>>>,
+    format: string,
+  ) => {
+    setErrorMsg('')
+    setStates(prev => ({ ...prev, [format]: 'loading' }))
+    try {
+      await downloadExport(endpoint, { ...params, format })
+      setStates(prev => ({ ...prev, [format]: 'success' }))
+      // 2 秒后恢复 idle
+      setTimeout(() => {
+        setStates(prev => ({ ...prev, [format]: 'idle' }))
+      }, 2000)
+    } catch (e: any) {
+      setStates(prev => ({ ...prev, [format]: 'error' }))
+      setErrorMsg(e?.message || '下载失败，请稍后重试')
+      setTimeout(() => {
+        setStates(prev => ({ ...prev, [format]: 'idle' }))
+      }, 2000)
+    }
+  }
+
+  return (
+    <div className="max-w-5xl mx-auto">
+      {/* 标题 */}
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-cd-text flex items-center gap-2">
+          <Database size={24} className="text-cd-green" />
+          数据导出中心
+        </h1>
+        <p className="text-sm text-cd-text-tertiary mt-1">
+          一键导出你的工作数据，支持 Markdown / JSON / CSV 多种格式，方便归档与分享 📦
+        </p>
+      </div>
+
+      {/* 错误提示 */}
+      {errorMsg && (
+        <div className="mb-4 px-4 py-3 rounded-lg bg-cd-red/10 border border-cd-red/20 text-sm text-cd-red">
+          {errorMsg}
+        </div>
+      )}
+
+      {/* 2×2 网格 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* 📊 周报告导出 */}
+        <ExportCard
+          icon={BarChart3}
+          title="周报告导出"
+          description="本周任务完成情况 + 番茄统计 + 活动汇总，一键回顾这一周"
+          accentColor="#10b981"
+        >
+          <div className="space-y-3">
+            <div>
+              <label className="block text-[11px] text-cd-text-tertiary mb-1">选择周（周一日期）</label>
+              <input
+                type="date"
+                value={weekStart}
+                onChange={e => setWeekStart(e.target.value)}
+                className="w-full bg-cd-bg border border-cd-border rounded-lg px-3 py-2 text-sm text-cd-text focus:outline-none focus:border-cd-green"
+              />
+            </div>
+            <div className="flex gap-2">
+              <FormatButton
+                format="markdown"
+                state={weekStates.markdown || 'idle'}
+                onClick={() =>
+                  handleDownload('/api/exports/weekly-report', { week_start: weekStart }, 'week', setWeekStates, 'markdown')
+                }
+              />
+              <FormatButton
+                format="json"
+                state={weekStates.json || 'idle'}
+                onClick={() =>
+                  handleDownload('/api/exports/weekly-report', { week_start: weekStart }, 'week', setWeekStates, 'json')
+                }
+              />
+              <FormatButton
+                format="csv"
+                state={weekStates.csv || 'idle'}
+                onClick={() =>
+                  handleDownload('/api/exports/weekly-report', { week_start: weekStart }, 'week', setWeekStates, 'csv')
+                }
+              />
+            </div>
+          </div>
+        </ExportCard>
+
+        {/* 📈 月报告导出 */}
+        <ExportCard
+          icon={TrendingUp}
+          title="月报告导出"
+          description="月目标 + 完成率 + 每日热力图 + 分类分布，月度复盘好帮手"
+          accentColor="#3b82f6"
+        >
+          <div className="space-y-3">
+            <div>
+              <label className="block text-[11px] text-cd-text-tertiary mb-1">选择月</label>
+              <input
+                type="month"
+                value={monthKey}
+                onChange={e => setMonthKey(e.target.value)}
+                className="w-full bg-cd-bg border border-cd-border rounded-lg px-3 py-2 text-sm text-cd-text focus:outline-none focus:border-cd-green"
+              />
+            </div>
+            <div className="flex gap-2">
+              <FormatButton
+                format="markdown"
+                state={monthStates.markdown || 'idle'}
+                onClick={() =>
+                  handleDownload('/api/exports/monthly-report', { month_key: monthKey }, 'month', setMonthStates, 'markdown')
+                }
+              />
+              <FormatButton
+                format="json"
+                state={monthStates.json || 'idle'}
+                onClick={() =>
+                  handleDownload('/api/exports/monthly-report', { month_key: monthKey }, 'month', setMonthStates, 'json')
+                }
+              />
+            </div>
+          </div>
+        </ExportCard>
+
+        {/* 📅 年度总结导出 */}
+        <ExportCard
+          icon={Calendar}
+          title="年度总结导出"
+          description="全年热力图数据 + 月度趋势 + 成就墙，年终回顾一目了然"
+          accentColor="#a855f7"
+        >
+          <div className="space-y-3">
+            <div>
+              <label className="block text-[11px] text-cd-text-tertiary mb-1">选择年</label>
+              <input
+                type="number"
+                value={year}
+                min="2020"
+                max="2099"
+                onChange={e => setYear(e.target.value)}
+                className="w-full bg-cd-bg border border-cd-border rounded-lg px-3 py-2 text-sm text-cd-text focus:outline-none focus:border-cd-green"
+              />
+            </div>
+            <div className="flex gap-2">
+              <FormatButton
+                format="markdown"
+                state={yearStates.markdown || 'idle'}
+                onClick={() =>
+                  handleDownload('/api/exports/yearly-summary', { year }, 'year', setYearStates, 'markdown')
+                }
+              />
+              <FormatButton
+                format="json"
+                state={yearStates.json || 'idle'}
+                onClick={() =>
+                  handleDownload('/api/exports/yearly-summary', { year }, 'year', setYearStates, 'json')
+                }
+              />
+            </div>
+          </div>
+        </ExportCard>
+
+        {/* 💾 全部数据导出 */}
+        <ExportCard
+          icon={Database}
+          title="全部数据导出"
+          description="活动记录 + 待办 + 番茄钟会话 + 日记，完整备份不丢数据"
+          accentColor="#f59e0b"
+        >
+          <div className="space-y-3">
+            <div className="text-xs text-cd-text-tertiary bg-cd-bg rounded-lg px-3 py-2.5 border border-cd-border">
+              📦 包含：activities + todos + pomodoro_sessions + diaries
+              <br />
+              ⏱️ 活动记录导出最近 90 天，其他全量
+            </div>
+            <div className="flex gap-2">
+              <FormatButton
+                format="json"
+                state={allStates.json || 'idle'}
+                onClick={() =>
+                  handleDownload('/api/exports/all-data', {}, 'all', setAllStates, 'json')
+                }
+              />
+              <FormatButton
+                format="csv"
+                state={allStates.csv || 'idle'}
+                onClick={() =>
+                  handleDownload('/api/exports/all-data', {}, 'all', setAllStates, 'csv')
+                }
+              />
+            </div>
+          </div>
+        </ExportCard>
+
+        {/* 📄 P8-4：历史报告导出 */}
+        <ExportCard
+          icon={FileText}
+          title="历史报告导出"
+          description="导出指定日期范围内的所有日报内容，支持 CSV 与 JSON 两种格式"
+          accentColor="#10b981"
+        >
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-cd-text-tertiary">起止日期</span>
+              <input
+                type="date"
+                value={reportsRange.start}
+                onChange={(e) => setReportsRange(prev => ({ ...prev, start: e.target.value }))}
+                className="bg-cd-bg border border-cd-border rounded px-2 py-1 text-xs text-cd-text"
+              />
+              <span className="text-cd-text-tertiary">→</span>
+              <input
+                type="date"
+                value={reportsRange.end}
+                onChange={(e) => setReportsRange(prev => ({ ...prev, end: e.target.value }))}
+                className="bg-cd-bg border border-cd-border rounded px-2 py-1 text-xs text-cd-text"
+              />
+            </div>
+            <div className="text-xs text-cd-text-tertiary bg-cd-bg rounded-lg px-3 py-2.5 border border-cd-border">
+              📝 包含：报告日期 / 创建时间 / 字符数 / 完整内容（最长 90 天）
+            </div>
+            <div className="flex gap-2">
+              <FormatButton
+                format="csv"
+                state={reportsStates.csv || 'idle'}
+                onClick={() =>
+                  handleDownload('/api/exports/reports', { start: reportsRange.start, end: reportsRange.end }, 'reports', setReportsStates, 'csv')
+                }
+              />
+              <FormatButton
+                format="json"
+                state={reportsStates.json || 'idle'}
+                onClick={() =>
+                  handleDownload('/api/exports/reports', { start: reportsRange.start, end: reportsRange.end }, 'reports', setReportsStates, 'json')
+                }
+              />
+            </div>
+          </div>
+        </ExportCard>
+
+        {/* 🌳 P8-4：活动明细聚合导出 */}
+        <ExportCard
+          icon={ListTree}
+          title="活动明细聚合导出"
+          description="导出指定日期范围内所有活动记录，含分类、应用、窗口标题、AI 详情，CSV 格式"
+          accentColor="#3b82f6"
+        >
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-cd-text-tertiary">起止日期</span>
+              <input
+                type="date"
+                value={activitiesRange.start}
+                onChange={(e) => setActivitiesRange(prev => ({ ...prev, start: e.target.value }))}
+                className="bg-cd-bg border border-cd-border rounded px-2 py-1 text-xs text-cd-text"
+              />
+              <span className="text-cd-text-tertiary">→</span>
+              <input
+                type="date"
+                value={activitiesRange.end}
+                onChange={(e) => setActivitiesRange(prev => ({ ...prev, end: e.target.value }))}
+                className="bg-cd-bg border border-cd-border rounded px-2 py-1 text-xs text-cd-text"
+              />
+            </div>
+            <div className="text-xs text-cd-text-tertiary bg-cd-bg rounded-lg px-3 py-2.5 border border-cd-border">
+              🔍 包含：时间 / 应用 / 窗口标题 / 分类 / 摘要 / 时长 / AI 详情 / 可见窗口（最长 90 天）
+            </div>
+            <div className="flex gap-2">
+              <FormatButton
+                format="csv"
+                state={activitiesStates.csv || 'idle'}
+                onClick={() =>
+                  handleDownload('/api/exports/activities-detail', { start: activitiesRange.start, end: activitiesRange.end }, 'activities', setActivitiesStates, 'csv')
+                }
+              />
+            </div>
+          </div>
+        </ExportCard>
+      </div>
+
+      {/* P10-3：数据导入 */}
+      <ImportSection />
+
+      {/* P15-3：数据自毁 */}
+      <WipeSection />
+
+      {/* 底部提示 */}
+      <div className="mt-6 text-xs text-cd-text-tertiary text-center">
+        💡 导出文件会自动下载到浏览器默认下载目录，可在设置中查看存储路径
+      </div>
+    </div>
+  )
+}
+
+// ── P10-3：数据导入区块 ──
+function ImportSection() {
+  const [importing, setImporting] = useState<'toggl' | 'rescuetime' | null>(null)
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [pendingSource, setPendingSource] = useState<'toggl' | 'rescuetime' | null>(null)
+
+  const handleFile = async (file: File, source: 'toggl' | 'rescuetime') => {
+    setImporting(source)
+    setResult(null)
+    try {
+      const text = await file.text()
+      if (!text.trim()) {
+        setResult({ ok: false, message: '文件为空' })
+        return
+      }
+      const res = source === 'toggl'
+        ? await importTogglCsv(text)
+        : await importRescueTimeCsv(text)
+      setResult({
+        ok: true,
+        message: res.message || `成功解析 ${res.parsed} 条，导入 ${res.inserted} 条`,
+      })
+    } catch (e: any) {
+      setResult({ ok: false, message: e?.message || '导入失败' })
+    } finally {
+      setImporting(null)
+      setPendingSource(null)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  const triggerFile = (source: 'toggl' | 'rescuetime') => {
+    setPendingSource(source)
+    fileRef.current?.click()
+  }
+
+  return (
+    <div className="mt-6 bg-cd-bg-card border border-white/5 rounded-xl p-5">
+      <h2 className="text-lg font-bold text-cd-text flex items-center gap-2 mb-1">
+        <Upload size={18} className="text-cd-accent" /> 数据导入
+      </h2>
+      <p className="text-xs text-cd-text-tertiary mb-4">
+        从其他时间追踪工具迁移数据，导入记录会标记为 [imported]，仅用于历史对比
+      </p>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <button
+          onClick={() => triggerFile('toggl')}
+          disabled={importing !== null}
+          className="flex items-center gap-3 p-3 bg-cd-bg-input border border-white/5 rounded-lg hover:border-cd-accent/30 transition disabled:opacity-50 text-left"
+        >
+          {importing === 'toggl' ? <Loader2 size={20} className="animate-spin text-cd-accent" /> : <Upload size={20} className="text-cd-accent" />}
+          <div>
+            <div className="text-sm font-medium text-cd-text">Toggl Track CSV</div>
+            <div className="text-[10px] text-cd-text-tertiary">Description, Start date, Duration...</div>
+          </div>
+        </button>
+        <button
+          onClick={() => triggerFile('rescuetime')}
+          disabled={importing !== null}
+          className="flex items-center gap-3 p-3 bg-cd-bg-input border border-white/5 rounded-lg hover:border-cd-accent/30 transition disabled:opacity-50 text-left"
+        >
+          {importing === 'rescuetime' ? <Loader2 size={20} className="animate-spin text-cd-accent" /> : <Upload size={20} className="text-cd-accent" />}
+          <div>
+            <div className="text-sm font-medium text-cd-text">RescueTime CSV</div>
+            <div className="text-[10px] text-cd-text-tertiary">Activity, Category, Duration sec...</div>
+          </div>
+        </button>
+      </div>
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".csv,text/csv"
+        className="hidden"
+        onChange={e => {
+          const f = e.target.files?.[0]
+          if (f && pendingSource) handleFile(f, pendingSource)
+        }}
+      />
+
+      {result && (
+        <div className={`mt-3 flex items-start gap-2 p-3 rounded-lg text-sm ${
+          result.ok
+            ? 'bg-green-500/10 border border-green-400/20 text-green-400'
+            : 'bg-red-500/10 border border-red-400/20 text-red-400'
+        }`}>
+          {result.ok ? <CheckCircle size={16} className="mt-0.5" /> : <AlertCircle size={16} className="mt-0.5" />}
+          <span>{result.message}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── P15-3：数据自毁区块 ──
+function WipeSection() {
+  const toast = useToast()
+  const [step, setStep] = useState<'idle' | 'confirm' | 'wiping' | 'done'>('idle')
+  const [confirmText, setConfirmText] = useState('')
+  const [wipeResult, setWipeResult] = useState<WipeResult | null>(null)
+
+  const handleStart = () => { setStep('confirm'); setConfirmText(''); setWipeResult(null) }
+  const handleCancel = () => { setStep('idle'); setConfirmText('') }
+
+  const handleConfirmWipe = async () => {
+    if (confirmText !== 'DELETE') {
+      toast.error('请输入大写 DELETE 以确认')
+      return
+    }
+    setStep('wiping')
+    try {
+      const res = await wipeAllData(confirmText)
+      setWipeResult(res)
+      setStep('done')
+      toast.success('所有数据已永久删除')
+    } catch (e: any) {
+      toast.error(e?.message || '数据删除失败')
+      setStep('confirm')
+    }
+  }
+
+  if (step === 'idle') {
+    return (
+      <div className="mt-6 bg-red-500/5 border border-red-500/20 rounded-xl p-5">
+        <h2 className="text-lg font-bold text-cd-text flex items-center gap-2 mb-1">
+          <Trash2 size={18} className="text-red-400" /> 数据自毁
+        </h2>
+        <p className="text-xs text-cd-text-tertiary mb-4">
+          永久删除所有用户数据，包括活动记录、待办、番茄钟、日记、成就、截图、报告等。此操作不可恢复。
+        </p>
+        <div className="flex items-start gap-2 p-3 bg-red-500/5 rounded-lg border border-red-500/10 mb-3">
+          <AlertTriangle size={14} className="text-red-400 mt-0.5 shrink-0" />
+          <p className="text-xs text-red-300/80 leading-relaxed">
+            删除前建议先导出数据备份。删除后保留 AI 配置和迁移记录，避免重新登录。
+          </p>
+        </div>
+        <button
+          onClick={handleStart}
+          className="flex items-center gap-1.5 px-4 py-2 bg-red-500/15 text-red-400 rounded-lg border border-red-500/30 hover:bg-red-500/25 transition text-sm font-medium"
+        >
+          <Trash2 size={14} /> 我要永久删除所有数据
+        </button>
+      </div>
+    )
+  }
+
+  if (step === 'confirm') {
+    return (
+      <div className="mt-6 bg-red-500/10 border border-red-500/30 rounded-xl p-5">
+        <h2 className="text-lg font-bold text-red-400 flex items-center gap-2 mb-2">
+          <AlertTriangle size={18} /> 最终确认
+        </h2>
+        <p className="text-sm text-cd-text mb-3">
+          你即将永久删除所有数据，此操作<strong className="text-red-400">不可恢复</strong>。
+        </p>
+        <p className="text-xs text-cd-text-tertiary mb-3">
+          请输入 <code className="px-1.5 py-0.5 bg-red-500/15 text-red-300 rounded font-mono">DELETE</code> 以确认操作：
+        </p>
+        <input
+          type="text"
+          value={confirmText}
+          onChange={e => setConfirmText(e.target.value)}
+          placeholder="DELETE"
+          autoFocus
+          className="w-full bg-cd-bg border border-red-500/30 rounded-lg px-3 py-2 text-sm text-cd-text focus:outline-none focus:border-red-500 mb-4 font-mono"
+        />
+        <div className="flex gap-2">
+          <button
+            onClick={handleConfirmWipe}
+            disabled={confirmText !== 'DELETE'}
+            className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Trash2 size={14} /> 确认永久删除
+          </button>
+          <button
+            onClick={handleCancel}
+            className="px-4 py-2 bg-cd-bg-secondary text-cd-text-secondary rounded-lg text-sm hover:text-cd-text border border-cd-border transition"
+          >
+            取消
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (step === 'wiping') {
+    return (
+      <div className="mt-6 bg-red-500/10 border border-red-500/30 rounded-xl p-8">
+        <div className="flex flex-col items-center">
+          <Loader2 size={32} className="text-red-400 animate-spin mb-3" />
+          <p className="text-sm text-cd-text">正在永久删除数据...</p>
+          <p className="text-xs text-cd-text-tertiary mt-1">请勿关闭窗口</p>
+        </div>
+      </div>
+    )
+  }
+
+  // done
+  const screenshots = wipeResult?.deleted?.screenshots || 0
+  const reports = wipeResult?.deleted?.reports || 0
+  const tableCount = Object.values(wipeResult?.deleted?.db_tables || {}).filter(v => v >= 0).length
+  return (
+    <div className="mt-6 bg-green-500/10 border border-green-500/30 rounded-xl p-5">
+      <h2 className="text-lg font-bold text-green-400 flex items-center gap-2 mb-3">
+        <CheckCircle size={18} /> 数据已永久删除
+      </h2>
+      <div className="space-y-2 text-sm text-cd-text">
+        <div className="flex items-center gap-2">
+          <Database size={14} className="text-cd-text-tertiary" />
+          <span>已清空 {tableCount} 张数据库表</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <FileText size={14} className="text-cd-text-tertiary" />
+          <span>已删除 {screenshots} 张截图</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <FileText size={14} className="text-cd-text-tertiary" />
+          <span>已删除 {reports} 份报告文件</span>
+        </div>
+      </div>
+      <p className="text-xs text-cd-text-tertiary mt-4">
+        AI 配置已保留。建议重启应用以使所有更改生效。
+      </p>
+      <button
+        onClick={() => window.location.reload()}
+        className="mt-3 flex items-center gap-1.5 px-4 py-2 bg-cd-green text-white rounded-lg text-sm font-medium hover:opacity-90 transition"
+      >
+        刷新应用
+      </button>
+    </div>
+  )
+}

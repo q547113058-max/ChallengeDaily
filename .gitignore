@@ -1,0 +1,82 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+build/
+.eggs/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+yarn.lock
+pnpm-lock.yaml
+
+# Build outputs
+dist/
+dist-electron/
+dist-electron-tmp/
+dist-electron-tmp*/
+client/dist/
+out/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Runtime data
+data/
+*.db
+*.log
+logs/
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Env files
+.env
+.env.local
+.env.*.local
+
+# GitHub workflows (Token无workflow scope, 无法推送包含此目录的commit)
+.github/
+
+# Temp files
+.temp/
+.superpowers/
+tmp_*.diff
+check_db.py
+scripts/_test_singleton.py
+
+# Python cache
+.pytest_cache/
+mypy_cache/
+.ruff_cache/
+
+# Frontend build cache
+.vite/
+.eslintcache
+*.tsbuildinfo
+
+# Misrestored / old installer remnants
+.misrestored/
+
+# Development artifacts
+*_audit*.md
+*_report*.md
+验收报告*.md
+循环工程日志*.md
+LOOP_ENGINEERING_PLAN.md
+PROJECT_FINAL_REPORT.md

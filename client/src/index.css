@@ -1,0 +1,566 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Anthropic Sans：Claude 同款英文/数字字体 ─── */
+@font-face {
+  font-family: 'Anthropic Sans';
+  src: url('./fonts/anthropic-sans.woff2') format('woff2');
+  font-weight: 300 800;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0020-007F, U+0080-00FF, U+0100-017F, U+0180-024F;
+}
+@font-face {
+  font-family: 'Anthropic Sans';
+  src: url('./fonts/anthropic-sans-italic.woff2') format('woff2');
+  font-weight: 300 800;
+  font-style: italic;
+  font-display: swap;
+  unicode-range: U+0020-007F, U+0080-00FF, U+0100-017F, U+0180-024F;
+}
+@font-face {
+  font-family: 'Anthropic Mono';
+  src: url('./fonts/anthropic-mono.woff2') format('woff2');
+  font-weight: 300 800;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0020-007F, U+0080-00FF, U+0100-017F, U+0180-024F;
+}
+@font-face {
+  font-family: 'Anthropic Mono';
+  src: url('./fonts/anthropic-mono-italic.woff2') format('woff2');
+  font-weight: 300 800;
+  font-style: italic;
+  font-display: swap;
+  unicode-range: U+0020-007F, U+0080-00FF, U+0100-017F, U+0180-024F;
+}
+
+/* ─── 方正清刻本悦宋：中文衬线标题字体（Claude 风格） ─── */
+@font-face {
+  font-family: 'FZQingKeBenYueSong';
+  src: url('./fonts/方正清刻本悦宋简体.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ─── 主题变量 ──────────────────────────── */
+:root {
+  /* 表面 / 背景：浅色模式以白/浅灰为主 */
+  --cd-bg: #FFFFFF;
+  --cd-bg-secondary: #F5F5F5;
+  --cd-bg-tertiary: #EEEEEE;
+  --cd-bg-input: #FFFFFF;
+  --cd-sidebar: #FAFAFA;
+  --cd-card: #FFFFFF;
+  /* 边框 */
+  --cd-border: #E0E0E0;
+  --cd-border-light: #F0F0F0;
+  /* 文字：提高对比度，减轻阅读疲劳 */
+  --cd-text: #1A1A1A;
+  --cd-text-secondary: #4A4A4A;
+  --cd-text-tertiary: #757575;
+  /* 交互 */
+  --cd-hover: #F0F0F0;
+  --cd-selected: #F3F0FF;
+  /* 主色与强调色：幕布紫为主，金色点缀 */
+  --cd-green: #7B68EE;
+  --cd-green-light: #F3F0FF;
+  --cd-green-dark: #6A5ACD;
+  --cd-blue: #5B8DEF;
+  --cd-blue-light: #E8F0FD;
+  --cd-orange: #F0A030;
+  --cd-orange-light: #FFF6E5;
+  --cd-red: #E54D42;
+  --cd-red-light: #FDECEB;
+  --cd-purple: #7B68EE;
+  --cd-purple-light: #F3F0FF;
+  --cd-yellow: #F0C040;
+  --cd-gold: #F0C040;
+  /* 滚动条 */
+  --cd-scrollbar: #CCCCCC;
+  --cd-scrollbar-hover: #AAAAAA;
+}
+
+.dark {
+  /* 告诉浏览器原生控件使用深色配色（select/date 等下拉不再白底白字） */
+  color-scheme: dark;
+  /* 表面 / 背景：真正的黑灰底色，不带蓝紫 */
+  --cd-bg: #121212;
+  --cd-bg-secondary: #1E1E1E;
+  --cd-bg-tertiary: #2D2D2D;
+  --cd-bg-input: #2D2D2D;
+  --cd-sidebar: #181818;
+  --cd-card: #1E1E1E;
+  /* 边框 */
+  --cd-border: #333333;
+  --cd-border-light: #2A2A2A;
+  /* 文字：加深辅助色对比，避免灰字糊成一片 */
+  --cd-text: #FFFFFF;
+  --cd-text-secondary: #D0D0D0;
+  --cd-text-tertiary: #888888;
+  /* 交互 */
+  --cd-hover: #2A2A2A;
+  --cd-selected: rgba(123, 104, 238, 0.15);
+  /* 强调色：紫色和金色仅作点缀 */
+  --cd-green: #937CFF;
+  --cd-green-light: rgba(123, 104, 238, 0.15);
+  --cd-green-dark: #B8A8FF;
+  --cd-blue-light: #1F2A45;
+  --cd-orange-light: #3D3220;
+  --cd-red-light: #3D2020;
+  --cd-purple-light: rgba(123, 104, 238, 0.15);
+  --cd-yellow: #F0C040;
+  --cd-gold: #F0C040;
+  /* 滚动条 */
+  --cd-scrollbar: #3A3A3A;
+  --cd-scrollbar-hover: #4A4A4A;
+}
+
+/* ─── 翰墨皮肤 · 宣纸（浅色）────────────────── */
+/* 暖米色底 + 暖褐文字 + 古金点缀，衬线字体最佳拍档 */
+.skin-hanmo:not(.dark) {
+  /* 表面 / 背景 */
+  --cd-bg: #F7F3ED;
+  --cd-bg-secondary: #EFE8DC;
+  --cd-bg-tertiary: #E5DCC9;
+  --cd-bg-input: #FBF8F2;
+  --cd-sidebar: #F2EDE2;
+  --cd-card: #FBF8F2;
+  /* 边框 */
+  --cd-border: #D9CFB8;
+  --cd-border-light: #E8E0CE;
+  /* 文字 */
+  --cd-text: #2C2620;
+  --cd-text-secondary: #6B5D4F;
+  --cd-text-tertiary: #9A8B7A;
+  /* 交互 */
+  --cd-hover: #EDE6D9;
+  --cd-selected: #F0EBE0;
+  /* 功能色（暖色偏移） */
+  --cd-blue: #4A7DD9;
+  --cd-blue-light: #E8EEF6;
+  --cd-orange: #D49434;
+  --cd-orange-light: #F5EBD8;
+  --cd-red: #C8453E;
+  --cd-red-light: #F5E0DC;
+  --cd-yellow: #C8A960;
+  --cd-gold: #C8A960;
+  /* 滚动条 */
+  --cd-scrollbar: #C9BFA8;
+  --cd-scrollbar-hover: #B5A98E;
+}
+
+/* ─── 翰墨皮肤 · 墨韵（深色）────────────────── */
+/* 暖褐黑底 + 暖白文字 + 琥珀金点缀，夜读古籍气质 */
+.skin-hanmo.dark {
+  /* 告诉浏览器原生控件使用深色配色 */
+  color-scheme: dark;
+  /* 表面 / 背景 */
+  --cd-bg: #1A1714;
+  --cd-bg-secondary: #221E19;
+  --cd-bg-tertiary: #2B2620;
+  --cd-bg-input: #2B2620;
+  --cd-sidebar: #1E1A16;
+  --cd-card: #221E19;
+  /* 边框 */
+  --cd-border: #3A332B;
+  --cd-border-light: #2F2922;
+  /* 文字 */
+  --cd-text: #F5F0E8;
+  --cd-text-secondary: #B8AC9A;
+  --cd-text-tertiary: #7A6F5F;
+  /* 交互 */
+  --cd-hover: #2B2620;
+  --cd-selected: rgba(123, 104, 238, 0.15);
+  /* 功能色 */
+  --cd-blue-light: #1E2A38;
+  --cd-orange-light: #3D3220;
+  --cd-red-light: #3D2020;
+  --cd-yellow: #D4B56A;
+  --cd-gold: #D4B56A;
+  /* 滚动条 */
+  --cd-scrollbar: #3A332B;
+  --cd-scrollbar-hover: #4A4035;
+}
+
+/* ─── 翰墨皮肤 · SVG 噪点纹理 ────────────── */
+/* feTurbulence 生成纸张噪点，极低 opacity + blend-mode 叠加 */
+.skin-hanmo body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  pointer-events: none;
+  z-index: 9999;
+  mix-blend-mode: multiply;
+  opacity: 0.035;
+}
+
+/* 深色模式：screen 混合让噪点变亮，模拟暗面纸张纹理 */
+.skin-hanmo.dark body::after {
+  mix-blend-mode: screen;
+  opacity: 0.04;
+}
+
+/* ─── 全局样式 ──────────────────────────── */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+  background: var(--cd-bg);
+  color: var(--cd-text);
+  font-family: var(--cd-font, 'Fraunces', 'FZQingKeBenYueSong', 'Microsoft YaHei', 'PingFang SC', ui-serif, serif);
+  transition: background-color 0.2s, color 0.2s;
+}
+
+/* 等宽字体用于代码/数值 */
+code, pre, kbd, .font-mono {
+  font-family: 'Anthropic Mono', 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--cd-scrollbar);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--cd-scrollbar-hover);
+}
+
+/* 卡片内嵌细滚动条 — 更轻量不抢视觉 */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 3px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--cd-scrollbar);
+  border-radius: 2px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: var(--cd-scrollbar-hover);
+}
+
+/* ─── 标题栏拖拽区域 ────────────────────── */
+.titlebar {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.titlebar button {
+  -webkit-app-region: no-drag;
+}
+
+/* ─── 分类颜色（12大分类） ─────────────── */
+.cat-开发 { --cat-color: #00B894; }
+.cat-会议 { --cat-color: #E54D42; }
+.cat-沟通 { --cat-color: #5B8DEF; }
+.cat-文档 { --cat-color: #A29BFE; }
+.cat-测试 { --cat-color: #F0A030; }
+.cat-设计 { --cat-color: #FD79A8; }
+.cat-运维 { --cat-color: #00CEC9; }
+.cat-数据分析 { --cat-color: #55EFC4; }
+.cat-学习 { --cat-color: #6C5CE7; }
+.cat-管理 { --cat-color: #B2BEC3; }
+.cat-产品 { --cat-color: #635BFF; }
+.cat-生活 { --cat-color: #F0C040; }
+.cat-其他 { --cat-color: #9999B0; }
+
+/* ─── 卡片通用样式 ──────────────────────── */
+.card {
+  background: var(--cd-card);
+  border-radius: var(--cd-radius, 12px);
+  border: 1px solid var(--cd-border);
+  padding: 20px;
+  box-shadow: var(--cd-shadow, none);
+  transition: background-color 0.2s, border-color 0.2s, border-radius 0.15s, box-shadow 0.15s;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ─── 热力图格子 ────────────────────────── */
+.heat-cell {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 500;
+  transition: all 0.15s;
+  cursor: default;
+}
+
+.heat-cell:hover {
+  transform: scale(1.15);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+
+/* ─── 动画 ──────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.25s ease-out;
+}
+
+/* 动态模糊渐入：适合新条目/流式内容 */
+@keyframes blurFadeIn {
+  0% {
+    opacity: 0;
+    filter: blur(6px);
+    transform: translateY(4px) scale(0.995);
+  }
+  60% {
+    opacity: 1;
+    filter: blur(2px);
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-blur-fade-in {
+  animation: blurFadeIn 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  will-change: opacity, filter, transform;
+}
+
+/* 内容稳定化：减少刷新时的闪烁 */
+.content-stable {
+  transition: opacity 0.2s ease, filter 0.2s ease;
+}
+
+.content-updating {
+  opacity: 0.85;
+  filter: blur(0.5px);
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2s ease-in-out infinite;
+}
+
+/* 刷新指示器 */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin-slow {
+  animation: spin 1.5s linear infinite;
+}
+
+/* ─── 时间线 ────────────────────────────── */
+.timeline-track {
+  position: relative;
+  padding-left: 52px;
+}
+
+.timeline-track::before {
+  content: '';
+  position: absolute;
+  left: 22px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--cd-border);
+}
+
+.timeline-entry {
+  position: relative;
+  padding-bottom: 12px;
+}
+
+/* ─── 进度条 ────────────────────────────── */
+.progress-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--cd-border);
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.6s ease;
+}
+
+/* ─── Toast 通知动画 ─────────────────────── */
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.25s ease-out;
+}
+
+/* ─── 无障碍：键盘聚焦样式 ──────────────────── */
+*:focus-visible {
+  outline: 2px solid var(--cd-green);
+  outline-offset: 2px;
+}
+
+/* ─── 热力图格子 hover（纯 CSS，不触发 React 重渲染）─── */
+.heatmap-cell {
+  transition: filter 0.15s, box-shadow 0.15s;
+}
+.heatmap-cell:hover {
+  filter: brightness(1.25);
+  box-shadow: 0 0 0 1.5px var(--cd-green);
+}
+
+/* ─── 桌面宠物动画 ─────────────────────────── */
+@keyframes pet-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+@keyframes pet-bounce {
+  0% { transform: translateY(0) scale(1); }
+  30% { transform: translateY(-14px) scale(1.12); }
+  60% { transform: translateY(0) scale(0.98); }
+  80% { transform: translateY(-5px) scale(1.04); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+@keyframes pet-blink {
+  0%, 45%, 55%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.1); }
+}
+
+@keyframes pet-tail {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(8deg); }
+}
+
+.animate-pet-float {
+  animation: pet-float 2.4s ease-in-out infinite;
+}
+
+.animate-pet-bounce {
+  animation: pet-bounce 0.55s ease-out;
+}
+
+.animate-pet-blink {
+  animation: pet-blink 3.2s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.animate-pet-tail {
+  animation: pet-tail 2s ease-in-out infinite;
+}
+
+/* ─── 减弱动画偏好 ─────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-spin,
+  .animate-slide-in,
+  .animate-pulse,
+  .animate-pet-float,
+  .animate-pet-bounce,
+  .animate-pet-blink,
+  .animate-pet-tail {
+    animation: none !important;
+  }
+  .transition-colors,
+  .transition-transform,
+  .transition-all {
+    transition: none !important;
+  }
+}
+
+/* ─── P45: 高对比度模式 ─────────────────────────── */
+@media (prefers-contrast: more) {
+  * {
+    border-color: currentColor !important;
+  }
+  .bg-white\/5,
+  .bg-white\/10,
+  .bg-black\/5,
+  .bg-black\/10 {
+    background-color: transparent !important;
+    border: 1px solid currentColor !important;
+  }
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 3px solid currentColor !important;
+    outline-offset: 2px !important;
+  }
+}
+
+/* ─── P50: 加载骨架屏 ─────────────────────────── */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.05) 25%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0.05) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+  border-radius: 4px;
+}
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.skeleton-text {
+  height: 14px;
+  margin-bottom: 8px;
+  border-radius: 4px;
+}
+.skeleton-text:last-child {
+  width: 60%;
+}
+.skeleton-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+/* ─── P47: 全局 reduced-motion 兜底 ─────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none !important;
+  }
+}
