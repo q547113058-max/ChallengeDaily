@@ -745,14 +745,31 @@ function hidePomodoroWidget() {
   }
 }
 
+// 同步宠物可见性到主窗口的 localStorage（设置页开关读取同一份状态）
+function setPetVisibleFlag(show) {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  const js = `try{localStorage.setItem('cd_pet_visible','${show ? '1' : '0'}');` +
+    `window.dispatchEvent(new CustomEvent('cd-pet-visible-change'))}catch(e){}`
+  mainWindow.webContents.executeJavaScript(js).catch(() => {})
+}
+
 // ─── 系统托盘 ────────────────────────────────────
 function createTray() {
   const icon = getTrayIcon()
   tray = new Tray(icon)
   const contextMenu = Menu.buildFromTemplate([
     { label: '显示主窗口', click: () => { mainWindow?.show(); mainWindow?.focus() } },
-    { label: '显示桌面宠物', click: () => { petWindow?.show() } },
-    { label: '隐藏桌面宠物', click: () => { petWindow?.hide() } },
+    { label: '显示桌面宠物', click: () => {
+      if (!petWindow || petWindow.isDestroyed()) createPetWindow()
+      petWindow?.show()
+      petWindow?.setAlwaysOnTop(true, 'normal')
+      petWindow?.setFocusable(false)
+      setPetVisibleFlag(true)
+    } },
+    { label: '隐藏桌面宠物', click: () => {
+      petWindow?.hide()
+      setPetVisibleFlag(false)
+    } },
     { type: 'separator' },
     { label: '开始记录', click: () => sendToRenderer('collector-action', 'start') },
     { label: '暂停记录', click: () => sendToRenderer('collector-action', 'stop') },

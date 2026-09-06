@@ -275,6 +275,14 @@ export default function Pet() {
     showBubble(`切换为${PET_CONFIGS[next].name}~`, 2000)
   }
 
+  // 关闭宠物：写入 localStorage 持久化，下次启动不再自动弹出
+  // （恢复入口：设置页 → 桌面宠物开关 / 托盘菜单 → 显示桌面宠物）
+  const handleClosePet = useCallback(() => {
+    setMenuOpen(false)
+    try { localStorage.setItem('cd_pet_visible', '0') } catch {}
+    window.electronAPI?.togglePet(false)
+  }, [])
+
   const renderPet = () => {
     switch (style) {
       case 'yuexinmao': return <YueXinMao happy={happy} eyeBlink={eyeBlink} tailWag={tailWag} />
@@ -347,6 +355,17 @@ export default function Pet() {
               {PET_CONFIGS[p].name}
             </button>
           ))}
+          <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '2px 0' }} />
+          <button data-pet-no-drag onClick={(e) => { e.stopPropagation(); handleClosePet() }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px',
+              borderRadius: '8px', border: 'none', fontSize: '12px', cursor: 'pointer',
+              background: 'transparent', color: '#ff6b6b', transition: 'all 0.2s',
+            }}
+            title="关闭后不再自动显示，可在设置页「桌面宠物」重新开启">
+            <span style={{ fontSize: '14px' }}>⏻</span>
+            关闭宠物
+          </button>
         </div>
       )}
 
@@ -358,12 +377,12 @@ export default function Pet() {
         filter: distractionAlert ? 'drop-shadow(0 0 8px rgba(239,68,68,0.8)) hue-rotate(-20deg) saturate(1.5)' : 'drop-shadow(0 4px 8px rgba(0,0,0,0.2))',
       }}>
         {hover && (
-          <button data-pet-no-drag onClick={(e) => { e.stopPropagation(); window.electronAPI?.togglePet(false) }}
+          <button data-pet-no-drag onClick={(e) => { e.stopPropagation(); handleClosePet() }}
             style={{
               position: 'absolute', top: '-4px', right: '-4px', zIndex: 20, width: '20px', height: '20px',
               borderRadius: '50%', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: '12px', cursor: 'pointer', opacity: 0.7, background: 'rgba(60,60,70,0.8)', color: '#aaa',
-            }} title="隐藏宠物">×</button>
+            }} title="关闭宠物（不再自动显示）">×</button>
         )}
         {hover && (
           <button data-pet-no-drag onClick={(e) => { e.stopPropagation(); setMenuOpen(prev => !prev) }}
