@@ -42,8 +42,8 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const [useFreeModel, setUseFreeModel] = useState(true)
   const [apiKey, setApiKey] = useState('')
   const [apiBase, setApiBase] = useState('https://open.bigmodel.cn/api/paas/v4')
-  const [apiVisionModel, setApiVisionModel] = useState('glm-4v-flash')
-  const [apiTextModel, setApiTextModel] = useState('glm-4-flash')
+  const [apiVisionModel, setApiVisionModel] = useState('glm-4.6v-flash')
+  const [apiTextModel, setApiTextModel] = useState('glm-4.7-flash')
   const [showKey, setShowKey] = useState(false)
   const [aiTesting, setAiTesting] = useState(false)
   const [aiTestResult, setAiTestResult] = useState<{ ok: boolean; message: string } | null>(null)
@@ -81,8 +81,8 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const handleUseFreeModel = () => {
     setUseFreeModel(true)
     setApiBase('https://open.bigmodel.cn/api/paas/v4')
-    setApiVisionModel('glm-4v-flash')
-    setApiTextModel('glm-4-flash')
+    setApiVisionModel('glm-4.6v-flash')
+    setApiTextModel('glm-4.7-flash')
   }
 
   // 组件卸载时取消进行中的 AI 测试请求，避免卸载后 setState 产生竞态
@@ -482,7 +482,7 @@ function AIStep({
                     type="text"
                     value={apiVisionModel}
                     onChange={(e) => setApiVisionModel(e.target.value)}
-                    placeholder="glm-4v-flash"
+                    placeholder="glm-4.6v-flash"
                     className="w-full bg-cd-bg border border-cd-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-cd-green"
                   />
                 </div>
@@ -492,7 +492,7 @@ function AIStep({
                     type="text"
                     value={apiTextModel}
                     onChange={(e) => setApiTextModel(e.target.value)}
-                    placeholder="glm-4-flash"
+                    placeholder="glm-4.7-flash"
                     className="w-full bg-cd-bg border border-cd-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-cd-green"
                   />
                 </div>

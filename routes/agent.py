@@ -507,7 +507,7 @@ def test_ai_connection():
     data = request.get_json(force=True) if request.is_json else {}
     api_key = data.get("api_key", "")
     base_url = data.get("base_url", "https://open.bigmodel.cn/api/paas/v4")
-    model = data.get("model", "glm-4v-flash")
+    model = data.get("model", "glm-4.6v-flash")
 
     # 若前端未传 key（已配置状态下测试），回退到本地加密存储的 key
     if not api_key:

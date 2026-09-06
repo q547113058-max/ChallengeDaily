@@ -234,7 +234,7 @@ def auto_split():
             '返回格式：[{"title":"任务1","target_min":60,"category":"开发","day":1},...]'
         )
         response = client.chat.completions.create(
-            model='glm-4-flash',
+            model='glm-4.7-flash',
             messages=[{'role': 'user', 'content': prompt}],
             max_tokens=1000,
             temperature=0.7,
