@@ -4,7 +4,7 @@ import { ToggleSwitch, useTimeout, useAsyncData, ApiErrorDisplay } from '../comp
 import { useToast } from '../components/Toast'
 import { useTheme, ACCENT_PRESETS, FONT_PRESETS, RADIUS_PRESETS, SHADOW_PRESETS, OPACITY_PRESETS, SKIN_PRESETS } from '../components/ThemeContext'
 import { AppLockSettings } from '../components/AppLock'
-import { Shield, Bot, Eye, EyeOff, Server, FileText, ListFilter, Download, Loader2, CheckCircle, XCircle, RotateCcw, Database, Upload, HardDrive, Info, RefreshCw, Palette, Type, GlassWater, Moon, Cat, Rocket, Search, Calendar, GitBranch, Cpu, Cloud, Brain, FileUp, Heart } from 'lucide-react'
+import { Shield, Bot, Eye, EyeOff, Server, FileText, ListFilter, Download, Loader2, CheckCircle, XCircle, RotateCcw, Database, Upload, HardDrive, Info, RefreshCw, Palette, Type, GlassWater, Moon, Rocket, Search, Calendar, GitBranch, Cpu, Cloud, Brain, FileUp, Heart } from 'lucide-react'
 import dayjs from 'dayjs'
 import CalendarSubscriptionManager from '../components/CalendarSubscriptionManager'
 import GitRepoManager from '../components/GitRepoManager'
@@ -90,8 +90,6 @@ export default function Settings() {
   const [appVersion, setAppVersion] = useState('')
   const [updateChecking, setUpdateChecking] = useState(false)
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'available' | 'downloading' | 'downloaded' | 'up-to-date'>('idle')
-  // 桌面宠物可见性
-  const [petVisible, setPetVisible] = useState<boolean>(() => localStorage.getItem('cd_pet_visible') !== '0')
   // 开机自启动
   const [autoStart, setAutoStart] = useState(false)
   // 设置搜索
@@ -128,21 +126,8 @@ export default function Settings() {
       setHighlightedSection('')
     }
   }
-  useEffect(() => {
-    const sync = () => setPetVisible(localStorage.getItem('cd_pet_visible') !== '0')
-    window.addEventListener('cd-pet-visible-change', sync)
-    return () => window.removeEventListener('cd-pet-visible-change', sync)
-  }, [])
   // 个人习惯配置已迁移至「深度画像」页面
 
-  const handleTogglePet = (show: boolean) => {
-    setPetVisible(show)
-    ;(window as any)._petVisible = show
-    localStorage.setItem('cd_pet_visible', show ? '1' : '0')
-    window.dispatchEvent(new CustomEvent('cd-pet-visible-change'))
-    // 通过 IPC 控制独立宠物窗口的显示/隐藏
-    window.electronAPI?.togglePet(show)
-  }
 
   const handleToggleAutoStart = async (enabled: boolean) => {
     try {
@@ -622,18 +607,6 @@ export default function Settings() {
                 </button>
               ))}
             </div>
-          </div>
-
-          {/* 桌面宠物 */}
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <Cat size={14} className="text-cd-text-tertiary" />
-                <span className="text-sm text-cd-text">桌面宠物</span>
-              </div>
-              <p className="text-[10px] text-cd-text-tertiary ml-[22px] mt-0.5">在桌面上显示陪伴小宠物</p>
-            </div>
-            <ToggleSwitch checked={petVisible} onChange={handleTogglePet} />
           </div>
 
           {/* 开机自启动 */}

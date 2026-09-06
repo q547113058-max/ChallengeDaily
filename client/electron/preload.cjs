@@ -24,11 +24,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   close: () => ipcRenderer.send('window-close'),
   show: () => ipcRenderer.send('window-show'),
 
-  // 宠物控制
-  togglePet: (show) => ipcRenderer.send('pet-toggle', show),
-  getPetVisible: () => ipcRenderer.invoke('pet-get-visible'),
-  // 窗口拖拽（宠物窗口专用）
-  petWindowDrag: (dx, dy) => ipcRenderer.send('pet-window-drag', { mouseX: dx, mouseY: dy }),
 
   // 后端端口
   getBackendPort: () => ipcRenderer.invoke('get-backend-port'),

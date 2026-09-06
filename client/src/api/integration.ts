@@ -545,20 +545,6 @@ export async function getDailyCardText(date?: string): Promise<{ date: string; t
   return request(`/api/daily-card/text?date=${d}`) as Promise<{ date: string; text: string; summary: any }>
 }
 
-// ── P12-4：宠物情绪化 ──
-export type PetMood = 'idle' | 'focused' | 'flowing' | 'distracted' | 'overworked' | 'sleepy' | 'milestone'
-export interface PetMoodData {
-  status: string
-  mood: PetMood
-  focus_min: number
-  focus_sessions: number
-  distraction_count: number
-  streak_days: number
-  message: string
-}
-export async function getPetMood(): Promise<PetMoodData> {
-  return request('/api/pet/mood') as Promise<PetMoodData>
-}
 
 // ── P11-2：用户个性化偏好 ──
 export interface UserPreferences {

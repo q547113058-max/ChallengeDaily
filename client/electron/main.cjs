@@ -55,7 +55,6 @@ console.log('[Main] main.cjs loaded, log file:', mainLogFile)
 
 // 保持全局引用，防止垃圾回收
 let mainWindow = null
-let petWindow = null
 let pomodoroWidget = null
 let widgetDismissed = false     // 用户手动关闭过：当前番茄内不再强行弹出
 let widgetLastPhase = 'idle'    // 上一次 tick 的阶段，用于识别新番茄开始
@@ -592,74 +591,6 @@ function createMainWindow() {
   })
 }
 
-// ─── 桌面宠物窗口 ──────────────────────────────
-function createPetWindow() {
-  const { width } = screen.getPrimaryDisplay().workAreaSize
-
-  petWindow = new BrowserWindow({
-    width: 200,
-    height: 220,
-    x: width - 230,
-    y: 100,
-    transparent: true,
-    frame: false,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    resizable: false,
-    hasShadow: false,              // 禁用窗口阴影，避免透明区域出现黑边
-    backgroundColor: undefined,  // 不设背景色，让透明生效
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      preload: path.join(__dirname, 'preload.cjs'),
-    },
-    show: false,
-  })
-
-  // 宠物窗口始终置顶但不抢焦点
-  petWindow.setAlwaysOnTop(true, 'normal')
-  petWindow.setFocusable(false)
-  // Windows 透明窗口需要禁用视觉背景效果
-  petWindow.setBackgroundColor('#00000000')
-
-  // P20-1: 为宠物窗口应用基础 CSP（与主窗口策略一致，避免子窗口裸奔）
-  applyCSPToSession(petWindow.webContents.session)
-
-  if (isDev) {
-    petWindow.loadURL('http://localhost:5173/pet.html')
-  } else {
-    petWindow.loadFile(path.join(__dirname, '..', 'dist', 'pet.html'))
-  }
-
-  // 加载完成后不自动显示，等待渲染进程通过 pet-toggle IPC 同步状态后再决定是否显示
-  petWindow.once('ready-to-show', () => {
-    console.log('[Main] Pet window ready-to-show, waiting for toggle signal...')
-    // 默认隐藏，由 App.tsx 启动时根据 localStorage 的 cd_pet_visible 决定
-  })
-
-  petWindow.webContents.on('did-finish-load', () => {
-    console.log('[Main] Pet window did-finish-load')
-  })
-
-  petWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
-    console.error('[Main] Pet window did-fail-load:', errorCode, errorDescription)
-  })
-
-  petWindow.on('closed', () => {
-    console.log('[Main] Pet window closed')
-    petWindow = null
-  })
-
-  // 窗口级别的拖拽：整个窗口可通过鼠标拖拽移动
-  // 监听渲染进程发来的拖拽事件
-  ipcMain.on('pet-window-drag', (_event, { mouseX, mouseY }) => {
-    if (!petWindow || petWindow.isDestroyed()) return
-    const [x, y] = petWindow.getPosition()
-    petWindow.setPosition(x + mouseX, y + mouseY)
-  })
-}
-
 // ─── 番茄钟悬浮计时窗口 ────────────────────────────────
 // 类似"番茄土豆"的置顶小窗口，迷你显示倒计时/任务/阶段
 // 番茄钟运行时自动弹出，可拖拽，点击跳回主界面
@@ -745,31 +676,12 @@ function hidePomodoroWidget() {
   }
 }
 
-// 同步宠物可见性到主窗口的 localStorage（设置页开关读取同一份状态）
-function setPetVisibleFlag(show) {
-  if (!mainWindow || mainWindow.isDestroyed()) return
-  const js = `try{localStorage.setItem('cd_pet_visible','${show ? '1' : '0'}');` +
-    `window.dispatchEvent(new CustomEvent('cd-pet-visible-change'))}catch(e){}`
-  mainWindow.webContents.executeJavaScript(js).catch(() => {})
-}
-
 // ─── 系统托盘 ────────────────────────────────────
 function createTray() {
   const icon = getTrayIcon()
   tray = new Tray(icon)
   const contextMenu = Menu.buildFromTemplate([
     { label: '显示主窗口', click: () => { mainWindow?.show(); mainWindow?.focus() } },
-    { label: '显示桌面宠物', click: () => {
-      if (!petWindow || petWindow.isDestroyed()) createPetWindow()
-      petWindow?.show()
-      petWindow?.setAlwaysOnTop(true, 'normal')
-      petWindow?.setFocusable(false)
-      setPetVisibleFlag(true)
-    } },
-    { label: '隐藏桌面宠物', click: () => {
-      petWindow?.hide()
-      setPetVisibleFlag(false)
-    } },
     { type: 'separator' },
     { label: '开始记录', click: () => sendToRenderer('collector-action', 'start') },
     { label: '暂停记录', click: () => sendToRenderer('collector-action', 'stop') },
@@ -795,7 +707,6 @@ function quitApp() {
   globalShortcut.unregisterAll()
   stopBackend()
   tray?.destroy()
-  petWindow?.destroy()
   mainWindow?.destroy()
   app.quit()
 }
@@ -845,9 +756,7 @@ function setupIPC() {
   // P37: IPC 通道白名单 — 仅允许已注册的通道名
   const ALLOWED_IPC_CHANNELS = new Set([
     'window-minimize', 'window-maximize', 'window-close', 'window-show',
-    'pet-toggle', 'pet-get-visible', 'pet-window-drag', 'pet-activity-update',
     'pomodoro-widget-update', 'pomodoro-widget-hide',
-    'distraction-alert', 'show-notification',
     'get-backend-port', 'get-api-token',
     'check-for-updates', 'download-update', 'install-update', 'get-app-version',
     'get-auto-start', 'set-auto-start',
@@ -881,25 +790,6 @@ function setupIPC() {
   })
   ipcMain.on('window-close', () => mainWindow?.hide())
   ipcMain.on('window-show', () => mainWindow?.show())
-
-  // 宠物控制：show 时创建/显示，hide 时销毁（避免透明窗口残留白色方块）
-  ipcMain.on('pet-toggle', (_event, show) => {
-    if (show) {
-      if (!petWindow || petWindow.isDestroyed()) {
-        createPetWindow()
-      }
-      petWindow?.show()
-      petWindow?.setAlwaysOnTop(true, 'normal')
-      petWindow?.setFocusable(false)
-    } else {
-      if (petWindow && !petWindow.isDestroyed()) {
-        petWindow.destroy()
-        petWindow = null
-      }
-    }
-  })
-  // renderer 请求当前 pet 可见状态
-  ipcMain.handle('pet-get-visible', () => petWindow?.isVisible() ?? false)
 
   // ── 幕布文档同步 IPC ──
   // 弹出登录窗口（用户点"登录幕布"按钮时触发）
@@ -951,20 +841,6 @@ function setupIPC() {
       mainWindow.show()
       mainWindow.focus()
       mainWindow.webContents.send('navigate-to', '/focus')
-    }
-  })
-
-  // 宠物气泡内容更新 → 中转到主窗口侧边栏状态
-  ipcMain.on('pet-activity-update', (_event, data) => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('pet-activity', data)
-    }
-  })
-
-  // 分心告警：主窗口 → 宠物窗口（宠物变红提示）
-  ipcMain.on('distraction-alert', (_event, data) => {
-    if (petWindow && !petWindow.isDestroyed()) {
-      petWindow.webContents.send('distraction-alert', data)
     }
   })
 

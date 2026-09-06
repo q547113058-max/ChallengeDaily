@@ -6,9 +6,6 @@ interface Window {
     maximize: () => void
     close: () => void
     show: () => void
-    togglePet: (show: boolean) => void
-    getPetVisible: () => Promise<boolean>
-    petWindowDrag: (dx: number, dy: number) => void
     getBackendPort: () => Promise<number>
     getApiToken: () => Promise<string>
     checkForUpdates: () => Promise<boolean>
@@ -35,7 +32,6 @@ interface Window {
     setAutoStart: (enabled: boolean) => Promise<boolean>
     windowsHello?: (reason?: string) => Promise<{ success: boolean; error?: string }>
   }
-  _petVisible?: boolean
 }
 
 declare module 'lunar-javascript'

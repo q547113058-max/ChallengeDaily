@@ -8,7 +8,6 @@ const mockElectronAPI = {
   onUpdateDownloaded: jest.fn(),
   installUpdate: jest.fn(),
   downloadUpdate: jest.fn(),
-  togglePet: jest.fn(),
   showNotification: jest.fn(),
   getBackendPort: jest.fn().mockResolvedValue(58888),
   getApiToken: jest.fn().mockResolvedValue(''),

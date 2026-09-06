@@ -317,21 +317,6 @@ def report_export_obsidian():
         return jsonify({"error": safe_error(e, "Obsidian 导出失败")}), 500
 
 
-# ── P12-4：桌面宠物情绪化数据端点 ──
-
-@bp.route("/api/pet/mood")
-def pet_mood():
-    """基于今日数据返回宠物情绪数据
-    返回: { mood, focus_min, focus_sessions, distraction_count, message, streak_days }
-    """
-    if not deps.check_token(request):
-        return jsonify({"error": "Unauthorized"}), 401
-    try:
-        from pet_mood import compute_pet_mood
-        result = compute_pet_mood()
-        return jsonify({"status": "ok", **result})
-    except Exception as e:
-        return jsonify({"error": safe_error(e, "宠物情绪计算失败")}), 500
 
 
 def _get_pomodoro_section(target_date):
