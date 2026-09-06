@@ -507,7 +507,7 @@ def test_ai_connection():
     data = request.get_json(force=True) if request.is_json else {}
     api_key = data.get("api_key", "")
     base_url = data.get("base_url", "https://open.bigmodel.cn/api/paas/v4")
-    model = data.get("model", "glm-4.6v-flash")
+    model = data.get("model", "glm-4.1v-thinking-flash")
 
     # 若前端未传 key（已配置状态下测试），回退到本地加密存储的 key
     if not api_key:
@@ -518,26 +518,50 @@ def test_ai_connection():
         return jsonify({"ok": False, "message": "请先填写 API Key"})
 
     try:
-        from openai import OpenAI
+        from openai import OpenAI, RateLimitError
         import httpx
         client = OpenAI(
             api_key=api_key,
             base_url=base_url,
             timeout=httpx.Timeout(15.0, connect=5.0),
+            max_retries=3,
         )
-        response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": "你好"}],
-            max_tokens=10,
-        )
+        messages = [{"role": "user", "content": "你好"}]
+        used_model = model
+        # 视觉推理模型(glm-4.1v-thinking-flash 等)默认内置思考: 需显式 disabled, 否则小 max_tokens 全耗在推理
+        is_vision_model = model in (getattr(config, "AI_VISION_MODEL", ""), getattr(config, "AI_VISION_MODEL_FALLBACK", ""))
+        try:
+            if is_vision_model:
+                response = client.chat.completions.create(model=model, messages=messages, max_tokens=30,
+                                                          extra_body={"thinking": {"type": "disabled"}})
+            else:
+                response = client.chat.completions.create(model=model, messages=messages, max_tokens=30)
+        except RateLimitError:
+            # 429 限流: 若测的是应用默认模型, 自动用备用模型重试一次, 避免误报"连接失败"
+            fb = None
+            if model == config.AI_TEXT_MODEL:
+                fb = config.AI_TEXT_MODEL_FALLBACK
+            elif model == config.AI_VISION_MODEL:
+                fb = config.AI_VISION_MODEL_FALLBACK
+            if not fb or fb == model:
+                raise
+            logger.info("ai/test: %s 触发 429 限流, 自动用备用 %s 重试", model, fb)
+            if is_vision_model:
+                response = client.chat.completions.create(model=fb, messages=messages, max_tokens=30,
+                                                          extra_body={"thinking": {"type": "disabled"}})
+            else:
+                response = client.chat.completions.create(model=fb, messages=messages, max_tokens=30)
+            used_model = fb
         reply = response.choices[0].message.content.strip()
-        return jsonify({"ok": True, "message": f"连接成功，模型回复：{reply}"})
+        return jsonify({"ok": True, "message": f"连接成功（{used_model}），模型回复：{reply}"})
     except Exception as e:
         # 异常日志脱敏：仅记录异常类型，避免把可能含 api_key 的错误串直接落盘
         logger.error(f"AI connection test failed: {type(e).__name__}")
         error_str = str(e)
         if "401" in error_str or "Unauthorized" in error_str:
             error_msg = "API Key 无效或已过期，请检查后重试"
+        elif "429" in error_str or "访问量过大" in error_str or "速率限制" in error_str:
+            error_msg = "模型触发限流(429)：访问量过大或账户速率受限，请稍后再试"
         elif "404" in error_str:
             error_msg = f"模型 {model} 不存在，请检查模型名称"
         elif "Connection" in error_str or "timeout" in error_str.lower():

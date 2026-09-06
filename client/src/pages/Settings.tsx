@@ -27,7 +27,7 @@ export default function Settings() {
   const [aiEnabled, setAiEnabled] = useState(false)
   const [apiKey, setApiKey] = useState('')
   const [apiBase, setApiBase] = useState('https://open.bigmodel.cn/api/paas/v4')
-  const [apiVisionModel, setApiVisionModel] = useState('glm-4.6v-flash')
+  const [apiVisionModel, setApiVisionModel] = useState('glm-4.1v-thinking-flash')
   const [apiTextModel, setApiTextModel] = useState('glm-4.7-flash')
   const [showKey, setShowKey] = useState(false)
   const [excludeApps, setExcludeApps] = useState('')
@@ -121,7 +121,7 @@ export default function Settings() {
     setApiBase(settings.ai_base_url || 'https://open.bigmodel.cn/api/paas/v4')
     // 兼容旧版单模型字段 ai_model
     const legacyModel = (settings as any).ai_model
-    setApiVisionModel(settings.ai_vision_model || legacyModel || 'glm-4.6v-flash')
+    setApiVisionModel(settings.ai_vision_model || legacyModel || 'glm-4.1v-thinking-flash')
     setApiTextModel(settings.ai_text_model || legacyModel || 'glm-4.7-flash')
     // 人生配置
     setBirthday(settings.birthday || '')
@@ -208,7 +208,7 @@ export default function Settings() {
         work_end_hour: 18,
         custom_report_instructions: '',
         ai_base_url: 'https://open.bigmodel.cn/api/paas/v4',
-        ai_vision_model: 'glm-4.6v-flash',
+        ai_vision_model: 'glm-4.1v-thinking-flash',
         ai_text_model: 'glm-4.7-flash',
         ai_enabled: false,
       }
@@ -728,7 +728,7 @@ export default function Settings() {
                     type="text"
                     value={apiVisionModel}
                     onChange={(e) => setApiVisionModel(e.target.value)}
-                    placeholder="glm-4.6v-flash"
+                    placeholder="glm-4.1v-thinking-flash"
                     className="w-full bg-cd-bg-secondary text-cd-text border border-cd-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-cd-green transition-colors"
                   />
                 </div>

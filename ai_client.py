@@ -8,7 +8,7 @@ import re
 import threading
 import time
 import httpx
-from openai import OpenAI
+from openai import OpenAI, RateLimitError
 
 import config
 from screenshot import encode_image_to_base64
@@ -159,6 +159,84 @@ def _rate_limit_check(model_type: str = "text") -> bool:
     return True
 
 
+def _is_empty_content(resp) -> bool:
+    """200 但消息内容为空(服务端降载/异常)即视为失败。tool_calls/reasoning 场景不算空"""
+    try:
+        msg = resp.choices[0].message
+        if getattr(msg, "tool_calls", None):
+            return False
+        return not (msg.content or "").strip()
+    except Exception:
+        return False
+
+
+def _fallback_model_for(model: str):
+    """给定主模型名，返回 429 限流时降级用的备用模型名；无配置/自身即备用时返回 None"""
+    try:
+        if model and model == config.AI_TEXT_MODEL:
+            return (getattr(config, "AI_TEXT_MODEL_FALLBACK", "") or "").strip() or None
+        if model and model == config.AI_VISION_MODEL:
+            return (getattr(config, "AI_VISION_MODEL_FALLBACK", "") or "").strip() or None
+    except Exception:
+        return None
+    return None
+
+
+class _AutoFallbackCompletions:
+    """chat.completions.create 的 429 自动降级代理：主模型限流时用备用模型重试一次"""
+    __slots__ = ("_target",)
+
+    def __init__(self, target):
+        self._target = target
+
+    def create(self, **kwargs):
+        try:
+            resp = self._target.create(**kwargs)
+        except RateLimitError as exc:
+            fb = _fallback_model_for(kwargs.get("model", ""))
+            if not fb or fb == kwargs.get("model"):
+                raise
+            logger.warning("模型 %s 触发 429 限流 → 自动降级 %s 重试一次", kwargs.get("model"), fb)
+            alt = dict(kwargs)
+            alt["model"] = fb
+            try:
+                return self._target.create(**alt)
+            except Exception:
+                # 备用模型也失败 → 抛原始 429, 交上层既有熔断/重试/兜底逻辑处理
+                raise exc
+        # 429 之外: 200 但空内容(服务端降载)同样降级重试一次
+        if _is_empty_content(resp):
+            fb = _fallback_model_for(kwargs.get("model", ""))
+            if fb and fb != kwargs.get("model"):
+                logger.warning("模型 %s 返回空内容 → 自动降级 %s 重试一次", kwargs.get("model"), fb)
+                alt = dict(kwargs)
+                alt["model"] = fb
+                try:
+                    resp2 = self._target.create(**alt)
+                    if not _is_empty_content(resp2):
+                        return resp2
+                except Exception:
+                    pass
+        return resp
+
+
+class _AutoFallbackChat:
+    __slots__ = ("completions",)
+
+    def __init__(self, completions):
+        self.completions = completions
+
+
+class _AutoFallbackClient:
+    """包装 OpenAI 客户端: chat.completions.create 走 429 降级代理, 其余属性/方法委托真实 client"""
+    def __init__(self, real):
+        self._real = real
+        self.chat = _AutoFallbackChat(real.chat.completions)
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+
 def get_circuit_breaker_status() -> dict:
     """获取熔断器状态（供 health API 使用）"""
     with _cb_lock:
@@ -182,11 +260,12 @@ def _get_client() -> OpenAI:
         # 双重检查
         if _client_instance is not None:
             return _client_instance
-        _client_instance = OpenAI(
+        _client_instance = _AutoFallbackClient(OpenAI(
             api_key=config.AI_API_KEY,
             base_url=config.AI_BASE_URL,
             timeout=httpx.Timeout(180.0, connect=10.0),
-        )
+            max_retries=5,  # 429/5xx 自动重试增强: 智谱 flash 新模型上线期常间歇 429
+        ))
         return _client_instance
 
 
@@ -279,11 +358,17 @@ def analyze_screenshot(image_path: str, app_name: str = "", window_title: str = 
                         ],
                     },
                 ],
-                max_tokens=800,
+                max_tokens=2500,
                 temperature=0.2,
+                extra_body={"thinking": {"type": "disabled"}},  # 视觉推理主模型(glm-4.1v-thinking-flash): 分类任务须关思考, 否则小token被推理耗尽
             )
 
             raw = response.choices[0].message.content.strip()
+            # 防御: 服务端偶发仍把推理内联进 content(disabled 不彻底), 剥离 <think> 段再解析
+            if "<think>" in raw:
+                stripped_raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.S).strip()
+                if stripped_raw:
+                    raw = stripped_raw
 
             # P11-4：释放 base64 图像字符串内存（大图可能占 1-2MB）
             del b64_image

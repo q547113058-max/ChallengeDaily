@@ -77,8 +77,13 @@ AI_BASE_URL = os.getenv("AI_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
 
 # 向后兼容：旧的 AI_MODEL 同时作为 vision/text 的兜底
 _legacy_model = os.getenv("AI_MODEL", "")
-AI_VISION_MODEL = os.getenv("AI_VISION_MODEL", _legacy_model or "glm-4.6v-flash")
+AI_VISION_MODEL = os.getenv("AI_VISION_MODEL", _legacy_model or "glm-4.1v-thinking-flash")
 AI_TEXT_MODEL = os.getenv("AI_TEXT_MODEL", _legacy_model or "glm-4.7-flash")
+
+# 429 限流时的自动降级备用模型(环境变量可覆盖)。智谱新 flash 模型上线期负载大, 间歇性 429;
+# 旧版 glm-4v-flash / glm-4-flash 同账号可用且稳定, 作默认降级目标。
+AI_VISION_MODEL_FALLBACK = os.getenv("AI_VISION_MODEL_FALLBACK", "glm-4v-flash")
+AI_TEXT_MODEL_FALLBACK = os.getenv("AI_TEXT_MODEL_FALLBACK", "glm-4-flash")
 
 # API Key 优先级：环境变量（非空）> 加密 vault > 默认值
 _raw_api_key = os.getenv("AI_API_KEY", "").strip()
@@ -152,7 +157,7 @@ _DEFAULT_SETTINGS = {
     "custom_report_instructions": "",
     "ai_enabled": False,
     "ai_base_url": "https://open.bigmodel.cn/api/paas/v4",
-    "ai_vision_model": "glm-4.6v-flash",
+    "ai_vision_model": "glm-4.1v-thinking-flash",
     "ai_text_model": "glm-4.7-flash",
     "pomodoro_work_min": 25,
     "pomodoro_break_min": 5,

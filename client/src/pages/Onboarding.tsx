@@ -42,7 +42,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const [useFreeModel, setUseFreeModel] = useState(true)
   const [apiKey, setApiKey] = useState('')
   const [apiBase, setApiBase] = useState('https://open.bigmodel.cn/api/paas/v4')
-  const [apiVisionModel, setApiVisionModel] = useState('glm-4.6v-flash')
+  const [apiVisionModel, setApiVisionModel] = useState('glm-4.1v-thinking-flash')
   const [apiTextModel, setApiTextModel] = useState('glm-4.7-flash')
   const [showKey, setShowKey] = useState(false)
   const [aiTesting, setAiTesting] = useState(false)
@@ -81,7 +81,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const handleUseFreeModel = () => {
     setUseFreeModel(true)
     setApiBase('https://open.bigmodel.cn/api/paas/v4')
-    setApiVisionModel('glm-4.6v-flash')
+    setApiVisionModel('glm-4.1v-thinking-flash')
     setApiTextModel('glm-4.7-flash')
   }
 
@@ -480,7 +480,7 @@ function AIStep({
                     type="text"
                     value={apiVisionModel}
                     onChange={(e) => setApiVisionModel(e.target.value)}
-                    placeholder="glm-4.6v-flash"
+                    placeholder="glm-4.1v-thinking-flash"
                     className="w-full bg-cd-bg border border-cd-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-cd-green"
                   />
                 </div>
