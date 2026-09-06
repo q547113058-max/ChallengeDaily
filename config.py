@@ -78,7 +78,7 @@ AI_BASE_URL = os.getenv("AI_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
 # 向后兼容：旧的 AI_MODEL 同时作为 vision/text 的兜底
 _legacy_model = os.getenv("AI_MODEL", "")
 AI_VISION_MODEL = os.getenv("AI_VISION_MODEL", _legacy_model or "glm-4.1v-thinking-flash")
-AI_TEXT_MODEL = os.getenv("AI_TEXT_MODEL", _legacy_model or "glm-4.7-flash")
+AI_TEXT_MODEL = os.getenv("AI_TEXT_MODEL", _legacy_model or "glm-4-flash")
 
 # 429 限流时的自动降级备用模型(环境变量可覆盖)。智谱新 flash 模型上线期负载大, 间歇性 429;
 # 旧版 glm-4v-flash / glm-4-flash 同账号可用且稳定, 作默认降级目标。
@@ -158,7 +158,7 @@ _DEFAULT_SETTINGS = {
     "ai_enabled": False,
     "ai_base_url": "https://open.bigmodel.cn/api/paas/v4",
     "ai_vision_model": "glm-4.1v-thinking-flash",
-    "ai_text_model": "glm-4.7-flash",
+    "ai_text_model": "glm-4-flash",
     "pomodoro_work_min": 25,
     "pomodoro_break_min": 5,
     "pomodoro_long_break_min": 15,
