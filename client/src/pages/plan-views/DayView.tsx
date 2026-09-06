@@ -1,4 +1,4 @@
-import { Play, Plus, Target, Flame, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, Target, Flame, ChevronLeft, ChevronRight } from 'lucide-react'
 import { CATEGORY_COLORS, POMODORO_SIZES, type TodoV2, type WeekPlanData } from '../../api/client'
 import GanttBar from '../../components/GanttBar'
 import TimeAxis from '../../components/TimeAxis'
@@ -12,7 +12,6 @@ interface DayViewProps {
   setSelectedDate: (v: string) => void
   setWeekStart: (v: string) => void
   openDetail: (todo: TodoV2) => void
-  startFocus: (id: number) => void
   handleDragStart: (todo: TodoV2) => (e: React.DragEvent) => void
   handleDragEnd: () => void
   setShowCreateModal: (v: boolean) => void
@@ -21,7 +20,7 @@ interface DayViewProps {
 
 export default function DayView({
   selectedDate, weekPlan, weekStart, dragId,
-  setSelectedDate, setWeekStart, openDetail, startFocus,
+  setSelectedDate, setWeekStart, openDetail,
   handleDragStart, handleDragEnd, setShowCreateModal, getWeekStart,
 }: DayViewProps) {
   const allTasks = (weekPlan.day_tasks[selectedDate] || []).slice().sort((a, b) => (a.priority || 3) - (b.priority || 3) || a.id - b.id)
@@ -87,14 +86,6 @@ export default function DayView({
           <h2 className="text-sm font-semibold text-cd-text">{fmtDate(selectedDate)} {WEEKDAY_LABELS[wd]}</h2>
           <span className="text-xs text-cd-text-tertiary">{allTasks.length} 个任务 · 总计 {totalMin}m</span>
         </div>
-        {isToday && allTasks.some(t => t.status !== 'completed') && (
-          <button
-            onClick={() => { const t = allTasks.find(t => t.status !== 'completed'); if (t) startFocus(t.id) }}
-            className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg bg-cd-accent/20 text-cd-accent border border-cd-accent/30 hover:bg-cd-accent/30 transition"
-          >
-            <Play size={12} /> 开始专注
-          </button>
-        )}
       </div>
       {/* 日期导航 */}
       <div className="flex items-center gap-2 mb-4">

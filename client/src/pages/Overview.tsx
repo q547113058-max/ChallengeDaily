@@ -21,7 +21,7 @@ import {
   type RecentHeatmapDay,
 } from '../api/client'
 import {
-  Clock, Monitor, Zap, TrendingUp, Camera, Focus, CalendarDays,
+  Clock, Monitor, Zap, TrendingUp, Camera, CalendarDays,
   Activity as ActivityIcon, Play, ArrowRight,
 } from 'lucide-react'
 import dayjs from 'dayjs'
@@ -322,10 +322,6 @@ export default function Overview() {
           <span className="text-cd-text-tertiary">·</span>
           <a href="#/week-plan" className="text-sm text-cd-green hover:underline flex items-center gap-1">
             <CalendarDays size={14} /> 前往周计划
-          </a>
-          <span className="text-cd-text-tertiary">·</span>
-          <a href="#/focus" className="text-sm text-cd-green hover:underline flex items-center gap-1">
-            <Focus size={14} /> 开始专注
           </a>
         </div>
 

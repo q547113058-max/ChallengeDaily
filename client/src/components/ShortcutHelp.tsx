@@ -17,13 +17,6 @@ const SHORTCUT_GROUPS = [
       { keys: ['Enter'], desc: '命令面板中跳转' },
     ],
   },
-  {
-    title: '番茄钟',
-    shortcuts: [
-      { keys: ['Space'], desc: '开始/暂停番茄钟（专注页面）' },
-      { keys: ['S'], desc: '跳过当前阶段' },
-    ],
-  },
 ]
 
 export function ShortcutHelp({ open, onClose }: { open: boolean; onClose: () => void }) {

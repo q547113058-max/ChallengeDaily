@@ -30,8 +30,6 @@ def build_tray_menu_items() -> list:
         {"id": "show", "label": "显示主窗口", "accelerator": "Ctrl+Shift+S", "enabled": True},
         {"id": "hide", "label": "隐藏到托盘", "enabled": True},
         {"type": "separator"},
-        {"id": "start_pomodoro", "label": "开始番茄钟", "accelerator": "Ctrl+Shift+P", "enabled": True},
-        {"id": "start_focus", "label": "进入专注模式", "accelerator": "Ctrl+Shift+F", "enabled": True},
         {"id": "pause_tracking", "label": "暂停采集", "enabled": True},
         {"type": "separator"},
         {"id": "daily_report", "label": "查看今日报告", "enabled": True},
@@ -74,9 +72,6 @@ def list_shortcuts() -> list:
 def get_default_shortcuts() -> list:
     """获取默认快捷键配置"""
     return [
-        {"accelerator": "Ctrl+Shift+P", "action": "pomodoro.start", "description": "开始番茄钟"},
-        {"accelerator": "Ctrl+Shift+F", "action": "focus.start", "description": "进入专注模式"},
-        {"accelerator": "Ctrl+Shift+Q", "action": "pomodoro.quick", "description": "快速番茄"},
         {"accelerator": "Ctrl+Shift+S", "action": "window.show", "description": "显示主窗口"},
         {"accelerator": "Ctrl+Shift+H", "action": "window.hide", "description": "隐藏主窗口"},
         {"accelerator": "Ctrl+Shift+D", "action": "report.daily", "description": "今日报告"},

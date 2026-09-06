@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Play, Check, Trash2, Calendar, Target } from 'lucide-react'
+import { Check, Trash2, Calendar, Target } from 'lucide-react'
 import Modal from './Modal'
 import { updateTodo, deleteTodo, assignTodo, unassignTodo, updateTaskTime, getGoals, type TodoV2, type Goal } from '../api/client'
 import { useToast } from './Toast'
@@ -99,11 +99,6 @@ export default function TaskDetailModal({ todo, onClose, onUpdate }: Props) {
       onUpdate(); onClose()
     } catch { error('移动失败') }
   }
-  const startFocus = () => {
-    window.location.hash = '#/focus?todo_id=' + todo.id
-    onClose()
-  }
-
   return (
     <Modal
       open={!!todo}
@@ -111,13 +106,7 @@ export default function TaskDetailModal({ todo, onClose, onUpdate }: Props) {
       title="任务详情"
       maxWidth="max-w-md"
       footer={
-        <div className="grid grid-cols-3 gap-2">
-          <button
-            onClick={startFocus}
-            className="flex items-center justify-center gap-1 py-2 text-xs rounded-xl bg-cd-accent/20 text-cd-accent border border-cd-accent/30 hover:bg-cd-accent/30 transition"
-          >
-            <Play size={12} /> 专注
-          </button>
+        <div className="grid grid-cols-2 gap-2">
           <button
             onClick={handleComplete}
             className="flex items-center justify-center gap-1 py-2 text-xs rounded-xl bg-cd-green/20 text-cd-green border border-cd-green/30 hover:bg-cd-green/30 transition"

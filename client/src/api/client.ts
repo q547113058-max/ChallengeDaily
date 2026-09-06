@@ -21,10 +21,6 @@ export { getStatus, getTodayStats, getDateStats, getActivities, getAppUsage, cap
 export { generateDailyReport, generateWeeklyReport, generateMonthlyReport, getCustomTemplates, saveCustomTemplate, deleteCustomTemplate, getDailyReportContent, getReportChannels, saveReportChannels, testReportChannel, submitReportToChannels, scoreReportQuality, searchReports, getDeepInsights, exportReportAsObsidian } from './report'
 export type { CustomTemplate, ReportChannelConfig, ReportQualityDimension, ReportQualityResult, ReportSearchResult, DeepInsights } from './report'
 
-// ── 番茄钟 API ──
-export { startPomodoro, stopPomodoro, getPomodoroSessions, getPomodoroStats, getPomodoroQuality, checkPomodoroDistraction, getSmartDuration, getPomodoroReport } from './pomodoro'
-export type { PomodoroSession, PomodoroQuality, SmartDurationResult, PomodoroReport } from './pomodoro'
-
 // ── 统计 API ──
 export { getHourlyStats, getTrendStats, getRhythmStats, getRecentHeatmap, getDistractionHeatmap, getCalendarView, getSankeyData } from './stats'
 export type { RecentHeatmapDay, DistractionHeatmapEntry, CalendarDay, CalendarViewData, SankeyLink } from './stats'

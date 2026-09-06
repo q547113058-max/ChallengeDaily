@@ -17,7 +17,6 @@ import {
   Brain,
   Activity,
   Sparkles,
-  Timer,
   CheckSquare,
   Calendar,
   CalendarDays,
@@ -91,12 +90,6 @@ const NAV_GROUPS: { label: string; items: NavParent[] }[] = [
         icon: CheckSquare,
         label: '待办清单',
         desc: '今日待办与子任务树形管理',
-      },
-      {
-        to: '/focus',
-        icon: Timer,
-        label: '专注番茄',
-        desc: '番茄钟与待办联动计时',
       },
     ],
   },
@@ -330,7 +323,6 @@ export default function Sidebar() {
                           <NavLink
                             key={child.to + child.label}
                             to={child.to}
-                            end={child.to === '/focus'}
                             className={({ isActive }) =>
                               `flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[12px] transition-colors ${
                                 isActive

@@ -26,7 +26,6 @@ const Onboarding = lazy(() => import('./pages/Onboarding'))
 const Legal = lazy(() => import('./pages/Legal'))
 const DeepProfile = lazy(() => import('./pages/DeepProfile'))
 const Health = lazy(() => import('./pages/Health'))
-const Focus = lazy(() => import('./pages/Focus'))
 const Todos = lazy(() => import('./pages/Todos'))
 const Countdowns = lazy(() => import('./pages/Countdowns'))
 const Habits = lazy(() => import('./pages/Habits'))
@@ -198,7 +197,6 @@ export default function App() {
                         <Route path="/" element={<Overview />} />
                         <Route path="/timeline" element={<Timeline />} />
                         <Route path="/report" element={<Report />} />
-                        <Route path="/focus" element={<Focus />} />
                         <Route path="/week-plan" element={<WeekPlan />} />
                         <Route path="/todos" element={<Todos />} />
                         <Route path="/heatmap" element={<Heatmap />} />
@@ -246,10 +244,9 @@ function ElectronNavigationBridge() {
   const navigate = useNavigate()
   useEffect(() => {
     if (!window.electronAPI) return
-    // 监听全局快捷键导航（Ctrl+Shift+Q → 番茄钟 等）
+    // 监听全局快捷键导航（全局快捷键→跳转页面）
     const onNav = (path: string) => {
       const pathMap: Record<string, string> = {
-        focus: '/focus',
         report: '/report',
         overview: '/',
         habits: '/habits',
@@ -260,13 +257,6 @@ function ElectronNavigationBridge() {
     // 使用通用事件监听（onNavigateTo 已在 preload 声明）
     if (window.electronAPI?.onNavigateTo) {
       window.electronAPI.onNavigateTo(onNav)
-    }
-    // 专注模式切换（Ctrl+Shift+F）
-    if (window.electronAPI?.onToggleFocusMode) {
-      window.electronAPI.onToggleFocusMode(() => {
-        // 通知 Focus 页面切换专注模式（通过自定义事件）
-        window.dispatchEvent(new CustomEvent('toggle-focus-mode'))
-      })
     }
     return () => { /* IPC 监听器随组件卸载自动清理 */ }
   }, [navigate])

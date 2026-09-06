@@ -44,21 +44,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Windows 系统定位（主进程调用 PowerShell）
   getWindowsLocation: () => ipcRenderer.invoke('get-windows-location'),
 
-  // 番茄钟悬浮窗
-  pomodoroWidgetUpdate: (data) => ipcRenderer.send('pomodoro-widget-update', data),
-  pomodoroWidgetHide: () => ipcRenderer.send('pomodoro-widget-hide'),
-  pomodoroWidgetClick: () => ipcRenderer.send('pomodoro-widget-click'),
-  onPomodoroTick: _makeManagedListener('pomodoro-tick'),
-
-  // 分心告警：主窗口 → 主进程 → 宠物窗口
-  sendDistractionAlert: (data) => ipcRenderer.send('distraction-alert', data),
-  onDistractionAlert: _makeManagedListener('distraction-alert'),
-
-  // 主进程导航指令（悬浮窗点击跳转等）
+  // 主进程导航指令（全局快捷键→跳转页面）
   onNavigateTo: _makeManagedListener('navigate-to'),
-
-  // P13-4：专注模式切换（全局快捷键 Ctrl+Shift+F 触发）
-  onToggleFocusMode: _makeManagedListener('toggle-focus-mode'),
 
   // 开机自启动
   getAutoStart: () => ipcRenderer.invoke('get-auto-start'),

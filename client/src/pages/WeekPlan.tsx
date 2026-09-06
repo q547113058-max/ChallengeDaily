@@ -199,7 +199,6 @@ export default function WeekPlan() {
     else if (viewMode === 'year') loadYear(yearKey)
     else loadWeek(weekStart)
   }
-  const startFocus = (id: number) => { window.location.hash = '#/focus?todo_id=' + id }
   const dates = weekPlan?.dates || getWeekDates(weekStart)
 
   const toggleExpand = (id: number) => setExpandedTaskId(prev => prev === id ? null : id)
@@ -428,7 +427,6 @@ export default function WeekPlan() {
             handleDropDay={handleDropDay}
             handleDropUnassigned={handleDropUnassigned}
             openDetail={openDetail}
-            startFocus={startFocus}
             setShowCreateModal={setShowCreateModal}
             toggleExpand={toggleExpand}
           />
@@ -442,7 +440,6 @@ export default function WeekPlan() {
             setSelectedDate={setSelectedDate}
             setWeekStart={setWeekStart}
             openDetail={openDetail}
-            startFocus={startFocus}
             handleDragStart={handleDragStart}
             handleDragEnd={handleDragEnd}
             setShowCreateModal={setShowCreateModal}

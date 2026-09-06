@@ -1,4 +1,4 @@
-import { Search, Plus, Play, Target } from 'lucide-react'
+import { Search, Plus, Target } from 'lucide-react'
 import { CATEGORY_COLORS, POMODORO_SIZES, type TodoV2, type WeekPlanData } from '../../api/client'
 import { TaskCard } from './weekPlanComponents'
 import {
@@ -22,7 +22,6 @@ interface WeekViewProps {
   handleDropDay: (date: string) => (e: React.DragEvent) => void
   handleDropUnassigned: (e: React.DragEvent) => void
   openDetail: (todo: TodoV2) => void
-  startFocus: (id: number) => void
   setShowCreateModal: (v: boolean) => void
   toggleExpand: (id: number) => void
 }
@@ -31,7 +30,7 @@ export default function WeekView({
   weekPlan, dates, unassigned, searchQuery, setSearchQuery,
   dragId, dragOverCol, expandedTaskId,
   handleDragStart, handleDragEnd, handleDragOver, handleDragLeave,
-  handleDropDay, handleDropUnassigned, openDetail, startFocus, setShowCreateModal, toggleExpand,
+  handleDropDay, handleDropUnassigned, openDetail, setShowCreateModal, toggleExpand,
 }: WeekViewProps) {
   const filteredUnassigned = searchQuery.trim()
     ? unassigned.filter(t => t.title.toLowerCase().includes(searchQuery.toLowerCase()) || t.category.includes(searchQuery))
@@ -277,19 +276,6 @@ export default function WeekView({
           })}
         </div>
 
-        {/* 底栏：今日专注入口 */}
-        {todayTasks.some(t => t.status !== 'completed') && (
-          <div className="shrink-0 px-3 py-2 flex items-center gap-2" style={{ borderTop: '1px solid var(--cd-border)' }}>
-            <span className="text-[10px] text-cd-text-tertiary">今日待完成 {todayTasks.filter(t => t.status !== 'completed').length} 项</span>
-            <button
-              onClick={() => { const t = todayTasks.find(t => t.status !== 'completed'); if (t) startFocus(t.id) }}
-              className="flex items-center gap-1 px-2.5 py-1 text-[10px] rounded transition hover:brightness-125"
-              style={{ background: '#7B68EE22', color: '#937CFF', border: '1px solid #7B68EE55' }}
-            >
-              <Play size={9} /> 开始专注
-            </button>
-          </div>
-        )}
       </div>
     </div>
   )

@@ -287,7 +287,6 @@ function FeatureTourStep() {
       desc: '规划与执行',
       items: [
         '周计划 / 待办清单',
-        '专注番茄',
         '报告中心：生成 / 历史 / 导出',
       ],
     },

@@ -452,21 +452,6 @@ def tool_list_goals(status: str | None = None, timeframe: str | None = None) -> 
     return _ok(data)
 
 
-# ── 番茄钟 ──────────────────────────────────────────────────────
-
-
-def tool_list_pomodoro_sessions(target_date: str | None = None) -> list[dict]:
-    """列出某天番茄钟会话
-
-    Args:
-        target_date: 日期 YYYY-MM-DD
-    """
-    data = _backend_request("GET", "/api/pomodoro/sessions", params={
-        "date": target_date or _today(),
-    })
-    return _ok(data)
-
-
 # ── 数据库只读查询（白名单 + 严格只读） ──────────────────────────────
 
 # 仅允许 SELECT，且表名白名单
@@ -739,7 +724,6 @@ _TOOL_REGISTRY: dict[str, Callable[..., list[dict]]] = {
     "get_daily_report": tool_get_daily_report,
     "get_ai_insight": tool_get_ai_insight,
     "list_goals": tool_list_goals,
-    "list_pomodoro_sessions": tool_list_pomodoro_sessions,
     "query_database": tool_query_database,
     "health_check": tool_health_check,
     # 记忆系统（三阶段记忆：search_memory 原始片段，get_memory_context 拼接上下文）

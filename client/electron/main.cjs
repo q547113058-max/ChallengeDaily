@@ -52,9 +52,6 @@ console.log('[Main] main.cjs loaded, log file:', mainLogFile)
 
 // 保持全局引用，防止垃圾回收
 let mainWindow = null
-let pomodoroWidget = null
-let widgetDismissed = false     // 用户手动关闭过：当前番茄内不再强行弹出
-let widgetLastPhase = 'idle'    // 上一次 tick 的阶段，用于识别新番茄开始
 let tray = null
 let backendProcess = null
 let _backendDir = null        // 后端工作目录，供 readApiToken 使用
@@ -588,91 +585,6 @@ function createMainWindow() {
   })
 }
 
-// ─── 番茄钟悬浮计时窗口 ────────────────────────────────
-// 类似"番茄土豆"的置顶小窗口，迷你显示倒计时/任务/阶段
-// 番茄钟运行时自动弹出，可拖拽，点击跳回主界面
-function createPomodoroWidget() {
-  if (pomodoroWidget && !pomodoroWidget.isDestroyed()) {
-    return pomodoroWidget
-  }
-
-  const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize
-
-  pomodoroWidget = new BrowserWindow({
-    width: 216,
-    height: 94,
-    x: screenWidth - 236,
-    y: 60,
-    transparent: true,
-    frame: false,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    resizable: false,
-    hasShadow: false,
-    backgroundColor: undefined,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      preload: path.join(__dirname, 'preload.cjs'),
-    },
-    show: false,
-    focusable: true,  // 需要能接受点击
-  })
-
-  pomodoroWidget.setAlwaysOnTop(true, 'floating')
-  pomodoroWidget.setBackgroundColor('#00000000')
-
-  // Win11 毛玻璃：DWM acrylic 材质模糊窗口后方桌面内容（Win10 不支持则静默回退）
-  try {
-    if (process.platform === 'win32') pomodoroWidget.setBackgroundMaterial('acrylic')
-  } catch (_) { /* 旧系统无此 API，保持纯半透明外观 */ }
-
-  // P20-1: 为番茄钟悬浮窗应用基础 CSP
-  applyCSPToSession(pomodoroWidget.webContents.session)
-
-  if (isDev) {
-    pomodoroWidget.loadURL('http://localhost:5173/pomodoro-widget.html')
-  } else {
-    pomodoroWidget.loadFile(path.join(__dirname, '..', 'dist', 'pomodoro-widget.html'))
-  }
-
-  // 点击悬浮窗 → 激活主窗口并跳转到专注页
-  // 注意：不用 focus 事件（拖拽窗口也会触发 focus，会误抢焦点）；
-  // 改由悬浮窗内点击发送的 pomodoro-widget-click IPC 显式触发（见 registerIpc）
-
-  pomodoroWidget.on('closed', () => {
-    pomodoroWidget = null
-    widgetDismissed = true  // 防止下一秒 tick 把已关闭的窗口重建出来
-  })
-
-  return pomodoroWidget
-}
-
-function showPomodoroWidget(data) {
-  // 新番茄开始（休息/空闲 → 工作）时，恢复被用户关闭的悬浮窗
-  if (data.phase === 'working' && widgetLastPhase !== 'working') widgetDismissed = false
-  widgetLastPhase = data.phase
-  // 用户手动关闭过：当前番茄内尊重其意图，不再强行弹出
-  if (widgetDismissed) return
-
-  const w = createPomodoroWidget()
-  w.webContents.once('did-finish-load', () => {
-    w.webContents.send('pomodoro-tick', data)
-    w.showInactive()  // 显示但不抢焦点
-  })
-  if (!w.webContents.isLoading()) {
-    w.webContents.send('pomodoro-tick', data)
-    if (!w.isVisible()) w.showInactive()
-  }
-}
-
-function hidePomodoroWidget() {
-  if (pomodoroWidget && !pomodoroWidget.isDestroyed()) {
-    pomodoroWidget.hide()
-  }
-}
-
 // ─── 系统托盘 ────────────────────────────────────
 function createTray() {
   const icon = getTrayIcon()
@@ -753,7 +665,6 @@ function setupIPC() {
   // P37: IPC 通道白名单 — 仅允许已注册的通道名
   const ALLOWED_IPC_CHANNELS = new Set([
     'window-minimize', 'window-maximize', 'window-close', 'window-show',
-    'pomodoro-widget-update', 'pomodoro-widget-hide',
     'get-backend-port', 'get-api-token',
     'get-app-version',
     'get-auto-start', 'set-auto-start',
@@ -787,29 +698,6 @@ function setupIPC() {
   })
   ipcMain.on('window-close', () => mainWindow?.hide())
   ipcMain.on('window-show', () => mainWindow?.show())
-
-  // ── 番茄钟悬浮窗 IPC ──
-  // 渲染进程发送计时数据 → 悬浮窗更新显示
-  ipcMain.on('pomodoro-widget-update', (_event, data) => {
-    if (data.phase === 'idle') {
-      hidePomodoroWidget()
-    } else {
-      showPomodoroWidget(data)
-    }
-  })
-  // 渲染进程请求关闭悬浮窗（用户点击了悬浮窗上的 ×）
-  ipcMain.on('pomodoro-widget-hide', () => {
-    widgetDismissed = true  // 记住关闭意图，当前番茄内不再弹出
-    hidePomodoroWidget()
-  })
-  // 悬浮窗内点击 → 激活主窗口并跳转专注页
-  ipcMain.on('pomodoro-widget-click', () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.show()
-      mainWindow.focus()
-      mainWindow.webContents.send('navigate-to', '/focus')
-    }
-  })
 
   // 后端状态
   ipcMain.handle('get-backend-port', () => BACKEND_PORT)
@@ -1029,19 +917,6 @@ function registerShortcuts() {
       mainWindow?.show()
       mainWindow?.focus()
     }
-  })
-
-  // P13-4：Ctrl+Shift+Q — 快速打开番茄钟
-  globalShortcut.register('CommandOrControl+Shift+Q', () => {
-    sendToRenderer('navigate-to', 'focus')
-    mainWindow?.show()
-    mainWindow?.focus()
-  })
-
-  // P13-4：Ctrl+Shift+F — 切换专注模式（通知前端）
-  globalShortcut.register('CommandOrControl+Shift+F', () => {
-    sendToRenderer('toggle-focus-mode')
-    mainWindow?.show()
   })
 
   console.log('[Main] Global shortcuts registered')

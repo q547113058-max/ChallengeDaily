@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Plus, Check, Trash2, Clock, Target, Repeat, ListChecks, Play, Calendar, Flame, ChevronRight, GitBranch } from 'lucide-react'
+import { Plus, Check, Trash2, Clock, Target, Repeat, ListChecks, Calendar, Flame, ChevronRight, GitBranch } from 'lucide-react'
 import { getTodos, updateTodo, deleteTodo, getTodayTodos, CATEGORY_COLORS, type TodoV2, formatLocalDate } from '../api/client'
 import { useToast } from '../components/Toast'
 import TaskCreateModal from '../components/TaskCreateModal'
@@ -100,10 +100,6 @@ export default function Todos() {
     }
   }
 
-  const startFocus = (todo: TodoV2) => {
-    window.location.hash = `#/focus?todo_id=${todo.id}`
-  }
-
   const toggleExpand = (id: number) => {
     setExpandedParents(prev => {
       const next = new Set(prev)
@@ -135,7 +131,7 @@ export default function Todos() {
   const unassigned = excludeChildren(todos.filter(t => !t.assigned_date && t.status !== 'completed'))
   const otherPending = excludeChildren(todos.filter(t => t.assigned_date && t.assigned_date !== todayStr && t.status !== 'completed'))
 
-  const renderTodoCard = (todo: TodoV2, showFocus = false, isChild = false) => {
+  const renderTodoCard = (todo: TodoV2, isChild = false) => {
     const Icon = MODE_ICONS[todo.mode] || Clock
     const progress = todo.target_min > 0 ? Math.min(100, (todo.progress_min / todo.target_min) * 100) : 0
     const estPom = todo.estimated_pomodoros || Math.ceil(todo.target_min / 25) || 1
@@ -265,15 +261,6 @@ export default function Todos() {
               </span>
             )}
           </div>
-          {showFocus && !isCompleted && (
-            <button
-              onClick={() => startFocus(todo)}
-              className="px-2.5 py-1 rounded-lg text-xs bg-cd-accent/15 text-cd-accent border border-cd-accent/20 hover:bg-cd-accent/25 transition flex items-center gap-1 shrink-0"
-              title="开始专注"
-            >
-              <Play size={11} /> 开始专注
-            </button>
-          )}
         </div>
 
         {/* 子任务列表（Notion 式缩进 + 树形连接线） */}
@@ -314,15 +301,6 @@ export default function Todos() {
                   >
                     {child.category}
                   </span>
-                  {!childCompleted && showFocus && (
-                    <button
-                      onClick={() => startFocus(child)}
-                      className="text-cd-accent hover:text-cd-accent/80 shrink-0 p-0.5"
-                      title="开始专注"
-                    >
-                      <Play size={11} />
-                    </button>
-                  )}
                   <button
                     onClick={() => handleDelete(child)}
                     className="text-cd-text-tertiary hover:text-red-400 transition shrink-0 p-0.5"
@@ -339,7 +317,7 @@ export default function Todos() {
     )
   }
 
-  const renderGroup = (title: string, dotColor: string, items: TodoV2[], showFocus = false) => {
+  const renderGroup = (title: string, dotColor: string, items: TodoV2[]) => {
     if (items.length === 0) return null
     return (
       <div className="mb-6">
@@ -348,7 +326,7 @@ export default function Todos() {
           {title} · {items.length}项
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-          {items.map(t => renderTodoCard(t, showFocus))}
+          {items.map(t => renderTodoCard(t))}
         </div>
       </div>
     )
@@ -365,7 +343,7 @@ export default function Todos() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-cd-text">待办清单</h1>
-          <p className="text-xs text-cd-text-tertiary mt-1">快速管理任务 · 父任务可展开查看子任务 · 点击卡片可启动番茄专注</p>
+          <p className="text-xs text-cd-text-tertiary mt-1">快速管理任务 · 父任务可展开查看子任务</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 bg-cd-bg-card rounded-lg border border-white/5 p-0.5">
@@ -390,10 +368,10 @@ export default function Todos() {
         </div>
       </div>
 
-      {renderGroup('今日待办', 'var(--cd-green)', todayPending, true)}
-      {renderGroup('未分配', '#F0C040', unassigned, true)}
-      {renderGroup('其他日期', '#5B8DEF', otherPending, true)}
-      {renderGroup('今日已完成', '#22c55e', todayCompleted, false)}
+      {renderGroup('今日待办', 'var(--cd-green)', todayPending)}
+      {renderGroup('未分配', '#F0C040', unassigned)}
+      {renderGroup('其他日期', '#5B8DEF', otherPending)}
+      {renderGroup('今日已完成', '#22c55e', todayCompleted)}
 
       {isEmpty && (
         <div className="text-center py-12 text-cd-text-secondary">

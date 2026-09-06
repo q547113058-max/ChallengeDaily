@@ -29,9 +29,6 @@ export default function InsightCards({ insights, onIgnore }: Props) {
   const handleAction = (actionType?: string) => {
     if (!actionType) return
     switch (actionType) {
-      case 'start_pomodoro':
-        navigate('/focus?autostart=1')
-        break
       case 'view_trend':
         navigate('/heatmap')
         break

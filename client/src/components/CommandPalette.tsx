@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Search, Home, Calendar, CheckSquare, Timer, FileText,
+  Search, Home, Calendar, CheckSquare, FileText,
   Flame, Target, Brain, Clock,
   Grid3X3, AppWindow, History, Download, Activity, Settings as SettingsIcon,
   CalendarRange, CornerDownLeft, ArrowUp, ArrowDown, Moon, TrendingUp
@@ -39,7 +39,6 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       nav('/', '今日总览', Home, '首页', ['home', 'dashboard']),
       nav('/week-plan', '周计划', Calendar, '周计划管理', ['week', 'plan']),
       nav('/todos', '待办清单', CheckSquare, '任务管理', ['todo', 'task']),
-      nav('/focus', '专注番茄', Timer, '番茄钟', ['pomodoro', 'focus', '番茄']),
       nav('/goals', '长期目标', Target, '年度/季度目标', ['goal', '目标']),
       nav('/habits', '习惯追踪', Flame, '打卡', ['habit', '习惯']),
       nav('/countdowns', '倒数日', Calendar, '倒计时', ['countdown']),
@@ -56,15 +55,6 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       nav('/settings', '设置', SettingsIcon, '应用设置', ['setting', 'config']),
 
       // ── 快捷动作 ──
-      {
-        id: 'action-start-pomodoro',
-        label: '立即开始番茄',
-        icon: Timer,
-        hint: '直达专注页并自动开始',
-        group: 'action',
-        keywords: ['start', 'pomodoro', 'focus', '开始', '番茄'],
-        action: () => { navigate('/focus?autostart=1'); onClose() },
-      },
       {
         id: 'action-end-day',
         label: '结束今天 · 生成日报',
