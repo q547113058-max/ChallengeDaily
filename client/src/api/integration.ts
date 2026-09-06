@@ -238,24 +238,6 @@ export async function getSamplingDeviation(date?: string): Promise<SamplingDevia
   return await request(`/api/health/sampling-deviation${params}`) as SamplingDeviation
 }
 
-// ── 成就系统 ──
-export interface Achievement {
-  id: number
-  code: string
-  name: string
-  description: string
-  icon: string
-  unlocked_at: string | null
-}
-
-export async function getAchievements(): Promise<{ achievements: Achievement[] }> {
-  return request('/api/achievements') as Promise<{ achievements: Achievement[] }>
-}
-
-export async function checkAchievements(): Promise<{ unlocked: Array<{ code: string; name: string; icon: string }> }> {
-  return request('/api/achievements/check', { method: 'POST' }) as Promise<{ unlocked: Array<{ code: string; name: string; icon: string }> }>
-}
-
 export async function getQuote(): Promise<{ quote: string }> {
   return request('/api/achievements/quote') as Promise<{ quote: string }>
 }
@@ -363,27 +345,6 @@ export async function executeImport(source: string, format: 'json' | 'csv', data
   return request('/api/data-import/execute', { method: 'POST', body: JSON.stringify({ source, format, data, target_table, dry_run }) }) as Promise<ImportResultV2>
 }
 
-// ── 规则引擎 ──
-export interface Rule {
-  id: number; name: string; description: string;
-  trigger_type: string; trigger_params: string;
-  action_type: string; action_params: string;
-  enabled: number; created_at: string; last_fired_at: string | null;
-}
-export interface RuleEvalResult {
-  rule_id: number; rule_name: string; action: string;
-  params: Record<string, unknown>; message: string; triggered_at: string;
-}
-export async function getRules(): Promise<{ rules: Rule[]; triggers: Record<string, string>; actions: Record<string, string> }> {
-  return request('/api/rules/list') as Promise<{ rules: Rule[]; triggers: Record<string, string>; actions: Record<string, string> }>
-}
-export async function toggleRule(id: number, enabled: boolean): Promise<{ status: string }> {
-  return request('/api/rules/toggle', { method: 'POST', body: JSON.stringify({ id, enabled }) }) as Promise<{ status: string }>
-}
-export async function evaluateRules(): Promise<{ triggered: RuleEvalResult[]; count: number }> {
-  return request('/api/rules/evaluate') as Promise<{ triggered: RuleEvalResult[]; count: number }>
-}
-
 // ── 习惯追踪 ──
 export interface Habit {
   id: number
@@ -454,41 +415,6 @@ export interface HabitStats {
 }
 export async function getHabitStats(habitId: number, days = 30): Promise<{ status: string; stats: HabitStats }> {
   return request(`/api/habits/${habitId}/stats?days=${days}`) as Promise<{ status: string; stats: HabitStats }>
-}
-
-// ── 每日日记 ──
-export interface DiaryMedia {
-  type: 'image' | 'audio' | 'link'
-  url: string
-  title?: string
-  thumbnail?: string
-  duration?: number
-}
-export interface Diary {
-  id: number
-  diary_date: string
-  mood: string
-  weather: string
-  content: string
-  tags: string
-  highlights: string
-  gratitude: string
-  media_json: string
-  font_style: string
-  created_at: string
-  updated_at: string
-}
-
-export async function getDiary(diaryDate: string): Promise<{ diary: Diary | null }> {
-  return request(`/api/diaries/${diaryDate}`) as Promise<{ diary: Diary | null }>
-}
-
-export async function saveDiary(data: Partial<Diary>): Promise<{ status: string; diary_date: string }> {
-  return request('/api/diaries', { method: 'POST', body: JSON.stringify(data) }) as Promise<{ status: string; diary_date: string }>
-}
-
-export async function getDiaries(limit?: number): Promise<{ diaries: Diary[]; dates: string[] }> {
-  return request(`/api/diaries/list?limit=${limit || 30}`) as Promise<{ diaries: Diary[]; dates: string[] }>
 }
 
 // ── 「今日完成」自动卡片 ──

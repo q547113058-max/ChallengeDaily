@@ -13,7 +13,6 @@ interface LockConfig {
   useHello: boolean     // Windows Hello 生物识别
   idleMinutes: number   // 闲置自动锁分钟数（0=不锁）
   moduleLock: {         // 模块级锁
-    diary: boolean
     profile: boolean
     settings: boolean
   }
@@ -26,7 +25,7 @@ const DEFAULT_CONFIG: LockConfig = {
   passwordHash: '',
   useHello: false,
   idleMinutes: 0,
-  moduleLock: { diary: false, profile: false, settings: false },
+  moduleLock: { profile: false, settings: false },
   failAttempts: 0,
   lastFailAt: 0,
 }
@@ -226,7 +225,6 @@ export function AppLockSettings() {
           <div className="space-y-1.5 pt-2 border-t border-white/5">
             <div className="text-xs text-cd-text-tertiary">模块级二次锁</div>
             {([
-              ['diary', '日记'],
               ['profile', '深度画像'],
               ['settings', '设置'],
             ] as const).map(([k, label]) => (
@@ -271,8 +269,8 @@ export function useAppLock() {
   return { locked, unlock, cfg }
 }
 
-// 模块级锁检查（用于日记等敏感模块）
-export function checkModuleLock(module: 'diary' | 'profile' | 'settings'): boolean {
+// 模块级锁检查
+export function checkModuleLock(module: 'profile' | 'settings'): boolean {
   const cfg = loadConfig()
   return cfg.enabled && cfg.moduleLock[module]
 }

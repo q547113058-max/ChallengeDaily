@@ -14,7 +14,6 @@ from routes.profile import bp as profile_bp
 from routes.deep_insight import bp as deep_insight_bp
 from routes.pomodoro import bp as pomodoro_bp
 from routes.todos import bp as todos_bp
-from routes.diaries import bp as diaries_bp
 from routes.achievements import bp as achievements_bp
 from routes.countdowns import bp as countdowns_bp
 from routes.chat import bp as chat_bp
@@ -23,7 +22,6 @@ from routes.week_plan import bp as week_plan_bp
 from routes.auth_routes import auth_bp
 from routes.privacy_routes import privacy_bp
 from routes.report_channels import bp as report_channels_bp
-from routes.rules_engine import bp as rules_engine_bp
 from routes.goals import bp as goals_bp
 from routes.data_import import bp as data_import_bp
 from routes.coach import bp as coach_bp
@@ -56,7 +54,6 @@ ALL_BLUEPRINTS = [
     deep_insight_bp,
     pomodoro_bp,
     todos_bp,
-    diaries_bp,
     achievements_bp,
     countdowns_bp,
     chat_bp,
@@ -65,7 +62,6 @@ ALL_BLUEPRINTS = [
     auth_bp,
     privacy_bp,
     report_channels_bp,
-    rules_engine_bp,
     goals_bp,
     data_import_bp,
     coach_bp,

@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Search, Home, Calendar, CheckSquare, Timer, FileText, BookOpen,
-  Flame, Target, Zap, Bot, Sparkles, Brain, Clock,
+  Search, Home, Calendar, CheckSquare, Timer, FileText,
+  Flame, Target, Bot, Sparkles, Brain, Clock,
   Grid3X3, AppWindow, History, Download, Activity, Settings as SettingsIcon,
   CalendarRange, CornerDownLeft, ArrowUp, ArrowDown, Moon, TrendingUp
 } from 'lucide-react'
@@ -41,10 +41,8 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       nav('/todos', '待办清单', CheckSquare, '任务管理', ['todo', 'task']),
       nav('/focus', '专注番茄', Timer, '番茄钟', ['pomodoro', 'focus', '番茄']),
       nav('/goals', '长期目标', Target, '年度/季度目标', ['goal', '目标']),
-      nav('/diary', '每日日记', BookOpen, '日记', ['diary', '日记']),
       nav('/habits', '习惯追踪', Flame, '打卡', ['habit', '习惯']),
       nav('/countdowns', '倒数日', Calendar, '倒计时', ['countdown']),
-      nav('/rules-engine', '规则引擎', Zap, 'IF-THEN', ['rule', '规则']),
       nav('/report', '生成报告', FileText, '日报/周报', ['report', '日报']),
       nav('/history', '历史报告', History, '历史日报', ['history']),
       nav('/timeline', '工作时间线', Clock, '时间线', ['timeline']),

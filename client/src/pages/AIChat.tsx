@@ -13,7 +13,6 @@ const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   get_user_profile: { label: '查询用户画像', icon: '👤' },
   create_todo: { label: '创建待办', icon: '✏️' },
   start_pomodoro: { label: '启动番茄钟', icon: '🍅' },
-  save_diary: { label: '保存日记', icon: '📝' },
 }
 
 // ── 快捷操作卡片 ──

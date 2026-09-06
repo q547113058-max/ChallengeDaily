@@ -277,24 +277,6 @@ def _tool_create_todo(params: dict) -> str:
     }, ensure_ascii=False)
 
 
-def _tool_save_diary(params: dict) -> str:
-    """保存日记（返回确认信息）"""
-    content = params.get("content", "")
-    mood = params.get("mood", "")
-    tags = params.get("tags", "")
-    if not content:
-        return "错误：日记内容不能为空"
-    return json.dumps({
-        "action": "save_diary",
-        "data": {
-            "content": content,
-            "mood": mood,
-            "tags": tags,
-        },
-        "confirm_message": f"是否保存日记？情绪：{mood or '未指定'}，标签：{tags or '无'}"
-    }, ensure_ascii=False)
-
-
 def _tool_start_pomodoro(params: dict) -> str:
     """启动番茄钟（返回确认信息）"""
     task = params.get("task", "")
@@ -433,22 +415,6 @@ CHAT_TOOLS = [
             },
         },
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "save_diary",
-            "description": "帮用户保存一条日记，需要用户确认后才会真正保存",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "content": {"type": "string", "description": "日记内容"},
-                    "mood": {"type": "string", "description": "心情标签，如：开心、平静、疲惫"},
-                    "tags": {"type": "string", "description": "标签，逗号分隔"},
-                },
-                "required": ["content"],
-            },
-        },
-    },
 ]
 
 # Tool 名称 → 执行函数的映射
@@ -461,7 +427,6 @@ TOOL_EXECUTORS = {
     "get_user_profile": _tool_get_user_profile,
     "create_todo": _tool_create_todo,
     "start_pomodoro": _tool_start_pomodoro,
-    "save_diary": _tool_save_diary,
 }
 
 
@@ -831,17 +796,6 @@ def execute_action():
                 source='ai_chat',
             )
             return jsonify({"status": "ok", "message": "番茄钟已启动", "session_id": session_id})
-
-        elif action == 'save_diary':
-            from datetime import date as _date_mod
-            diary_date = action_data.get('diary_date', _date_mod.today().isoformat())
-            db.upsert_diary(
-                diary_date=diary_date,
-                content=action_data.get('content', ''),
-                mood=action_data.get('mood', ''),
-                tags=action_data.get('tags', ''),
-            )
-            return jsonify({"status": "ok", "message": "日记已保存"})
 
         else:
             return jsonify({"error": f"未知操作: {action}"}), 400

@@ -371,62 +371,6 @@ def tool_get_activity_stats(target_date: str | None = None) -> list[dict]:
     return _ok(data)
 
 
-# ── 日记 ──────────────────────────────────────────────────────
-
-
-def tool_get_diary(diary_date: str | None = None) -> list[dict]:
-    """获取某天日记
-
-    Args:
-        diary_date: 日期 YYYY-MM-DD
-    """
-    data = _backend_request("GET", f"/api/diaries/{diary_date or _today()}")
-    return _ok(data)
-
-
-def tool_save_diary(
-    content: str,
-    diary_date: str | None = None,
-    mood: str = "",
-    weather: str = "",
-    tags: str = "",
-    highlights: str = "",
-    gratitude: str = "",
-) -> list[dict]:
-    """保存或更新日记（一日一页，覆盖当天）
-
-    Args:
-        content: 日记正文
-        diary_date: 日期 YYYY-MM-DD，默认今天
-        mood: 心情
-        weather: 天气
-        tags: 标签（逗号分隔）
-        highlights: 当日亮点
-        gratitude: 感恩
-    """
-    body = {
-        "diary_date": diary_date or _today(),
-        "content": content,
-        "mood": mood,
-        "weather": weather,
-        "tags": tags,
-        "highlights": highlights,
-        "gratitude": gratitude,
-    }
-    data = _backend_request("POST", "/api/diaries", json_body=body)
-    return _ok(data)
-
-
-def tool_list_diaries(limit: int = 30) -> list[dict]:
-    """列出最近 N 天日记
-
-    Args:
-        limit: 1-200，默认 30
-    """
-    data = _backend_request("GET", "/api/diaries/list", params={"limit": limit})
-    return _ok(data)
-
-
 # ── 习惯 ──────────────────────────────────────────────────────
 
 
@@ -788,9 +732,6 @@ _TOOL_REGISTRY: dict[str, Callable[..., list[dict]]] = {
     "complete_todo": tool_complete_todo,
     "list_activities": tool_list_activities,
     "get_activity_stats": tool_get_activity_stats,
-    "get_diary": tool_get_diary,
-    "save_diary": tool_save_diary,
-    "list_diaries": tool_list_diaries,
     "list_habits": tool_list_habits,
     "check_habit": tool_check_habit,
     "get_week_plan": tool_get_week_plan,

@@ -28,7 +28,6 @@ const DeepProfile = lazy(() => import('./pages/DeepProfile'))
 const Health = lazy(() => import('./pages/Health'))
 const Focus = lazy(() => import('./pages/Focus'))
 const Todos = lazy(() => import('./pages/Todos'))
-const Diary = lazy(() => import('./pages/Diary'))
 const Countdowns = lazy(() => import('./pages/Countdowns'))
 const AIChat = lazy(() => import('./pages/AIChat'))
 const Habits = lazy(() => import('./pages/Habits'))
@@ -36,9 +35,7 @@ const WeekPlan = lazy(() => import('./pages/WeekPlan'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const ExportCenter = lazy(() => import('./pages/ExportCenter'))
 const AICoach = lazy(() => import('./pages/AICoach'))
-const RulesEngine = lazy(() => import('./pages/RulesEngine'))
 const Goals = lazy(() => import('./pages/Goals'))
-const TimelinePlayer = lazy(() => import('./pages/TimelinePlayer'))
 const DailyCards = lazy(() => import('./pages/DailyCards'))
 const MemoryPage = lazy(() => import('./pages/MemoryPage'))
 
@@ -206,7 +203,6 @@ export default function App() {
                         <Route path="/focus" element={<Focus />} />
                         <Route path="/week-plan" element={<WeekPlan />} />
                         <Route path="/todos" element={<Todos />} />
-                        <Route path="/diary" element={<Diary />} />
                         <Route path="/heatmap" element={<Heatmap />} />
                         <Route path="/calendar" element={<CalendarView />} />
                         <Route path="/apps" element={<AppRecords />} />
@@ -220,9 +216,7 @@ export default function App() {
                         <Route path="/ai-chat" element={<AIChat />} />
                         <Route path="/dashboard" element={<Dashboard />} />
                         <Route path="/ai-coach" element={<AICoach />} />
-                        <Route path="/rules-engine" element={<RulesEngine />} />
                         <Route path="/goals" element={<Goals />} />
-                        <Route path="/timeline-player" element={<TimelinePlayer />} />
                         <Route path="/export" element={<ExportCenter />} />
                         <Route path="/habits" element={<Habits />} />
                         <Route path="/health" element={<Health />} />

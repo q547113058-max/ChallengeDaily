@@ -24,14 +24,6 @@ const SHORTCUT_GROUPS = [
       { keys: ['S'], desc: '跳过当前阶段' },
     ],
   },
-  {
-    title: '日记',
-    shortcuts: [
-      { keys: ['Ctrl', 'S'], desc: '保存日记' },
-      { keys: ['Ctrl', '←'], desc: '前一天' },
-      { keys: ['Ctrl', '→'], desc: '后一天' },
-    ],
-  },
 ]
 
 export function ShortcutHelp({ open, onClose }: { open: boolean; onClose: () => void }) {

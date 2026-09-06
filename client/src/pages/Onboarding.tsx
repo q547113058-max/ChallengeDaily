@@ -296,9 +296,9 @@ function FeatureTourStep() {
       label: '洞察',
       desc: '回顾与成长',
       items: [
-        '数据看板：仪表盘 / 时间线 / 热力图 / 日历 / 应用记录 / 时间线回放',
+        '数据看板：仪表盘 / 时间线 / 热力图 / 日历 / 应用记录',
         'AI 助手：AI 对话 / AI 教练',
-        '深度画像：个人画像 / 每日日记',
+        '深度画像：个人画像',
         '成长激励：习惯 / 目标 / 倒数日',
       ],
     },
@@ -307,7 +307,6 @@ function FeatureTourStep() {
   const moreItems = [
     { icon: Tags, label: '应用标签' },
     { icon: Activity, label: '数据校准' },
-    { icon: Zap, label: '规则引擎' },
     { icon: Bot, label: '智能代理' },
     { icon: SettingsIcon, label: '设置' },
   ]
