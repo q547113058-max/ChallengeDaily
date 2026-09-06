@@ -34,24 +34,7 @@ from routes.preferences import bp as preferences_bp
 from routes.audit import bp as audit_bp
 from routes.calendar_routes import bp as calendar_bp
 from routes.git_routes import bp as git_integration_bp
-from routes.analytics_routes import bp as analytics_bp
-from routes.ai_intel_routes import bp as ai_intel_bp
 from routes.platform_routes import bp as platform_bp
-from routes.delight_routes import bp as delight_bp
-from routes.advanced_data_routes import bp as advanced_data_bp
-from routes.smart_routes import bp as smart_bp
-from routes.uiux_routes import bp as uiux_bp
-from routes.integration_routes import bp as integration_bp
-from routes.viz_routes import bp as viz_bp
-from routes.smart_search_routes import bp as smart_search_bp
-from routes.realtime_routes import bp as realtime_bp
-from routes.accessibility_routes import bp as accessibility_bp
-from routes.ml_basic_routes import bp as ml_basic_bp
-from routes.nlp_routes import bp as nlp_bp
-from routes.cv_routes import bp as cv_bp
-from routes.privacy_dq_routes import bp as privacy_dq_bp
-from routes.db_advanced_routes import bp as db_advanced_bp
-from routes.cache_advanced_routes import bp as cache_advanced_bp
 from routes.daily_card import bp as daily_card_bp
 from routes.ritual import bp as ritual_bp
 from routes.scheduler import bp as scheduler_bp
@@ -95,24 +78,7 @@ ALL_BLUEPRINTS = [
     audit_bp,
     calendar_bp,
     git_integration_bp,
-    analytics_bp,
-    ai_intel_bp,
     platform_bp,
-    delight_bp,
-    advanced_data_bp,
-    smart_bp,
-    uiux_bp,
-    integration_bp,
-    viz_bp,
-    smart_search_bp,
-    realtime_bp,
-    accessibility_bp,
-    ml_basic_bp,
-    nlp_bp,
-    cv_bp,
-    privacy_dq_bp,
-    db_advanced_bp,
-    cache_advanced_bp,
     daily_card_bp,
     ritual_bp,
     scheduler_bp,
