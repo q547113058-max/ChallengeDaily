@@ -45,10 +45,11 @@ export default function Timeline() {
     // activity_change 事件：有新活动写入，触发增量刷新
     if (sseEvent.type === 'activity_change') {
       const now = Date.now()
-      // 防抖：1s 内最多刷新一次，避免批量写入时频繁请求
-      if (now - lastRefreshRef.current > 1000) {
+      // 防抖：5s 内最多刷新一次，合并批量写入；SSE 采集约每 5-10s 一条新活动
+      if (now - lastRefreshRef.current > 5000) {
         lastRefreshRef.current = now
-        refreshList()
+        // 静默刷新：不点亮顶部"刷新中"指示(活动事件 5-10s 一次，显示会导致标签高频闪现)
+        refreshList(true)
       }
     }
   }, [sseEvent, refreshList])

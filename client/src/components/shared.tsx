@@ -236,7 +236,7 @@ export function useAsyncData<T>(
   fetcher: () => Promise<T>,
   deps: unknown[] = [],
   refreshInterval?: number,
-): AsyncState<T> & { refresh: () => void } {
+): AsyncState<T> & { refresh: (silent?: boolean) => void } {
   const [state, setState] = useState<AsyncState<T>>({
     data: null,
     loading: true,
@@ -248,14 +248,15 @@ export function useAsyncData<T>(
   const retryCountRef = useRef(0)
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const load = useCallback(async (isBackground = false) => {
+  const load = useCallback(async (isBackground = false, silent = false) => {
     // 如果已经有数据，后台刷新不进入 loading 状态，避免页面闪烁
     setState(prev => ({
       ...prev,
       loading: isBackground && hasDataRef.current ? false : true,
       // 后台刷新出错时不清除已有错误信息，但也不覆盖已有数据
       error: isBackground && hasDataRef.current ? prev.error : null,
-      refreshing: true,
+      // silent(静默)刷新：SSE 事件驱动/定时轮询等自动刷新不点亮"刷新中"指示，避免高频闪现
+      refreshing: silent ? prev.refreshing : true,
     }))
     try {
       const data = await fetcher()
@@ -296,7 +297,7 @@ export function useAsyncData<T>(
       isVisible = !document.hidden
       if (!wasVisible && isVisible) {
         // 从隐藏恢复到可见，立即刷新一次数据
-        load(true)
+        load(true, true)
       }
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -305,7 +306,7 @@ export function useAsyncData<T>(
       // 正常定时刷新（窗口可见时才执行）
       intervalId = setInterval(() => {
         if (cancelled || !isVisible) return
-        load(true)
+        load(true, true)
       }, refreshInterval)
 
       // 断线自动重连：指数退避（1s → 2s → 5s → 10s → 10s...）
@@ -319,7 +320,7 @@ export function useAsyncData<T>(
         retryTimerRef.current = setTimeout(() => {
           if (cancelled || !mountedRef.current) return
           retryCountRef.current++
-          load(true).then(() => {
+          load(true, true).then(() => {
             // 成功后重置计数，恢复正常定时刷新
             retryCountRef.current = 0
           }).catch(() => {
@@ -355,5 +356,5 @@ export function useAsyncData<T>(
     }
   }, [load, refreshInterval])
 
-  return { ...state, refresh: () => load(false) }
+  return { ...state, refresh: (silent?: boolean) => load(false, !!silent) }
 }
