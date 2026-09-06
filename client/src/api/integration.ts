@@ -855,20 +855,3 @@ export async function triggerExtraction(): Promise<{ status: string; extracted?:
     body: '{}',
   }) as Promise<{ status: string; extracted?: number; [k: string]: unknown }>
 }
-
-/** 上传 OPML 文件至幕布导入接口（multipart/form-data） */
-export async function uploadOpmlFile(file: File): Promise<{ status: string; imported?: number; skipped?: number; [k: string]: unknown }> {
-  const token = await getApiToken()
-  const formData = new FormData()
-  formData.append('file', file)
-  const res = await fetch(`${getBaseUrl()}/api/mubu/import-opml`, {
-    method: 'POST',
-    headers: token ? { 'X-API-Token': token } : {},
-    body: formData,
-  })
-  if (!res.ok) {
-    const errData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
-    throw new Error(errData.error || 'OPML 导入失败')
-  }
-  return res.json()
-}

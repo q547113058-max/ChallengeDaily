@@ -620,67 +620,13 @@ def tool_health_check() -> list[dict]:
             "body": e.body,
         })
 
-
-# ── 幕布文档 ────────────────────────────────────
-
-
-def tool_search_mubu_docs(query: str, limit: int = 20) -> list[dict]:
-    """搜索已同步的幕布文档（关键词匹配标题和正文，返回命中片段）
-
-    Args:
-        query: 搜索关键词
-        limit: 返回条数上限 1-100
-    """
-    if not query or not query.strip():
-        return _err("query 不能为空")
-    data = _backend_request("GET", "/api/mubu/search", params={"q": query, "limit": limit})
-    return _ok(data)
-
-
-def tool_list_mubu_docs(limit: int = 50) -> list[dict]:
-    """列出已同步的幕布文档（不含正文，节省带宽）
-
-    Args:
-        limit: 返回条数上限 1-500
-    """
-    data = _backend_request("GET", "/api/mubu/docs", params={"limit": limit})
-    return _ok(data)
-
-
-def tool_get_mubu_doc(doc_id: str) -> list[dict]:
-    """获取单篇幕布文档完整内容
-
-    Args:
-        doc_id: 文档 id
-    """
-    data = _backend_request("GET", f"/api/mubu/docs/{doc_id}")
-    return _ok(data)
-
-
-def tool_get_mubu_context(days: int = 7, limit: int = 20) -> list[dict]:
-    """获取最近编辑的幕布文档作为 AI 上下文（用于日报生成、深度分析）
-
-    Args:
-        days: 最近 N 天 1-90
-        limit: 最多返回 N 篇 1-50
-    """
-    data = _backend_request("GET", "/api/mubu/context", params={"days": days, "limit": limit})
-    return _ok(data)
-
-
-def tool_get_mubu_sync_status() -> list[dict]:
-    """获取幕布文档同步状态（文档数、最后同步时间、cookie 是否有效）"""
-    data = _backend_request("GET", "/api/mubu/status")
-    return _ok(data)
-
-
-# ── 记忆系统（三阶段：幕布同步 → 向量化 → 统一记忆） ────────────────
+# ── 记忆系统（抽取 → 向量化 → 统一记忆） ─────────────────────────────
 
 
 def tool_search_memory(query: str, limit: int = 10) -> list[dict]:
     """混合检索记忆与文档片段（BM25 + 向量 RRF 融合排序）
 
-    覆盖已索引的幕布文档分块（doc_chunks）和抽取的结构化记忆（memories），
+    覆盖已索引的文档分块（doc_chunks）和抽取的结构化记忆（memories），
     返回与 query 最相关的片段列表，每条含 content、source、score 等字段。
 
     适用场景：
@@ -855,11 +801,6 @@ _TOOL_REGISTRY: dict[str, Callable[..., list[dict]]] = {
     "list_pomodoro_sessions": tool_list_pomodoro_sessions,
     "query_database": tool_query_database,
     "health_check": tool_health_check,
-    "search_mubu_docs": tool_search_mubu_docs,
-    "list_mubu_docs": tool_list_mubu_docs,
-    "get_mubu_doc": tool_get_mubu_doc,
-    "get_mubu_context": tool_get_mubu_context,
-    "get_mubu_sync_status": tool_get_mubu_sync_status,
     # 记忆系统（三阶段记忆：search_memory 原始片段，get_memory_context 拼接上下文）
     "search_memory": tool_search_memory,
     "get_memory_context": tool_get_memory_context,

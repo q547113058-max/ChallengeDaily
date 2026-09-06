@@ -1,50 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { getStatus, getSettings, updateSettings, testAiConnection, downloadExportActivities, downloadExportAppUsage, getBackupInfo, downloadBackup, restoreBackup, previewImport, executeImport, request, getMemoryStatus, uploadOpmlFile, type CollectorStatus, type BackendSettings, type MemoryStatus } from '../api/client'
+import { getStatus, getSettings, updateSettings, testAiConnection, downloadExportActivities, downloadExportAppUsage, getBackupInfo, downloadBackup, restoreBackup, previewImport, executeImport, request, type CollectorStatus, type BackendSettings } from '../api/client'
 import { ToggleSwitch, useTimeout, useAsyncData, ApiErrorDisplay } from '../components/shared'
 import { useToast } from '../components/Toast'
 import { useTheme, ACCENT_PRESETS, FONT_PRESETS, RADIUS_PRESETS, SHADOW_PRESETS, OPACITY_PRESETS, SKIN_PRESETS } from '../components/ThemeContext'
 import { AppLockSettings } from '../components/AppLock'
-import { Shield, Bot, Eye, EyeOff, Server, FileText, ListFilter, Download, Loader2, CheckCircle, XCircle, RotateCcw, Database, Upload, HardDrive, Info, RefreshCw, Palette, Type, GlassWater, Moon, Rocket, Search, Calendar, GitBranch, Cpu, Cloud, Brain, FileUp, Heart } from 'lucide-react'
+import { Shield, Bot, Eye, EyeOff, Server, FileText, ListFilter, Download, Loader2, CheckCircle, XCircle, RotateCcw, Database, Upload, HardDrive, Info, Palette, Type, GlassWater, Moon, Rocket, Search, Calendar, GitBranch, Cpu, Heart } from 'lucide-react'
 import dayjs from 'dayjs'
 import CalendarSubscriptionManager from '../components/CalendarSubscriptionManager'
 import GitRepoManager from '../components/GitRepoManager'
 import LocalModelConfigPanel from '../components/LocalModelConfig'
-
-// ── 幕布文档接入 ──
-type MubuStatus = 'idle' | 'syncing' | 'synced' | 'cookie_invalid' | 'error' | 'unknown'
-
-interface MubuStatusInfo {
-  doc_count: number
-  last_sync: string | null
-  status?: string
-}
-
-interface MubuDoc {
-  id: string | number
-  title: string
-  url?: string
-  updated_at?: string
-}
-
-// 将后端/IPC 返回的同步状态字符串归一化为前端枚举
-function normalizeMubuStatus(s: string | undefined | null): MubuStatus {
-  const v = (s || '').toLowerCase()
-  if (!v) return 'unknown'
-  if (v.includes('syncing') || v.includes('running') || v.includes('progress')) return 'syncing'
-  if (v.includes('synced') || v.includes('done') || v.includes('complete') || v.includes('ok') || v.includes('success')) return 'synced'
-  if (v.includes('cookie') || v.includes('unauthorized') || v.includes('auth') || v.includes('invalid') || v.includes('expire')) return 'cookie_invalid'
-  if (v.includes('error') || v.includes('fail')) return 'error'
-  return 'idle'
-}
-
-const MUBU_STATUS_META: Record<MubuStatus, { label: string; className: string }> = {
-  idle: { label: '未同步', className: 'bg-cd-bg-secondary text-cd-text-tertiary' },
-  syncing: { label: '同步中', className: 'bg-cd-green-light text-cd-green' },
-  synced: { label: '已同步', className: 'bg-cd-green-light text-cd-green' },
-  cookie_invalid: { label: 'Cookie 失效', className: 'bg-cd-red-light text-cd-red' },
-  error: { label: '错误', className: 'bg-cd-red-light text-cd-red' },
-  unknown: { label: '未知', className: 'bg-cd-bg-secondary text-cd-text-tertiary' },
-}
 
 export default function Settings() {
   const toast = useToast()
@@ -91,18 +55,6 @@ export default function Settings() {
   // 设置搜索
   const [searchQuery, setSearchQuery] = useState('')
   const [highlightedSection, setHighlightedSection] = useState<string>('')
-  // 幕布文档接入
-  const [mubuStatus, setMubuStatus] = useState<MubuStatus>('unknown')
-  const [mubuInfo, setMubuInfo] = useState<MubuStatusInfo | null>(null)
-  const [mubuLogging, setMubuLogging] = useState(false)
-  const [mubuSyncing, setMubuSyncing] = useState(false)
-  const [mubuSearchQuery, setMubuSearchQuery] = useState('')
-  const [mubuSearching, setMubuSearching] = useState(false)
-  const [mubuSearchResults, setMubuSearchResults] = useState<MubuDoc[]>([])
-  // OPML 导入 & 记忆向量化状态
-  const [opmlUploading, setOpmlUploading] = useState(false)
-  const opmlFileInputRef = useRef<HTMLInputElement>(null)
-  const [memoryStatus, setMemoryStatus] = useState<MemoryStatus | null>(null)
   // 人生配置
   const [birthday, setBirthday] = useState('')
   const [lifeExpectancy, setLifeExpectancy] = useState(80)
@@ -111,7 +63,7 @@ export default function Settings() {
     setSearchQuery(query)
     if (!query.trim()) { setHighlightedSection(''); return }
     // 简单匹配：遍历设置分区标题
-    const sections = ['外观', '采集', 'AI', '日报', '数据', '日历', '人生', 'Git', '幕布', '备份', '导入', '隐私', '关于']
+    const sections = ['外观', '采集', 'AI', '日报', '数据', '日历', '人生', 'Git', '备份', '导入', '隐私', '关于']
     const match = sections.find(s => s.toLowerCase().includes(query.toLowerCase()))
     if (match) {
       setHighlightedSection(match)
@@ -183,47 +135,6 @@ export default function Settings() {
     }
     if (window.electronAPI?.getAutoStart) {
       window.electronAPI.getAutoStart().then(v => setAutoStart(v))
-    }
-  }, [])
-
-  // 幕布文档接入：拉取状态 & 监听 IPC 状态变化（不可用时降级为轮询）
-  useEffect(() => {
-    let unsub: (() => void) | null = null
-    let pollTimer: ReturnType<typeof setInterval> | null = null
-
-    const fetchMubuStatus = async () => {
-      try {
-        const data = await request('/api/mubu/status') as MubuStatusInfo
-        setMubuInfo({ doc_count: data.doc_count ?? 0, last_sync: data.last_sync ?? null })
-        setMubuStatus(normalizeMubuStatus(data.status))
-      } catch {
-        // 后端尚未实现 /api/mubu/status 时静默失败
-      }
-    }
-    fetchMubuStatus()
-
-    // 优先通过 IPC 监听状态变化
-    const api = (window.electronAPI as any)
-    if (api?.on && typeof api.on === 'function') {
-      try {
-        const off = api.on('mubu:status-change', (status: string) => {
-          setMubuStatus(normalizeMubuStatus(status))
-          fetchMubuStatus()
-        })
-        if (typeof off === 'function') unsub = off
-      } catch {
-        // IPC 监听注册失败，降级轮询
-      }
-    }
-
-    // IPC 不可用或注册失败时，降级为定时轮询
-    if (!unsub) {
-      pollTimer = setInterval(fetchMubuStatus, 15000)
-    }
-
-    return () => {
-      if (unsub) { try { unsub() } catch {} }
-      if (pollTimer) clearInterval(pollTimer)
     }
   }, [])
 
@@ -352,88 +263,6 @@ export default function Settings() {
     }
   }
 
-  // 幕布文档接入：登录（使用 SSE 绕过 IPC 注册不稳定问题）
-  const handleMubuLogin = async () => {
-    setMubuLogging(true)
-    try {
-      await request('/api/mubu/login-request', { method: 'POST' })
-      toast.success('已发起幕布登录')
-    } catch (err: any) {
-      toast.error(err?.message || '幕布登录失败')
-    } finally {
-      setMubuLogging(false)
-    }
-  }
-
-  // 幕布文档接入：立即同步（使用 SSE 绕过 IPC 注册不稳定问题）
-  const handleMubuSync = async () => {
-    setMubuSyncing(true)
-    setMubuStatus('syncing')
-    try {
-      await request('/api/mubu/sync/trigger', { method: 'POST' })
-      toast.success('已触发幕布同步')
-    } catch (err: any) {
-      setMubuStatus('error')
-      toast.error(err?.message || '幕布同步失败')
-    } finally {
-      setMubuSyncing(false)
-    }
-  }
-
-  // 幕布文档接入：搜索已同步文档
-  const handleMubuSearch = async (q: string) => {
-    setMubuSearchQuery(q)
-    if (!q.trim()) { setMubuSearchResults([]); return }
-    setMubuSearching(true)
-    try {
-      const data = await request(`/api/mubu/search?q=${encodeURIComponent(q)}`)
-      const results = Array.isArray(data)
-        ? (data as MubuDoc[])
-        : ((data as { results?: MubuDoc[] }).results || [])
-      setMubuSearchResults(results)
-    } catch {
-      setMubuSearchResults([])
-    } finally {
-      setMubuSearching(false)
-    }
-  }
-
-  // OPML 文件导入：上传至 /api/mubu/import-opml
-  const handleOpmlImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setOpmlUploading(true)
-    try {
-      const res = await uploadOpmlFile(file)
-      const imported = typeof res.imported === 'number' ? res.imported : 0
-      const skipped = typeof res.skipped === 'number' ? res.skipped : 0
-      toast.success(`OPML 导入完成：成功 ${imported} 条${skipped > 0 ? `，跳过 ${skipped} 条` : ''}`)
-      // 导入后刷新记忆向量化状态
-      fetchMemoryStatus()
-    } catch (err: any) {
-      toast.error(err?.message || 'OPML 导入失败')
-    } finally {
-      setOpmlUploading(false)
-      // 清空 file input 以允许重复选择同一文件
-      if (opmlFileInputRef.current) opmlFileInputRef.current.value = ''
-    }
-  }
-
-  // 拉取记忆向量化状态（失败时静默处理）
-  const fetchMemoryStatus = useCallback(async () => {
-    try {
-      const s = await getMemoryStatus()
-      setMemoryStatus(s)
-    } catch {
-      // 后端未实现 /api/memory/status 时静默失败
-      setMemoryStatus(null)
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchMemoryStatus()
-  }, [fetchMemoryStatus])
-
   if (error) {
     return <ApiErrorDisplay error={error} onRetry={refreshData} />
   }
@@ -461,7 +290,7 @@ export default function Settings() {
           type="text"
           value={searchQuery}
           onChange={(e) => handleSearch(e.target.value)}
-          placeholder="搜索设置项...（外观/采集/AI/日报/数据/日历/人生/Git/幕布/备份/导入/隐私/关于）"
+          placeholder="搜索设置项...（外观/采集/AI/日报/数据/日历/人生/Git/备份/导入/隐私/关于）"
           className="w-full px-3 py-2 pl-9 bg-cd-bg-secondary border border-cd-border rounded-lg text-sm text-cd-text focus:outline-none focus:ring-1 focus:ring-cd-green"
         />
         <Search className="absolute left-3 top-2.5 w-4 h-4 text-cd-text-tertiary" />
@@ -1175,197 +1004,6 @@ export default function Settings() {
           添加本地 git 仓库路径，日报将自动聚合提交记录与代码增删行数，生成开发者专属代码产出统计。
         </div>
         <GitRepoManager />
-      </section>
-
-      {/* ─── 幕布文档接入 ──────────────────────────── */}
-      <section
-        id="settings-section-幕布"
-        className={`card space-y-4 ${highlightedSection === '幕布' ? 'ring-2 ring-cd-green' : ''}`}
-      >
-        <div className="flex items-center gap-2">
-          <Cloud size={16} className="text-cd-green" />
-          <h2 className="text-sm font-semibold text-cd-text">幕布文档接入</h2>
-        </div>
-        <div className="text-xs text-cd-text-tertiary">
-          登录幕布账号后，可将文档同步至本地，便于日报与活动关联引用。
-        </div>
-
-        {/* 同步状态 + 文档统计 */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-cd-text-secondary">同步状态</span>
-            <span className={`text-xs px-2.5 py-0.5 rounded-full ${MUBU_STATUS_META[mubuStatus].className}`}>
-              {MUBU_STATUS_META[mubuStatus].label}
-            </span>
-          </div>
-          <div className="text-xs text-cd-text-tertiary">
-            {mubuInfo ? (
-              <>
-                {mubuInfo.doc_count} 篇文档
-                {mubuInfo.last_sync && (
-                  <> · 最近同步 {dayjs(mubuInfo.last_sync).format('MM-DD HH:mm')}</>
-                )}
-              </>
-            ) : '—'}
-          </div>
-        </div>
-
-        {/* 操作按钮 */}
-        <div className="flex flex-wrap gap-3">
-          <button
-            onClick={handleMubuLogin}
-            disabled={mubuLogging}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-cd-bg-secondary text-cd-text-secondary hover:bg-cd-hover transition-colors border border-cd-border disabled:opacity-40"
-          >
-            {mubuLogging ? <Loader2 size={12} className="animate-spin" /> : <Cloud size={12} />}
-            {mubuLogging ? '登录中...' : '登录幕布'}
-          </button>
-          <button
-            onClick={handleMubuSync}
-            disabled={mubuSyncing}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-cd-green text-white hover:opacity-90 transition-opacity disabled:opacity-40"
-          >
-            {mubuSyncing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-            {mubuSyncing ? '同步中...' : '立即同步'}
-          </button>
-        </div>
-
-        {/* 搜索已同步文档 */}
-        <div>
-          <label className="text-xs text-cd-text-secondary block mb-1">搜索已同步文档</label>
-          <div className="relative">
-            <input
-              type="text"
-              value={mubuSearchQuery}
-              onChange={(e) => handleMubuSearch(e.target.value)}
-              placeholder="输入关键词搜索..."
-              className="w-full px-3 py-1.5 pl-9 bg-cd-bg-secondary text-cd-text border border-cd-border rounded-lg text-sm focus:outline-none focus:border-cd-green transition-colors"
-            />
-            {mubuSearching ? (
-              <Loader2 size={14} className="absolute left-2.5 top-2 animate-spin text-cd-text-tertiary" />
-            ) : (
-              <Search size={14} className="absolute left-2.5 top-2 text-cd-text-tertiary" />
-            )}
-          </div>
-          {mubuSearchResults.length > 0 && (
-            <ul className="mt-2 space-y-1 max-h-48 overflow-y-auto">
-              {mubuSearchResults.map((doc) => {
-                const inner = (
-                  <>
-                    <span className="truncate text-cd-text">{doc.title}</span>
-                    {doc.updated_at && (
-                      <span className="text-[10px] text-cd-text-tertiary ml-2 shrink-0">
-                        {dayjs(doc.updated_at).format('MM-DD')}
-                      </span>
-                    )}
-                  </>
-                )
-                return (
-                  <li key={doc.id}>
-                    {doc.url ? (
-                      <a
-                        href={doc.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs bg-cd-bg-secondary hover:bg-cd-hover transition-colors"
-                      >
-                        {inner}
-                      </a>
-                    ) : (
-                      <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs bg-cd-bg-secondary">
-                        {inner}
-                      </div>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-          {mubuSearchQuery.trim() && !mubuSearching && mubuSearchResults.length === 0 && (
-            <p className="text-[10px] text-cd-text-tertiary mt-1.5">无匹配文档</p>
-          )}
-        </div>
-
-        <div className="text-xs text-cd-text-tertiary space-y-1">
-          <p>• 首次使用请点击「登录幕布」完成账号授权</p>
-          <p>• Cookie 失效时请重新登录以恢复同步</p>
-        </div>
-
-        {/* ── OPML 导入 & 记忆向量化 ── */}
-        <div className="pt-3 border-t border-cd-border space-y-3">
-          <div className="flex items-center gap-1.5">
-            <FileUp size={12} className="text-cd-text-tertiary" />
-            <span className="text-xs font-semibold text-cd-text-secondary">OPML 导入 & 记忆向量化</span>
-          </div>
-
-          {/* OPML 文件导入 */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <label className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-cd-bg-secondary text-cd-text-secondary hover:bg-cd-hover transition-colors border border-cd-border cursor-pointer disabled:opacity-50">
-              {opmlUploading ? <Loader2 size={12} className="animate-spin" /> : <FileUp size={12} />}
-              {opmlUploading ? '导入中...' : '导入 OPML 文件'}
-              <input
-                ref={opmlFileInputRef}
-                type="file"
-                accept=".opml,.xml"
-                onChange={handleOpmlImport}
-                className="hidden"
-                disabled={opmlUploading}
-              />
-            </label>
-            <a
-              href="#/memory"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-cd-green hover:bg-cd-green-light transition-colors"
-            >
-              <Brain size={12} />
-              管理记忆
-            </a>
-          </div>
-
-          {/* 向量化状态显示 */}
-          {memoryStatus ? (
-            <div className="bg-cd-bg-secondary rounded-lg p-3 border border-cd-border space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-cd-text-secondary">向量化进度</span>
-                <span className="font-medium text-cd-text">
-                  {memoryStatus.indexed ?? 0} / {memoryStatus.total ?? 0}
-                </span>
-              </div>
-              <div className="h-1.5 rounded-full bg-cd-bg overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-cd-green transition-all duration-500"
-                  style={{
-                    width: `${Math.min(
-                      100,
-                      memoryStatus.total > 0
-                        ? Math.round(((memoryStatus.indexed ?? 0) / memoryStatus.total) * 100)
-                        : 0,
-                    )}%`,
-                  }}
-                />
-              </div>
-              {(memoryStatus.pending ?? 0) > 0 && (
-                <div className="text-[10px] text-cd-text-tertiary">
-                  待索引 {memoryStatus.pending} 条
-                  {memoryStatus.indexing && (
-                    <span className="ml-2 text-cd-green flex items-center gap-1 inline-flex">
-                      <Loader2 size={9} className="animate-spin" />
-                      索引中
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="text-[10px] text-cd-text-tertiary">
-              记忆系统未启用或后端暂未就绪
-            </div>
-          )}
-
-          <div className="text-[10px] text-cd-text-tertiary space-y-1">
-            <p>• 支持从其他笔记软件导出的 OPML 文件批量导入文档大纲</p>
-            <p>• 导入的文档会自动抽取事实并写入记忆库，供语义检索使用</p>
-          </div>
-        </div>
       </section>
 
       {/* ─── 数据备份与恢复 ────────────────────── */}
