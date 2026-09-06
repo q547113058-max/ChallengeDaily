@@ -99,6 +99,11 @@ export interface BackendSettings {
   ai_enabled?: boolean
   birthday?: string
   life_expectancy?: number
+  /** 每日定时生成日报开关（backend config.py 有对应默认值） */
+  auto_daily_report?: boolean
+  /** 每日定时生成日报的小时（0-23） */
+  auto_daily_report_hour?: number
+  auto_daily_report_template?: string
 }
 
 export interface ActivityPage {
