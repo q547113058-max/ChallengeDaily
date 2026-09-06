@@ -656,7 +656,7 @@ def hybrid_search(query: str, limit: int = 10) -> list[dict]:
 
 # ── LLM 调用辅助 ────────────────────────────────────────────
 # 任务说明提到复用 offline_ai.call_ai，但当前项目无此函数；
-# 这里实现一个本地 _call_llm 包装现有 OpenAI 客户端，遵循 routes/chat.py 模式。
+# 这里实现一个本地 _call_llm 包装现有 OpenAI 客户端。
 def _call_llm(prompt: str, system: str = "", max_tokens: int = 800,
               temperature: float = 0.3) -> Optional[str]:
     """调用 LLM 生成文本。失败返回 None。

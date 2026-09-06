@@ -29,12 +29,10 @@ const Health = lazy(() => import('./pages/Health'))
 const Focus = lazy(() => import('./pages/Focus'))
 const Todos = lazy(() => import('./pages/Todos'))
 const Countdowns = lazy(() => import('./pages/Countdowns'))
-const AIChat = lazy(() => import('./pages/AIChat'))
 const Habits = lazy(() => import('./pages/Habits'))
 const WeekPlan = lazy(() => import('./pages/WeekPlan'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const ExportCenter = lazy(() => import('./pages/ExportCenter'))
-const AICoach = lazy(() => import('./pages/AICoach'))
 const Goals = lazy(() => import('./pages/Goals'))
 const DailyCards = lazy(() => import('./pages/DailyCards'))
 const MemoryPage = lazy(() => import('./pages/MemoryPage'))
@@ -213,9 +211,7 @@ export default function App() {
                         <Route path="/profile" element={<DeepProfile />} />
                         <Route path="/deep-insight" element={<DeepProfile />} />
                         <Route path="/countdowns" element={<Countdowns />} />
-                        <Route path="/ai-chat" element={<AIChat />} />
                         <Route path="/dashboard" element={<Dashboard />} />
-                        <Route path="/ai-coach" element={<AICoach />} />
                         <Route path="/goals" element={<Goals />} />
                         <Route path="/export" element={<ExportCenter />} />
                         <Route path="/habits" element={<Habits />} />

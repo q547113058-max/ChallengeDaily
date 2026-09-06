@@ -155,16 +155,6 @@ const NAV_GROUPS: { label: string; items: NavParent[] }[] = [
           { to: '/profile', icon: Brain, label: '深度画像' },
         ],
       },
-      {
-        to: '/ai-chat',
-        icon: Bot,
-        label: 'AI 助手',
-        desc: '对话式 AI 与智能教练',
-        children: [
-          { to: '/ai-chat', icon: Bot, label: 'AI 对话' },
-          { to: '/ai-coach', icon: Sparkles, label: 'AI 教练' },
-        ],
-      },
     ],
   },
 ]

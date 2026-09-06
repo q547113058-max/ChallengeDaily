@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Search, Home, Calendar, CheckSquare, Timer, FileText,
-  Flame, Target, Bot, Sparkles, Brain, Clock,
+  Flame, Target, Brain, Clock,
   Grid3X3, AppWindow, History, Download, Activity, Settings as SettingsIcon,
   CalendarRange, CornerDownLeft, ArrowUp, ArrowDown, Moon, TrendingUp
 } from 'lucide-react'
@@ -50,8 +50,6 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       nav('/calendar', '日历视图', CalendarRange, '月度日历', ['calendar', '日历']),
       nav('/apps', '应用记录', AppWindow, '应用使用', ['app']),
       nav('/dashboard', '进度仪表盘', Activity, '数据看板', ['dashboard']),
-      nav('/ai-chat', 'AI 对话', Bot, 'AI助手', ['ai', 'chat']),
-      nav('/ai-coach', 'AI 教练', Sparkles, '智能教练', ['coach']),
       nav('/profile', '深度画像', Brain, 'AI画像', ['profile']),
       nav('/export', '数据导出', Download, '导出', ['export']),
       nav('/health', '数据校准', Activity, '健康度', ['health']),
