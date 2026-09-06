@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Sankey, ResponsiveContainer, Tooltip, Layer, Rectangle } from 'recharts'
+import { Sankey, ResponsiveContainer, Tooltip, Rectangle } from 'recharts'
 import { getSankeyData, type SankeyLink } from '../api/client'
 import dayjs from 'dayjs'
 
@@ -9,6 +9,7 @@ const CAT_COLORS: Record<string, string> = {
   '开发': '#22c55e', '测试': '#10b981', '运维': '#06b6d4', '数据分析': '#3b82f6',
   '产品': '#8b5cf6', '设计': '#ec4899', '管理': '#f59e0b', '文档': '#84cc16',
   '会议': '#f97316', '沟通': '#eab308', '学习': '#06b6d4', '生活': '#94a3b8',
+  '其他': '#9ca3af',
 }
 
 interface SankeyNode {
@@ -74,6 +75,34 @@ export default function SankeyChart({ date }: { date?: string }) {
           nodeWidth={14}
           linkCurvature={0.5}
           margin={{ top: 10, right: 80, bottom: 10, left: 80 }}
+          // 自定义节点着色：按 CAT_COLORS（recharts 默认所有节点固定 #0088fe 蓝，且不读 fill 子元素）
+          node={(props: any) => {
+            const { x, y, width, height, payload } = props
+            const name = payload?.name ?? ''
+            return (
+              <Rectangle
+                x={x} y={y} width={width} height={height}
+                fill={CAT_COLORS[name] || '#7B68EE'}
+                fillOpacity={0.85}
+                radius={2}
+              />
+            )
+          }}
+          // 连线按来源时段着色（默认 #333 20% 在浅/深底都近乎不可见）
+          link={(props: any) => {
+            const { sourceX, sourceY, sourceControlX, targetX, targetY, targetControlX, linkWidth, payload } = props
+            const srcName = payload?.source?.name ?? ''
+            const color = CAT_COLORS[srcName] || '#94a3b8'
+            return (
+              <path
+                d={`M${sourceX},${sourceY} C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}`}
+                fill="none"
+                stroke={color}
+                strokeWidth={Math.max(linkWidth, 1)}
+                strokeOpacity={0.35}
+              />
+            )
+          }}
         >
           <Tooltip
             content={({ active, payload }: any) => {
@@ -101,16 +130,6 @@ export default function SankeyChart({ date }: { date?: string }) {
               )
             }}
           />
-          <Layer>
-            {sankeyData.nodes.map((node, i) => (
-              <Rectangle
-                key={i}
-                x={0} y={0} width={0} height={0}
-                fill={CAT_COLORS[node.name] || '#7B68EE'}
-                fillOpacity={0.8}
-              />
-            ))}
-          </Layer>
         </Sankey>
       </ResponsiveContainer>
       <div className="mt-3 flex flex-wrap gap-2 justify-center">
