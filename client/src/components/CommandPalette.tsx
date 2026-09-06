@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Search, Home, Calendar, CheckSquare, Timer, FileText, BookOpen,
-  Flame, Trophy, Target, Users, Zap, Bot, Sparkles, Brain, Clock,
+  Flame, Target, Zap, Bot, Sparkles, Brain, Clock,
   Grid3X3, AppWindow, History, Download, Activity, Settings as SettingsIcon,
   CalendarRange, CornerDownLeft, ArrowUp, ArrowDown, Moon, TrendingUp
 } from 'lucide-react'
@@ -44,8 +44,6 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       nav('/diary', '每日日记', BookOpen, '日记', ['diary', '日记']),
       nav('/habits', '习惯追踪', Flame, '打卡', ['habit', '习惯']),
       nav('/countdowns', '倒数日', Calendar, '倒计时', ['countdown']),
-      nav('/achievements', '成就墙', Trophy, '成就', ['achievement']),
-      nav('/study-room', '番茄自习室', Users, '局域网自习', ['study', '自习室']),
       nav('/rules-engine', '规则引擎', Zap, 'IF-THEN', ['rule', '规则']),
       nav('/report', '生成报告', FileText, '日报/周报', ['report', '日报']),
       nav('/history', '历史报告', History, '历史日报', ['history']),

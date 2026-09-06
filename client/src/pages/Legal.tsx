@@ -89,7 +89,6 @@ function PrivacyContent() {
         <ul className="list-disc ml-5 space-y-1">
           <li>AI 分析（如您启用）：仅连接您配置的 AI 服务地址</li>
           <li>Webhook 推送（如您配置）：将日报推送到您指定的飞书/钉钉/企业微信</li>
-          <li>自动更新检查：连接 GitHub 检查新版本</li>
           <li>以上所有连接均可通过设置关闭，应用可在完全离线环境下运行</li>
         </ul>
       </section>

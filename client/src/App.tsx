@@ -29,7 +29,6 @@ const Health = lazy(() => import('./pages/Health'))
 const Focus = lazy(() => import('./pages/Focus'))
 const Todos = lazy(() => import('./pages/Todos'))
 const Diary = lazy(() => import('./pages/Diary'))
-const Achievements = lazy(() => import('./pages/Achievements'))
 const Countdowns = lazy(() => import('./pages/Countdowns'))
 const AIChat = lazy(() => import('./pages/AIChat'))
 const Habits = lazy(() => import('./pages/Habits'))
@@ -37,15 +36,11 @@ const WeekPlan = lazy(() => import('./pages/WeekPlan'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const ExportCenter = lazy(() => import('./pages/ExportCenter'))
 const AICoach = lazy(() => import('./pages/AICoach'))
-const StudyRoom = lazy(() => import('./pages/StudyRoom'))
 const RulesEngine = lazy(() => import('./pages/RulesEngine'))
 const Goals = lazy(() => import('./pages/Goals'))
 const TimelinePlayer = lazy(() => import('./pages/TimelinePlayer'))
-const Inspiration = lazy(() => import('./pages/Inspiration'))
 const DailyCards = lazy(() => import('./pages/DailyCards'))
 const MemoryPage = lazy(() => import('./pages/MemoryPage'))
-const ClipboardHistory = lazy(() => import('./pages/ClipboardHistory'))
-const Toolbox = lazy(() => import('./pages/Toolbox'))
 
 // 首次启动流程：法律协议 → 新手引导 → 主界面
 type FirstLaunchPhase = 'legal' | 'onboarding' | 'done'
@@ -141,36 +136,6 @@ export default function App() {
     setFirstLaunchPhase('done')
   }
 
-  // ── 自动更新状态 ──
-  const [updateInfo, setUpdateInfo] = useState<{ version: string; releaseNotes?: string } | null>(null)
-  const [updateProgress, setUpdateProgress] = useState<{ percent: number } | null>(null)
-  const [updateDownloaded, setUpdateDownloaded] = useState(false)
-  const [updateDismissed, setUpdateDismissed] = useState(false)
-
-  useEffect(() => {
-    if (!window.electronAPI) return
-    // 用 cancelled 标志避免 StrictMode 重复注册导致的状态污染
-    let cancelled = false
-    window.electronAPI.onUpdateAvailable((info) => {
-      if (cancelled) return
-      setUpdateInfo(info)
-      setUpdateDismissed(false)
-    })
-    window.electronAPI.onUpdateProgress((progress) => {
-      if (cancelled) return
-      setUpdateProgress(progress)
-    })
-    window.electronAPI.onUpdateDownloaded(() => {
-      if (cancelled) return
-      setUpdateDownloaded(true)
-    })
-    return () => { cancelled = true }
-  }, [])
-
-  const handleInstallUpdate = () => {
-    window.electronAPI?.installUpdate()
-  }
-
   // ── 桌面通知轮询 ──
   const notifiedIds = useRef(new Set<number>())
   useEffect(() => {
@@ -214,45 +179,6 @@ export default function App() {
           <div className="flex flex-col h-screen bg-cd-bg">
             <TitleBar />
           <BackendStatusBar />
-          {/* ── 全局更新提示条 ── */}
-          {updateInfo && !updateDismissed && !updateDownloaded && (
-            <div className="bg-cd-green/10 border-b border-cd-green/20 px-4 py-2 flex items-center justify-between text-sm">
-              <span className="text-cd-text-secondary">
-                发现新版本 <span className="font-medium text-cd-green">v{updateInfo.version}</span>
-                {updateProgress ? (
-                  <span className="ml-2 text-cd-text-tertiary">
-                    下载中 {updateProgress.percent.toFixed(0)}%
-                  </span>
-                ) : (
-                  <button
-                    onClick={() => window.electronAPI?.downloadUpdate()}
-                    className="ml-2 text-cd-green hover:underline font-medium"
-                  >
-                    立即下载
-                  </button>
-                )}
-              </span>
-              <button
-                onClick={() => setUpdateDismissed(true)}
-                className="text-cd-text-tertiary hover:text-cd-text text-sm"
-              >
-                稍后提醒
-              </button>
-            </div>
-          )}
-          {updateDownloaded && (
-            <div className="bg-cd-green/10 border-b border-cd-green/20 px-4 py-2 flex items-center justify-between text-sm">
-              <span className="text-cd-text-secondary">
-                新版本已就绪，重启后即可安装
-              </span>
-              <button
-                onClick={handleInstallUpdate}
-                className="bg-cd-green text-white px-3.5 py-1.5 rounded-md text-sm font-medium hover:opacity-90"
-              >
-                立即重启安装
-              </button>
-            </div>
-          )}
           <div className="flex flex-1 overflow-hidden">
             {checking ? (
               <LoadingScreen />
@@ -290,23 +216,18 @@ export default function App() {
                         <Route path="/settings" element={<Settings />} />
                         <Route path="/profile" element={<DeepProfile />} />
                         <Route path="/deep-insight" element={<DeepProfile />} />
-                        <Route path="/achievements" element={<Achievements />} />
                         <Route path="/countdowns" element={<Countdowns />} />
                         <Route path="/ai-chat" element={<AIChat />} />
                         <Route path="/dashboard" element={<Dashboard />} />
                         <Route path="/ai-coach" element={<AICoach />} />
-                        <Route path="/study-room" element={<StudyRoom />} />
                         <Route path="/rules-engine" element={<RulesEngine />} />
                         <Route path="/goals" element={<Goals />} />
                         <Route path="/timeline-player" element={<TimelinePlayer />} />
                         <Route path="/export" element={<ExportCenter />} />
                         <Route path="/habits" element={<Habits />} />
                         <Route path="/health" element={<Health />} />
-                        <Route path="/inspiration" element={<Inspiration />} />
                         <Route path="/daily-cards" element={<DailyCards />} />
                         <Route path="/memory" element={<MemoryPage />} />
-                        <Route path="/clipboard" element={<ClipboardHistory />} />
-                        <Route path="/toolbox" element={<Toolbox />} />
                         <Route path="*" element={<NotFoundPage />} />
                       </Routes>
                     </Suspense>
@@ -342,7 +263,6 @@ function ElectronNavigationBridge() {
         report: '/report',
         overview: '/',
         habits: '/habits',
-        achievements: '/achievements',
       }
       const target = pathMap[path] || path
       navigate(target)

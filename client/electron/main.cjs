@@ -758,7 +758,7 @@ function setupIPC() {
     'window-minimize', 'window-maximize', 'window-close', 'window-show',
     'pomodoro-widget-update', 'pomodoro-widget-hide',
     'get-backend-port', 'get-api-token',
-    'check-for-updates', 'download-update', 'install-update', 'get-app-version',
+    'get-app-version',
     'get-auto-start', 'set-auto-start',
     'get-windows-location', 'windows-hello',
   ])
@@ -860,22 +860,6 @@ function setupIPC() {
     }
   })
 
-  // 自动更新（敏感通道：校验 sender 来源）
-  ipcMain.handle('check-for-updates', (event) => {
-    if (!isFromMainWindow(event.sender)) return false
-    checkForUpdates()
-    return true
-  })
-  ipcMain.handle('download-update', (event) => {
-    if (!isFromMainWindow(event.sender)) return false
-    downloadUpdate()
-    return true
-  })
-  ipcMain.handle('install-update', (event) => {
-    if (!isFromMainWindow(event.sender)) return false
-    installUpdate()
-    return true
-  })
   ipcMain.handle('get-app-version', () => app.getVersion())
 
   // 桌面通知
@@ -1150,73 +1134,6 @@ function readApiToken(maxAttempts = 1) {
   return ''
 }
 
-// ─── 自动更新 ────────────────────────────────────
-let autoUpdater = null
-try {
-  autoUpdater = require('electron-updater').autoUpdater
-  autoUpdater.autoDownload = false   // 不自动下载，先提示用户
-  autoUpdater.autoInstallOnAppQuit = true  // 退出时自动安装
-  autoUpdater.setFeedURL({
-    provider: 'github',
-    owner: 'ChallengeDaily',
-    repo: 'ChallengeDaily',
-  })
-  // P0-11: 禁用更新缓存，避免拿到缓存的旧版本元数据
-  autoUpdater.requestHeaders = { 'Cache-Control': 'no-cache' }
-  // 签名校验：未来购买代码签名证书后启用
-  // autoUpdater.verifyUpdateCodeSignature = true
-
-  autoUpdater.on('update-available', (info) => {
-    // 通知渲染进程有新版本
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('update-available', {
-        version: info.version,
-        releaseNotes: info.releaseNotes,
-      })
-    }
-  })
-
-  autoUpdater.on('download-progress', (progress) => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('update-progress', {
-        percent: progress.percent,
-        transferred: progress.transferred,
-        total: progress.total,
-      })
-    }
-  })
-
-  autoUpdater.on('update-downloaded', () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('update-downloaded')
-    }
-  })
-
-  autoUpdater.on('error', (err) => {
-    console.error('[Updater] Error:', err.message)
-  })
-} catch (e) {
-  console.warn('[Updater] electron-updater not available:', e.message)
-}
-
-function checkForUpdates() {
-  if (autoUpdater && app.isPackaged) {
-    autoUpdater.checkForUpdates().catch(() => {})
-  }
-}
-
-function downloadUpdate() {
-  if (autoUpdater) {
-    autoUpdater.downloadUpdate().catch(() => {})
-  }
-}
-
-function installUpdate() {
-  if (autoUpdater) {
-    setImmediate(() => autoUpdater.quitAndInstall())
-  }
-}
-
 // ─── EPIPE 安全日志 ──────────────────────────────────
 // Windows 上后端进程被杀后，stdout/stderr 管道关闭，
 // console.log/warn/error 写入会触发 EPIPE 未捕获异常导致弹窗。
@@ -1246,7 +1163,6 @@ const _CRASH_WINDOW_SEC = 60      // 60秒内崩溃计数窗口
 
 // 全局定时器引用（在 before-quit 中清理，防止退出后定时器继续触发导致异常）
 let _healthInterval = null
-let _updateInterval = null
 
 // 重启互斥锁：避免心跳重启与崩溃重启同时进行导致重复 spawn
 let _restartMutex = false
@@ -1396,10 +1312,6 @@ app.whenReady().then(async () => {
     console.error('[Main] mubu sync init failed:', e?.message || String(e), e?.stack || '')
   }
 
-  // 启动后30秒检查更新（仅打包版）
-  setTimeout(checkForUpdates, 30000)
-  // 每8小时检查一次更新（降低频率，减少网络请求和 CPU 唤醒）
-  _updateInterval = setInterval(checkForUpdates, 8 * 60 * 60 * 1000)
 })
 
 app.on('window-all-closed', () => {
@@ -1409,7 +1321,6 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   // 清理定时器，防止退出后定时器继续触发导致异常
   if (_healthInterval) clearInterval(_healthInterval)
-  if (_updateInterval) clearInterval(_updateInterval)
   mubuSync.stopAutoSync()
   mubuSSE.stop()
   stopBackend()

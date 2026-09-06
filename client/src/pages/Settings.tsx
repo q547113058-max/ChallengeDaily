@@ -84,12 +84,8 @@ export default function Settings() {
   // 备份/恢复
   const [restoring, setRestoring] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  // 检查更新 setTimeout 计时器引用，用于组件卸载时清理
-  const checkUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // 关于与更新
+  // 关于
   const [appVersion, setAppVersion] = useState('')
-  const [updateChecking, setUpdateChecking] = useState(false)
-  const [updateStatus, setUpdateStatus] = useState<'idle' | 'available' | 'downloading' | 'downloaded' | 'up-to-date'>('idle')
   // 开机自启动
   const [autoStart, setAutoStart] = useState(false)
   // 设置搜索
@@ -190,21 +186,6 @@ export default function Settings() {
     }
   }, [])
 
-  // 监听更新状态
-  useEffect(() => {
-    if (!window.electronAPI) return
-    window.electronAPI.onUpdateAvailable(() => setUpdateStatus('available'))
-    window.electronAPI.onUpdateProgress(() => setUpdateStatus('downloading'))
-    window.electronAPI.onUpdateDownloaded(() => setUpdateStatus('downloaded'))
-  }, [])
-
-  // 组件卸载时清理检查更新的定时器，防止 setState 作用于已卸载组件
-  useEffect(() => {
-    return () => {
-      if (checkUpdateTimerRef.current) clearTimeout(checkUpdateTimerRef.current)
-    }
-  }, [])
-
   // 幕布文档接入：拉取状态 & 监听 IPC 状态变化（不可用时降级为轮询）
   useEffect(() => {
     let unsub: (() => void) | null = null
@@ -245,22 +226,6 @@ export default function Settings() {
       if (pollTimer) clearInterval(pollTimer)
     }
   }, [])
-
-  const handleCheckUpdate = async () => {
-    setUpdateChecking(true)
-    try {
-      await window.electronAPI?.checkForUpdates()
-      if (checkUpdateTimerRef.current) clearTimeout(checkUpdateTimerRef.current)
-      checkUpdateTimerRef.current = setTimeout(() => {
-        setUpdateChecking(false)
-        // 使用函数式更新避免闭包过期：只有当前状态确实是 idle 时才标记为最新
-        setUpdateStatus(prev => prev === 'idle' ? 'up-to-date' : prev)
-        checkUpdateTimerRef.current = null
-      }, 2000)
-    } catch {
-      setUpdateChecking(false)
-    }
-  }
 
   const _validateWorkHours = useCallback((): string | null => {
     if (workStart < 0 || workStart > 23 || workEnd < 0 || workEnd > 23) {
@@ -1485,14 +1450,14 @@ export default function Settings() {
         </div>
       </section>
 
-      {/* ─── 关于与更新 ────────────────────────── */}
+      {/* ─── 关于 ──────────────────────────────── */}
       <section
         id="settings-section-关于"
         className={`card space-y-4 ${highlightedSection === '关于' ? 'ring-2 ring-cd-green' : ''}`}
       >
         <div className="flex items-center gap-2">
           <Info size={16} className="text-cd-green" />
-          <h2 className="text-sm font-semibold text-cd-text">关于与更新</h2>
+          <h2 className="text-sm font-semibold text-cd-text">关于</h2>
         </div>
 
         <div className="flex items-center justify-between">
@@ -1501,35 +1466,6 @@ export default function Settings() {
             <p className="text-xs text-cd-text-tertiary">
               版本 {appVersion || '—'}
             </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {updateStatus === 'downloaded' ? (
-              <button
-                onClick={() => window.electronAPI?.installUpdate()}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-cd-green text-white hover:opacity-90 transition-opacity"
-              >
-                重启安装更新
-              </button>
-            ) : updateStatus === 'downloading' ? (
-              <span className="text-xs text-cd-text-secondary">下载中...</span>
-            ) : updateStatus === 'up-to-date' ? (
-              <span className="flex items-center gap-1 text-xs text-cd-green">
-                <CheckCircle size={12} />
-                已是最新版本
-              </span>
-            ) : (
-              <button
-                onClick={handleCheckUpdate}
-                disabled={updateChecking}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-cd-bg-secondary text-cd-text-secondary hover:bg-cd-hover transition-colors border border-cd-border disabled:opacity-40"
-              >
-                {updateChecking ? (
-                  <><Loader2 size={12} className="animate-spin" /> 检查中...</>
-                ) : (
-                  <><RefreshCw size={12} /> 检查更新</>
-                )}
-              </button>
-            )}
           </div>
         </div>
 

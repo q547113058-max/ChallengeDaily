@@ -8,7 +8,6 @@ import {
   History,
   Bot,
   Tags,
-  Users,
   Shield,
   Settings as SettingsIcon,
   HelpCircle,
@@ -21,7 +20,6 @@ import {
   Timer,
   CheckSquare,
   BookOpen,
-  Trophy,
   Calendar,
   CalendarDays,
   CalendarRange,
@@ -32,9 +30,6 @@ import {
   Target,
   ChevronDown,
   BarChart3,
-  Lightbulb,
-  ClipboardList,
-  Wrench,
   type LucideIcon,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
@@ -81,12 +76,6 @@ const NAV_GROUPS: { label: string; items: NavParent[] }[] = [
         label: '倒数日',
         desc: '重要节点倒计时',
       },
-      {
-        to: '/inspiration',
-        icon: Lightbulb,
-        label: '灵感中心',
-        desc: '计划/习惯/目标模板库',
-      },
     ],
   },
   {
@@ -110,10 +99,6 @@ const NAV_GROUPS: { label: string; items: NavParent[] }[] = [
         icon: Timer,
         label: '专注番茄',
         desc: '番茄钟与待办联动计时',
-        children: [
-          { to: '/focus', icon: Timer, label: '专注番茄' },
-          { to: '/study-room', icon: Users, label: '番茄自习室' },
-        ],
       },
     ],
   },
@@ -165,12 +150,6 @@ const NAV_GROUPS: { label: string; items: NavParent[] }[] = [
         desc: '每日习惯打卡与连续天数',
       },
       {
-        to: '/achievements',
-        icon: Trophy,
-        label: '成就墙',
-        desc: '里程碑成就解锁记录',
-      },
-      {
         to: '/profile',
         icon: Brain,
         label: '深度画像',
@@ -196,8 +175,6 @@ const NAV_GROUPS: { label: string; items: NavParent[] }[] = [
 
 const MORE_NAV = [
   { to: '/app-tags',  icon: Tags,         label: '应用标签' },
-  { to: '/clipboard', icon: ClipboardList, label: '剪贴板' },
-  { to: '/toolbox',   icon: Wrench,        label: '工具箱' },
   { to: '/health',    icon: Activity,     label: '数据校准' },
   { to: '/rules-engine', icon: Zap,       label: '规则引擎' },
   { to: '/memory',    icon: Brain,        label: '记忆系统' },

@@ -174,43 +174,6 @@ def get_registered_protocols() -> list:
     return list(_PROTOCOL_HANDLERS.keys())
 
 
-# ─── P95: 剪贴板历史 ──────────────────────────
-_CLIPBOARD_HISTORY: deque = deque(maxlen=50)
-_CLIPBOARD_LOCK = threading.Lock()
-
-
-def add_clipboard_item(content: str, content_type: str = "text") -> dict:
-    """添加剪贴板历史项"""
-    item = {
-        "id": f"c_{int(time.time() * 1000)}",
-        "content": content[:2000],  # 限制长度
-        "type": content_type,
-        "length": len(content),
-        "timestamp": datetime.now().isoformat()
-    }
-    with _CLIPBOARD_LOCK:
-        # 去重：相同内容不重复添加
-        for existing in _CLIPBOARD_HISTORY:
-            if existing["content"] == item["content"]:
-                return existing
-        _CLIPBOARD_HISTORY.append(item)
-    return item
-
-
-def get_clipboard_history(limit: int = 20) -> list:
-    with _CLIPBOARD_LOCK:
-        items = list(_CLIPBOARD_HISTORY)
-        items.reverse()
-        return items[:limit]
-
-
-def clear_clipboard_history() -> int:
-    with _CLIPBOARD_LOCK:
-        n = len(_CLIPBOARD_HISTORY)
-        _CLIPBOARD_HISTORY.clear()
-        return n
-
-
 # ─── P96: 窗口管理器 ──────────────────────────
 _WINDOW_STATES: dict[str, dict] = {}
 

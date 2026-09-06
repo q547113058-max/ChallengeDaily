@@ -293,22 +293,6 @@ export async function deleteCountdown(id: number): Promise<{ status: string }> {
   return request(`/api/countdowns/${id}`, { method: 'DELETE' }) as Promise<{ status: string }>
 }
 
-// ── 番茄自习室 ──
-export interface StudyRoomMember {
-  id: string; name: string; status: string; task: string;
-  started_at: string | null; today_min: number; today_count: number;
-  ip: string; is_self: boolean; last_heartbeat: number;
-}
-export async function getStudyRoomStatus(): Promise<{ members: StudyRoomMember[]; leaderboard: StudyRoomMember[]; online_count: number; focusing_count: number }> {
-  return request('/api/study-room/status') as Promise<{ members: StudyRoomMember[]; leaderboard: StudyRoomMember[]; online_count: number; focusing_count: number }>
-}
-export async function updateStudyRoomStatus(status: string, task: string = '', started_at: string | null = null): Promise<{ status: string }> {
-  return request('/api/study-room/update', { method: 'POST', body: JSON.stringify({ status, task, started_at }) }) as Promise<{ status: string }>
-}
-export async function broadcastStudyRoom(): Promise<{ status: string; broadcasted: number; subnet: string }> {
-  return request('/api/study-room/broadcast', { method: 'POST' }, 20000) as Promise<{ status: string; broadcasted: number; subnet: string }>
-}
-
 // ── 长期目标管理（GoalDay集大成） ──
 export interface Goal {
   id: number

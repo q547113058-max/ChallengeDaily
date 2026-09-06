@@ -31,14 +31,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // API Token（通过 IPC 从主进程读取，兼容 Electron 31 sandbox 模式）
   getApiToken: () => ipcRenderer.invoke('get-api-token'),
 
-  // 自动更新
-  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
-  downloadUpdate: () => ipcRenderer.invoke('download-update'),
-  installUpdate: () => ipcRenderer.invoke('install-update'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
-  onUpdateAvailable: _makeManagedListener('update-available'),
-  onUpdateProgress: _makeManagedListener('update-progress'),
-  onUpdateDownloaded: _makeManagedListener('update-downloaded'),
   onBackendCrash: _makeManagedListener('backend-crash'),
 
   // 监听来自主进程的消息
