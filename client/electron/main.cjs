@@ -669,6 +669,7 @@ function setupIPC() {
     'get-app-version',
     'get-auto-start', 'set-auto-start',
     'get-windows-location', 'windows-hello',
+    'show-notification',
   ])
   const _origOn = ipcMain.on.bind(ipcMain)
   const _origHandle = ipcMain.handle.bind(ipcMain)
