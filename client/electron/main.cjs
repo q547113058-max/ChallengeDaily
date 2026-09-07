@@ -512,6 +512,7 @@ function createMainWindow() {
             "https://api.bigdatacloud.net https://qifu-api.baidubce.com https://pv.sohu.com " +
             "https://int.dpool.sina.com.cn https://nominatim.openstreetmap.org " +
             "https://ipapi.co https://ipinfo.io https://ip-api.com " +
+            "https://apis.map.qq.com " +
             "https://open.bigmodel.cn; " +
           "media-src 'none'; " +
           "object-src 'none'; " +
