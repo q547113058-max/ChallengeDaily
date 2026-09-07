@@ -144,9 +144,6 @@ const NAV_GROUPS: { label: string; items: NavParent[] }[] = [
         icon: Brain,
         label: '深度画像',
         desc: '个人工作风格分析',
-        children: [
-          { to: '/profile', icon: Brain, label: '深度画像' },
-        ],
       },
     ],
   },
