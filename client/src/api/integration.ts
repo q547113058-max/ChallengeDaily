@@ -632,56 +632,6 @@ export async function getGitWeeklyReport(endDate?: string): Promise<{
   return request(`/api/git/weekly-report${q}`) as Promise<any>
 }
 
-// ─── P18-4: 本地小模型降级 ─────────────────────────
-
-export interface LocalModelConfig {
-  enabled: boolean
-  base_url: string
-  vision_model: string
-  text_model: string
-  fallback_to_rules: boolean
-  auto_fallback: boolean
-  timeout_sec: number
-}
-
-export interface LocalModelStatus {
-  config: LocalModelConfig
-  health: {
-    available: boolean
-    base_url: string
-    models?: string[]
-    model_count?: number
-    error?: string
-    cached?: boolean
-  }
-}
-
-export async function getLocalModelStatus(): Promise<LocalModelStatus> {
-  return request('/api/local-model/status') as Promise<LocalModelStatus>
-}
-
-export async function getLocalModelConfig(): Promise<LocalModelConfig> {
-  return request('/api/local-model/config') as Promise<LocalModelConfig>
-}
-
-export async function updateLocalModelConfig(data: Partial<LocalModelConfig>): Promise<LocalModelConfig> {
-  return request('/api/local-model/config', {
-    method: 'PUT',
-    body: JSON.stringify(data),
-  }) as Promise<LocalModelConfig>
-}
-
-export async function listLocalModels(): Promise<{ models: Array<{ name: string; size_mb: number; modified_at: string }> }> {
-  return request('/api/local-model/models') as Promise<{ models: Array<{ name: string; size_mb: number; modified_at: string }> }>
-}
-
-export async function testLocalModel(type: 'text' | 'vision' = 'text'): Promise<{ ok: boolean; type: string; result: any }> {
-  return request('/api/local-model/test', {
-    method: 'POST',
-    body: JSON.stringify({ type }),
-  }) as Promise<{ ok: boolean; type: string; result: any }>
-}
-
 // ─── 记忆系统（向量检索 / 事实抽取） ─────────────────────────
 
 /** 记忆条目 */

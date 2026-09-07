@@ -4,11 +4,10 @@ import { ToggleSwitch, useTimeout, useAsyncData, ApiErrorDisplay } from '../comp
 import { useToast } from '../components/Toast'
 import { useTheme, ACCENT_PRESETS, FONT_PRESETS, RADIUS_PRESETS, SHADOW_PRESETS, OPACITY_PRESETS, SKIN_PRESETS } from '../components/ThemeContext'
 import { AppLockSettings } from '../components/AppLock'
-import { Shield, Bot, Eye, EyeOff, Server, FileText, ListFilter, Download, Loader2, CheckCircle, XCircle, RotateCcw, Database, Upload, HardDrive, Info, Palette, Type, GlassWater, Moon, Rocket, Search, Calendar, GitBranch, Cpu, Heart } from 'lucide-react'
+import { Shield, Bot, Eye, EyeOff, Server, FileText, ListFilter, Download, Loader2, CheckCircle, XCircle, RotateCcw, Database, Upload, HardDrive, Info, Palette, Type, GlassWater, Moon, Rocket, Search, Calendar, GitBranch, Heart } from 'lucide-react'
 import dayjs from 'dayjs'
 import CalendarSubscriptionManager from '../components/CalendarSubscriptionManager'
 import GitRepoManager from '../components/GitRepoManager'
-import LocalModelConfigPanel from '../components/LocalModelConfig'
 
 export default function Settings() {
   const toast = useToast()
@@ -813,14 +812,6 @@ export default function Settings() {
                 )}
               </div>
 
-              {/* P19-4：本地小模型降级配置 */}
-              <div className="pt-3 border-t border-cd-border">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <Cpu size={12} className="text-cd-text-tertiary" />
-                  <span className="text-xs font-semibold text-cd-text-secondary">本地小模型降级（Ollama）</span>
-                </div>
-                <LocalModelConfigPanel />
-              </div>
             </>
           )}
         </div>
