@@ -30,7 +30,6 @@ import HeroInfo from '../components/HeroInfo'
 import DistractionHeatmap from '../components/DistractionHeatmap'
 import EmotionalCare from '../components/EmotionalCare'
 import InfoTooltip, { METRIC_EXPLANATIONS } from '../components/InfoTooltip'
-import EveningRitual from '../components/EveningRitual'
 
 function getDisplayAppName(appName: string): string {
   const lower = appName.toLowerCase()
@@ -561,10 +560,6 @@ export default function Overview() {
         </div>
       )}
 
-      {/* ─── 晚间回顾（仅 21:00 后且有活动数据时显示） ──── */}
-      <div className="mt-6">
-        <EveningRitual />
-      </div>
     </div>
   )
 }

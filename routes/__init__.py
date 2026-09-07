@@ -29,7 +29,6 @@ from routes.calendar_routes import bp as calendar_bp
 from routes.git_routes import bp as git_integration_bp
 from routes.platform_routes import bp as platform_bp
 from routes.daily_card import bp as daily_card_bp
-from routes.ritual import bp as ritual_bp
 from routes.scheduler import bp as scheduler_bp
 from routes.memory_routes import memory_bp
 
@@ -65,7 +64,6 @@ ALL_BLUEPRINTS = [
     git_integration_bp,
     platform_bp,
     daily_card_bp,
-    ritual_bp,
     scheduler_bp,
     memory_bp,
 ]
