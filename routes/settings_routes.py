@@ -13,7 +13,15 @@ bp = Blueprint('settings_routes', __name__)
 
 @bp.route("/api/settings", methods=["GET"])
 def get_settings():
-    return jsonify(load_settings())
+    settings = load_settings()
+    # 反映 vault 中的真实密钥状态：settings.json 可能没有 ai_api_key_set 字段
+    # （例如新数据目录尚未保存过设置），会导致设置页误显示"未配置 API Key"
+    try:
+        import config
+        settings["ai_api_key_set"] = bool(getattr(config, "AI_API_KEY", ""))
+    except Exception:
+        pass
+    return jsonify(settings)
 
 
 @bp.route("/api/settings", methods=["POST"])

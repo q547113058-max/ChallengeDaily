@@ -74,7 +74,7 @@ function PrivacyContent() {
 
       <section>
         <h3 className="font-medium text-cd-text mb-1">3. AI 服务使用</h3>
-        <p>AI 分析是可选功能，默认关闭。启用时：</p>
+        <p>AI 分析是可选功能，默认开启，可随时在设置中关闭。启用时：</p>
         <ul className="list-disc ml-5 space-y-1">
           <li>您需自行提供 AI 服务的 API Key 和接口地址</li>
           <li>截图内容将通过您配置的 AI 服务处理，受该服务的隐私政策约束</li>

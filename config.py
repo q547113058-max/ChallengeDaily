@@ -155,7 +155,7 @@ _DEFAULT_SETTINGS = {
     "work_start_hour": 9,
     "work_end_hour": 18,
     "custom_report_instructions": "",
-    "ai_enabled": False,
+    "ai_enabled": True,
     "ai_base_url": "https://open.bigmodel.cn/api/paas/v4",
     "ai_vision_model": "glm-4.1v-thinking-flash",
     "ai_text_model": "glm-4-flash",

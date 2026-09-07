@@ -210,7 +210,7 @@ export default function Settings() {
         ai_base_url: 'https://open.bigmodel.cn/api/paas/v4',
         ai_vision_model: 'glm-4.1v-thinking-flash',
         ai_text_model: 'glm-4-flash',
-        ai_enabled: false,
+        ai_enabled: true,
       }
       await updateSettings(defaultSettings)
       // 重置本地状态
@@ -222,7 +222,7 @@ export default function Settings() {
       setApiBase(defaultSettings.ai_base_url!)
       setApiVisionModel(defaultSettings.ai_vision_model!)
       setApiTextModel(defaultSettings.ai_text_model!)
-      setAiEnabled(false)
+      setAiEnabled(true)
       setApiKey('')
       setApiKeySet(false)
       setShowKeyInput(true)

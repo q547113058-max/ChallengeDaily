@@ -547,12 +547,20 @@ def test_ai_connection():
                 raise
             logger.info("ai/test: %s 触发 429 限流, 自动用备用 %s 重试", model, fb)
             if is_vision_model:
-                response = client.chat.completions.create(model=fb, messages=messages, max_tokens=30,
+                response = client.chat.completions.create(model=fb, messages=messages, max_tokens=120,
                                                           extra_body={"thinking": {"type": "disabled"}})
             else:
                 response = client.chat.completions.create(model=fb, messages=messages, max_tokens=30)
             used_model = fb
         reply = response.choices[0].message.content.strip()
+        # 防御：服务端偶发仍把推理内联进 content（thinking disabled 不彻底），
+        # 剥掉 <think> 段再回显，避免设置页把思考过程显示成"模型回复"
+        if "<think>" in reply:
+            # 先剥闭合的 <think>...</think>，再剥未闭合的（max_tokens 截断导致结尾无 </think>）
+            reply = re.sub(r"<think>.*?</think>", "", reply, flags=re.S)
+            reply = re.sub(r"<think>.*\Z", "", reply, flags=re.S).strip()
+        if not reply:
+            reply = "（模型本次只返回了思考内容，连接正常）"
         return jsonify({"ok": True, "message": f"连接成功（{used_model}），模型回复：{reply}"})
     except Exception as e:
         # 异常日志脱敏：仅记录异常类型，避免把可能含 api_key 的错误串直接落盘
