@@ -400,14 +400,6 @@ WEBHOOK_TEMPLATES = [
         "events": ["achievement.unlocked"],
         "url_placeholder": "https://your-server.com/webhook",
     },
-    {
-        "id": "tpl_feishu_morning",
-        "name": "飞书 — AI 晨间洞察",
-        "type": "feishu",
-        "description": "AI 晨间洞察生成后推送到飞书",
-        "events": ["insight.morning"],
-        "url_placeholder": "https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxx",
-    },
 ]
 
 

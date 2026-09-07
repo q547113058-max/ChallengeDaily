@@ -30,7 +30,6 @@ import HeroInfo from '../components/HeroInfo'
 import DistractionHeatmap from '../components/DistractionHeatmap'
 import EmotionalCare from '../components/EmotionalCare'
 import InfoTooltip, { METRIC_EXPLANATIONS } from '../components/InfoTooltip'
-import MorningRitual from '../components/MorningRitual'
 import EveningRitual from '../components/EveningRitual'
 
 function getDisplayAppName(appName: string): string {
@@ -268,11 +267,6 @@ export default function Overview() {
 
   return (
     <div className="animate-fade-in">
-      {/* ─── 晨间规划（仅 06:00-12:00 且未规划时显示） ──── */}
-      <div className="mb-6">
-        <MorningRitual />
-      </div>
-
       {/* ─── Hero 区域：时间日期 + AI 导语 + 关键数字 + 状态 ──── */}
       <div className="mb-8">
         <div className="flex items-start justify-between gap-4">

@@ -428,15 +428,6 @@ def tool_get_daily_report(target_date: str | None = None, template: str = "stand
     return _ok(data)
 
 
-def tool_get_ai_insight(force: bool = False) -> list[dict]:
-    """获取今日 AI 晨报洞察（活泼可爱温馨风格）
-
-    Args:
-        force: 是否强制重新生成（默认仅在 7-11 点且未推送时生成）
-    """
-    data = _backend_request("GET", "/api/insight/morning", params={"force": "1" if force else "0"})
-    return _ok(data)
-
 
 # ── 目标 ──────────────────────────────────────────────────────
 
@@ -722,7 +713,6 @@ _TOOL_REGISTRY: dict[str, Callable[..., list[dict]]] = {
     "get_week_plan": tool_get_week_plan,
     "get_unassigned_todos": tool_get_unassigned_todos,
     "get_daily_report": tool_get_daily_report,
-    "get_ai_insight": tool_get_ai_insight,
     "list_goals": tool_list_goals,
     "query_database": tool_query_database,
     "health_check": tool_health_check,

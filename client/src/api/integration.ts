@@ -242,18 +242,6 @@ export async function getQuote(): Promise<{ quote: string }> {
   return request('/api/achievements/quote') as Promise<{ quote: string }>
 }
 
-// ── P9-2: AI 主动洞察推送 ──
-export interface MorningInsight {
-  type: 'positive' | 'suggestion' | 'warning' | 'care' | 'fun'
-  title: string
-  body: string
-}
-
-export async function getMorningInsights(force = false): Promise<{ date: string; insights: MorningInsight[]; count: number }> {
-  const params = force ? '?force=1' : ''
-  return request(`/api/insight/morning${params}`) as Promise<{ date: string; insights: MorningInsight[]; count: number }>
-}
-
 // ── 倒数日 ──
 export interface Countdown {
   id: number

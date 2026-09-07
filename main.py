@@ -340,14 +340,6 @@ def main():
                         except Exception as e:
                             logger.error(f"自动备份失败: {e}")
 
-                    # P9-2：晨报洞察推送（7-11 点每小时整点检查一次，去重在 morning_insight 内处理）
-                    if now_minutes == 0 and 7 <= datetime.now().hour < 11:
-                        try:
-                            from morning_insight import push_morning_insights_if_due
-                            push_morning_insights_if_due()
-                        except Exception as e:
-                            logger.debug(f"晨报洞察推送异常: {e}")
-
                     # P10-2：看门狗 — 每小时整点检查采集器健康，连续 2 小时无活动自动重启
                     if now_minutes == 0 and in_work_hours:
                         try:
