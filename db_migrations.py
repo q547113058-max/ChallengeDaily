@@ -1,6 +1,6 @@
 """
 ChallengeDaily Windows 版 — SQLite Schema 迁移管理
-从 db.py 拆分：包含 SCHEMA_VERSION、默认配置、ACL 设置、init_db 及完整 V1-V36 迁移逻辑
+从 db.py 拆分：包含 SCHEMA_VERSION、默认配置、ACL 设置、init_db 及完整 V1-V37 迁移逻辑
 """
 import sqlite3
 import logging
@@ -10,7 +10,7 @@ from config import DB_PATH
 logger = logging.getLogger(__name__)
 
 # ── 数据库 Schema 版本 ──
-SCHEMA_VERSION = 36
+SCHEMA_VERSION = 37
 
 # P-01: 默认数据保留天数（90 天）
 DEFAULT_DATA_RETENTION_DAYS = 90
@@ -946,6 +946,25 @@ def _init_db_impl():
                 logger.info("V36: 遗留记忆系统表创建成功（兼容用，功能已移除）")
             except Exception as e:
                 logger.warning(f"V36 schema 升级失败: {e}")
+
+        # V37: 清理记忆系统遗留表（功能已删除，表不再被任何代码读写）
+        # 删除顺序：先虚表（doc_chunks_fts 依赖 doc_chunks 作为外部内容表），再索引，最后实体表。
+        # 注意：本迁移会永久删除 memories / doc_chunks 中的既有数据，不可恢复。
+        if current_version < 37:
+            try:
+                conn.executescript("""
+                    DROP TABLE IF EXISTS memories_vec;
+                    DROP TABLE IF EXISTS doc_chunks_vec;
+                    DROP TABLE IF EXISTS doc_chunks_fts;
+                    DROP INDEX IF EXISTS idx_memories_source;
+                    DROP INDEX IF EXISTS idx_doc_chunks_source;
+                    DROP TABLE IF EXISTS memories;
+                    DROP TABLE IF EXISTS doc_chunks;
+                    DROP TABLE IF EXISTS ingest_jobs;
+                """)
+                logger.info("V37: 记忆系统遗留表已清理（memories/doc_chunks/ingest_jobs 及关联索引与虚表）")
+            except Exception as e:
+                logger.warning(f"V37 清理遗留表失败: {e}")
 
         # 更新版本号
         conn.execute(
