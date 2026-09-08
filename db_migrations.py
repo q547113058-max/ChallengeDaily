@@ -886,7 +886,7 @@ def _init_db_impl():
             except Exception as e:
                 logger.warning(f"V35 schema 升级失败: {e}")
 
-        # V36: 三阶段记忆系统——文档分块 + FTS5 + 向量检索 + Mem0 风格记忆
+        # V36 遗留表：原三阶段记忆系统所用（该功能已移除，迁移保留以兼容既有数据库）
         # 表说明：
         #   doc_chunks       文档分块（source/source_id 区分来源）
         #   doc_chunks_fts   FTS5 全文索引（unicode61 分词，外部内容表）
@@ -942,8 +942,8 @@ def _init_db_impl():
                 except Exception as fts_err:
                     logger.warning(f"V36: FTS5 创建失败（功能降级为 LIKE）: {fts_err}")
                 # sqlite-vec 向量虚表：依赖 sqlite_vec 扩展，按需加载
-                # 此处不直接创建 vec0 表（需要扩展已加载），交给 memory_engine.init_memory_schema 处理
-                logger.info("V36: 记忆系统表创建成功（向量虚表由 memory_engine 按需创建）")
+                # 此处不直接创建 vec0 表（需要扩展已加载）
+                logger.info("V36: 遗留记忆系统表创建成功（兼容用，功能已移除）")
             except Exception as e:
                 logger.warning(f"V36 schema 升级失败: {e}")
 

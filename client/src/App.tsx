@@ -34,7 +34,6 @@ const Dashboard = lazy(() => import('./pages/Dashboard'))
 const ExportCenter = lazy(() => import('./pages/ExportCenter'))
 const Goals = lazy(() => import('./pages/Goals'))
 const DailyCards = lazy(() => import('./pages/DailyCards'))
-const MemoryPage = lazy(() => import('./pages/MemoryPage'))
 
 // 首次启动流程：法律协议 → 新手引导 → 主界面
 type FirstLaunchPhase = 'legal' | 'onboarding' | 'done'
@@ -215,7 +214,6 @@ export default function App() {
                         <Route path="/habits" element={<Habits />} />
                         <Route path="/health" element={<Health />} />
                         <Route path="/daily-cards" element={<DailyCards />} />
-                        <Route path="/memory" element={<MemoryPage />} />
                         <Route path="*" element={<NotFoundPage />} />
                       </Routes>
                     </Suspense>
