@@ -225,12 +225,14 @@ export interface SamplingDeviation {
 
 export async function getHealthCoverage(date?: string): Promise<HealthCoverage> {
   const params = date ? `?date=${date}` : ''
-  return await request(`/api/health/coverage${params}`) as HealthCoverage
+  // 事件日志查询需冷启动 PowerShell，冷加载可能数秒，超时放宽到 30s
+  return await request(`/api/health/coverage${params}`, undefined, 30000) as HealthCoverage
 }
 
 export async function getHealthSystemEvents(date?: string): Promise<HealthSystemEvents> {
   const params = date ? `?date=${date}` : ''
-  return await request(`/api/health/system-events${params}`) as HealthSystemEvents
+  // 同上：事件日志查询冷启动较慢，超时放宽到 30s
+  return await request(`/api/health/system-events${params}`, undefined, 30000) as HealthSystemEvents
 }
 
 export async function getSamplingDeviation(date?: string): Promise<SamplingDeviation> {

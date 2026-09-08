@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 import time
 import logging
@@ -15,6 +16,22 @@ _ss_size_cache_time = 0
 
 # R-02: 进程启动时间（用于 deep health 计算 uptime）
 _START_TIME = time.time()
+
+
+def _warm_event_cache(target_date: str) -> None:
+    """并发预热系统事件缓存（开关机 / 登录 / 开机时间）。
+
+    这三项互不依赖，各自都要冷启动一次 PowerShell（实测 1.6~2.7s/次）。
+    串行取完要 6~10s，直接撞上前端 10s 超时并报「请求超时，后端可能未响应」；
+    并发后墙钟时间 ≈ 最慢的那一项（约 3s）。
+    预热后 get_system_sessions / get_system_coverage / get_uptime_seconds
+    都会命中 system_events 的 TTL 缓存，不再额外 spawn 进程。
+    """
+    import system_events
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        ex.submit(system_events.get_boot_events, target_date, target_date)
+        ex.submit(system_events.get_login_events, target_date, target_date)
+        ex.submit(system_events.get_current_boot_time)
 
 
 @bp.route("/")
@@ -148,6 +165,9 @@ def health_coverage():
     import system_events
     from db import get_conn, get_app_usage
 
+    # 并发预热事件缓存：串行冷取要 ~7s，预热后 get_system_coverage 命中缓存
+    _warm_event_cache(target_date)
+
     # 系统权威数据
     sys_cov = system_events.get_system_coverage(target_date, target_date)
 
@@ -266,16 +286,20 @@ def health_system_events():
         return jsonify({"error": f"Invalid date: {target_date}"}), 400
 
     import system_events
+    # 并发预热：这三项原本串行冷取要 ~10s（撞前端 10s 超时），
+    # 预热后下面每个调用都直接命中 system_events 的 TTL 缓存
+    _warm_event_cache(target_date)
     boots = system_events.get_boot_events(target_date, target_date)
     logins = system_events.get_login_events(target_date, target_date)
     sessions = system_events.get_system_sessions(target_date, target_date)
+    boot_time = system_events.get_current_boot_time()
 
     return jsonify({
         "date": target_date,
         "boot_events": boots,
         "login_events": logins,
         "sessions": sessions,
-        "current_boot_time": system_events.get_current_boot_time(),
+        "current_boot_time": boot_time,
         "uptime_sec": system_events.get_uptime_seconds(),
     })
 

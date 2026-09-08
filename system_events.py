@@ -12,10 +12,14 @@
   - Security log Event ID 4647                 用户发起注销（需管理员权限，失败时降级）
 """
 
+import copy
+import functools
 import json
 import logging
 import re as _re
 import subprocess
+import threading
+import time
 from datetime import datetime, timedelta
 from functools import lru_cache
 
@@ -114,6 +118,53 @@ def _parse_ps_datetime(s: str) -> str | None:
     return None
 
 
+# ── TTL 缓存 ────────────────────────────────────────────────
+# 每次事件日志查询都要冷启动一个 PowerShell 子进程（实测 1.6~2.7s/次），
+# 而同一份数据在一次请求里还会被重复取 2~3 遍（如 /api/health/system-events
+# 先取 boot/login，get_system_sessions 内部又取一遍，get_uptime_seconds 又
+# 调一次 get_current_boot_time），串行叠加后单接口 7~12s，撞上前端 10s 超时
+# 直接报「请求超时，后端可能未响应」。
+#
+# 这里给所有对外查询函数统一加 5 分钟 TTL 缓存：
+#   - 同一请求内的重复调用 → 0 次 PowerShell
+#   - 5 分钟内的重复访问 → 直接命中缓存
+# 开关机/登录事件本身是低频事实，5 分钟新鲜度足够。
+_TTL_SECONDS = 300
+_TTL_CACHE: dict = {}
+_TTL_LOCK = threading.Lock()
+
+
+def _ttl_cached(seconds: int = _TTL_SECONDS):
+    """线程安全的 TTL 缓存装饰器（键 = 函数名 + 参数）。
+
+    空结果（如权限不足导致 Security 日志读不到）同样缓存，
+    避免每次请求都重跑一次必然失败的慢查询。
+    返回值做深拷贝，防止调用方修改污染缓存。
+    """
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            key = (fn.__name__, args, tuple(sorted(kwargs.items())))
+            now = time.time()
+            with _TTL_LOCK:
+                hit = _TTL_CACHE.get(key)
+                if hit is not None and hit[0] > now:
+                    return copy.deepcopy(hit[1])
+            value = fn(*args, **kwargs)
+            with _TTL_LOCK:
+                _TTL_CACHE[key] = (now + seconds, copy.deepcopy(value))
+            return copy.deepcopy(value)
+        return wrapper
+    return decorator
+
+
+def clear_ttl_cache() -> None:
+    """清空事件查询缓存（测试或强制刷新时使用）。"""
+    with _TTL_LOCK:
+        _TTL_CACHE.clear()
+
+
+@_ttl_cached()
 def get_current_boot_time() -> str | None:
     """获取当前系统开机时间（最近一次启动）。
 
@@ -145,6 +196,7 @@ def get_uptime_seconds() -> int:
         return 0
 
 
+@_ttl_cached()
 def get_boot_events(start_date: str, end_date: str) -> list[dict]:
     """读取与 [start_date, end_date] 范围相关的开关机事件。
 
@@ -227,6 +279,7 @@ $events | Sort-Object TimeCreated | ForEach-Object {{
     return result
 
 
+@_ttl_cached()
 def get_login_events(start_date: str, end_date: str) -> list[dict]:
     """读取登录/注销事件（需管理员权限，失败返回空列表降级）。
 
@@ -278,6 +331,7 @@ $result | Sort-Object timestamp | ConvertTo-Json -Compress
         return []
 
 
+@_ttl_cached()
 def get_system_sessions(start_date: str, end_date: str) -> list[dict]:
     """合并开关机 + 登录/注销事件，按时间排序成会话段。
 
@@ -385,6 +439,7 @@ def _cached_boot_events(start_date: str, end_date: str) -> tuple:
     return tuple(tuple(d.items()) for d in events)
 
 
+@_ttl_cached()
 def get_system_coverage(start_date: str, end_date: str) -> dict:
     """计算指定日期范围内系统"应有运行时长"。
 
