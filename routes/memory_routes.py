@@ -50,8 +50,39 @@ def memory_search():
         limit = 10
     try:
         me = _memory_engine()
-        results = me.hybrid_search(query, limit=limit)
-        return jsonify({"results": results, "count": len(results), "query": query})
+        # 记忆条目检索（memories 表）+ 文档片段检索（doc_chunks 表）双路合并。
+        # 此前只走 hybrid_search（doc_chunks），而记忆实际存在 memories 表，
+        # 导致「记忆明明有数据却搜不到」。
+        mem_hits = []
+        try:
+            mem_hits = me.search_memories(query, limit=limit)
+        except Exception as e:
+            logger.debug(f"记忆条目检索失败: {e}")
+        doc_hits = []
+        try:
+            doc_hits = me.hybrid_search(query, limit=limit)
+        except Exception as e:
+            logger.debug(f"文档片段检索失败: {e}")
+
+        merged: list[dict] = []
+        seen: set[str] = set()
+        for hit in list(mem_hits) + list(doc_hits):
+            key = (hit.get("id") or "") or (hit.get("content") or "")[:80]
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            merged.append({
+                "id": hit.get("id") or "",
+                "content": hit.get("content") or hit.get("snippet") or "",
+                "source": hit.get("source") or hit.get("source_type") or "",
+                "source_type": hit.get("source_type") or hit.get("source") or "",
+                "score": hit.get("score"),
+                "snippet": hit.get("snippet"),
+                "created_at": hit.get("created_at"),
+            })
+            if len(merged) >= limit:
+                break
+        return jsonify({"results": merged, "count": len(merged), "query": query})
     except Exception as e:
         return jsonify({"error": safe_error(e, "检索失败")}), 500
 
@@ -95,17 +126,51 @@ def memory_status():
 def memory_extract():
     """手动触发事实抽取
 
-    Body:
-        {"content": "...", "source_type": "manual", "source_id": "xxx"}
+    两种模式：
+      1) 提供 content：{"content": "...", "source_type": "manual", "source_id": "xxx"}
+      2) 不提供 content，改为从数据源批量抽取：
+         {"source": "report|diary|reflection|profile|activity", "days": 7, "limit": 7}
+         —— 此前前端按钮只发 {}，后端强制要 content 导致必然 400，此处兼容修复。
     """
     if not check_token(request):
         return jsonify({"error": "Unauthorized"}), 401
     data = request.get_json(force=True, silent=True) or {}
+
+    # ── 模式 2：从数据源批量抽取（无需 content）──
+    if not (data.get('content') or '').strip() and data.get('source'):
+        try:
+            import memory_producer
+        except Exception as e:
+            return jsonify({"error": safe_error(e, "记忆生产者不可用")}), 500
+        try:
+            days = int(data.get('days', 7))
+        except (TypeError, ValueError):
+            days = 7
+        try:
+            limit = int(data.get('limit', 7))
+        except (TypeError, ValueError):
+            limit = 7
+        res = memory_producer.extract_from_source(
+            source=str(data.get('source') or 'report'),
+            days=days,
+            limit=limit,
+            force=bool(data.get('force', False)),
+        )
+        if res.get('error'):
+            return jsonify({"error": res["error"]}), 400
+        res["status"] = "ok"
+        return jsonify(res)
+
+    # ── 模式 1：显式文本抽取 ──
     try:
         me = _memory_engine()
         content = (data.get('content') or '').strip()
         if not content:
-            return jsonify({"error": "content 不能为空"}), 400
+            return jsonify({
+                "error": "content 不能为空；若要从数据源批量抽取，请改传 "
+                         "{\"source\": \"report|diary|reflection|profile|activity\", \"days\": 7}",
+                "supported_sources": ["report", "diary", "reflection", "profile", "activity"],
+            }), 400
         source_type = (data.get('source_type') or 'manual').strip()
         source_id = (data.get('source_id') or '').strip()
         facts = me.extract_facts(content, source_type=source_type, source_id=source_id)
@@ -114,9 +179,71 @@ def memory_extract():
             mid = me.add_memory(f, source_type=source_type, source_id=source_id)
             if mid:
                 added_ids.append(mid)
-        return jsonify({"facts": facts, "memory_ids": added_ids})
+        return jsonify({"facts": facts, "memory_ids": added_ids, "added": len(added_ids)})
     except Exception as e:
         return jsonify({"error": safe_error(e, "事实抽取失败")}), 500
+
+
+@memory_bp.route('/auto-extract', methods=['POST'])
+def memory_auto_extract():
+    """从已有数据源自动抽取事实入库（记忆生产者）
+
+    Body: {"source": "report", "days": 30, "limit": 7, "force": false}
+
+    source 可选：report(日报) / diary(日记) / reflection(反思) / profile(画像) / activity(活动记录)
+    幂等：同一 source_id 已抽取过会自动跳过（force=true 可强制重跑）。
+    """
+    if not check_token(request):
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(force=True, silent=True) or {}
+    try:
+        import memory_producer
+    except Exception as e:
+        return jsonify({"error": safe_error(e, "记忆生产者不可用")}), 500
+    try:
+        days = int(data.get('days', 30))
+    except (TypeError, ValueError):
+        days = 30
+    try:
+        limit = int(data.get('limit', 7))
+    except (TypeError, ValueError):
+        limit = 7
+    res = memory_producer.extract_from_source(
+        source=str(data.get('source') or 'report'),
+        days=days,
+        limit=limit,
+        force=bool(data.get('force', False)),
+    )
+    if res.get('error'):
+        return jsonify({"error": res["error"]}), 400
+    res["status"] = "ok"
+    return jsonify(res)
+
+
+@memory_bp.route('/sources', methods=['GET'])
+def memory_sources():
+    """列出可抽取的数据源及其可用文本条数（供前端下拉展示）"""
+    try:
+        import memory_producer
+    except Exception:
+        return jsonify({"sources": []})
+    days = request.args.get('days', '30')
+    try:
+        days = max(1, min(3650, int(days)))
+    except (TypeError, ValueError):
+        days = 30
+    out = []
+    for s in memory_producer.SUPPORTED_SOURCES:
+        try:
+            items = memory_producer._fetch_source_texts(s, days, 50)
+            out.append({
+                "source": s,
+                "label": memory_producer.SOURCE_LABELS.get(s, s),
+                "available": len(items),
+            })
+        except Exception:
+            out.append({"source": s, "label": memory_producer.SOURCE_LABELS.get(s, s), "available": 0})
+    return jsonify({"sources": out, "days": days})
 
 @memory_bp.route('/list', methods=['GET'])
 def memory_list():

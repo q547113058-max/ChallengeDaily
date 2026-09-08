@@ -99,6 +99,13 @@ def _save(content: str, target_date: str):
     report_path.write_text(content, encoding="utf-8")
     save_report(target_date, content)
 
+    # 记忆系统：日报落库后异步抽取原子事实写入记忆库（不阻塞、失败仅记日志）
+    try:
+        import memory_producer
+        memory_producer.auto_extract_async(content, "report", f"report:{target_date}")
+    except Exception as e:  # pragma: no cover - 记忆抽取失败绝不能影响报告生成
+        logger.warning(f"记忆自动抽取挂钩失败: {e}")
+
 
 def get_report_files() -> list:
     """列出所有已生成的报告文件"""

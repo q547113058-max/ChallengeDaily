@@ -705,6 +705,44 @@ export async function deleteMemory(id: string): Promise<{ status: string }> {
   return request(`/api/memory/${encodeURIComponent(id)}`, { method: 'DELETE' }) as Promise<{ status: string }>
 }
 
+/** 记忆数据源可抽取条数 */
+export interface MemorySourceInfo {
+  source: string
+  label: string
+  available: number
+}
+
+/** 数据源抽取结果 */
+export interface AutoExtractResult {
+  status?: string
+  source: string
+  label?: string
+  scanned: number
+  added: number
+  facts: number
+  skipped: number
+  memory_ids?: string[]
+  message?: string
+}
+
+/** 查询可抽取的数据源及其可用条数 */
+export async function getMemorySources(days: number = 30): Promise<{ sources: MemorySourceInfo[]; days: number }> {
+  return request(`/api/memory/sources?days=${days}`) as Promise<{ sources: MemorySourceInfo[]; days: number }>
+}
+
+/** 从已有数据源自动抽取事实写入记忆库（幂等，force=true 强制重跑） */
+export async function autoExtractMemories(
+  source: string,
+  days: number = 30,
+  limit: number = 7,
+  force: boolean = false,
+): Promise<AutoExtractResult> {
+  return request('/api/memory/auto-extract', {
+    method: 'POST',
+    body: JSON.stringify({ source, days, limit, force }),
+  }) as Promise<AutoExtractResult>
+}
+
 /** 手动触发向量化索引 */
 export async function triggerIndexing(source?: string): Promise<{ status: string; indexed?: number; [k: string]: unknown }> {
   const body = source ? JSON.stringify({ source }) : '{}'

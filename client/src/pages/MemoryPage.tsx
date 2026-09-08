@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import dayjs from 'dayjs'
 import {
   Brain,
@@ -18,11 +18,12 @@ import {
   getMemoryStatus,
   getMemoryList,
   deleteMemory,
-  triggerIndexing,
-  triggerExtraction,
+  autoExtractMemories,
+  getMemorySources,
   type MemoryItem,
   type MemorySearchResult,
   type MemoryStatus,
+  type MemorySourceInfo,
 } from '../api/client'
 import { useAsyncData, ApiErrorDisplay } from '../components/shared'
 import { useToast } from '../components/Toast'
@@ -79,9 +80,13 @@ export default function MemoryPage() {
   const [searchResults, setSearchResults] = useState<MemorySearchResult[]>([])
   const [hasSearched, setHasSearched] = useState(false)
   // 操作进行中状态
-  const [indexing, setIndexing] = useState(false)
   const [extracting, setExtracting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  // 数据源抽取配置
+  const [extractSource, setExtractSource] = useState('report')
+  const [extractDays, setExtractDays] = useState(30)
+  const [extractForce, setExtractForce] = useState(false)
+  const [sources, setSources] = useState<MemorySourceInfo[]>([])
   // 用于触发列表刷新的 nonce
   const [refreshNonce, setRefreshNonce] = useState(0)
 
@@ -141,35 +146,43 @@ export default function MemoryPage() {
     setHasSearched(false)
   }, [])
 
-  // ── 触发向量化索引 ──
-  const handleIndex = useCallback(async () => {
-    setIndexing(true)
+  // ── 加载可抽取数据源 ──
+  const loadSources = useCallback(async () => {
     try {
-      const res = await triggerIndexing()
-      toast.success(`索引任务已触发${typeof res.indexed === 'number' ? `（本次索引 ${res.indexed} 条）` : ''}`)
-      // 索引可能耗时，延迟刷新状态
-      setTimeout(() => refresh(), 1000)
-    } catch (err: any) {
-      toast.error(err?.message || '触发索引失败')
-    } finally {
-      setIndexing(false)
+      const res = await getMemorySources(extractDays)
+      setSources(res.sources || [])
+    } catch {
+      setSources([])
     }
-  }, [refresh, toast])
+  }, [extractDays])
 
-  // ── 触发事实抽取 ──
+  // 天数变化时刷新数据源可用条数；首次挂载也加载一次
+  useEffect(() => {
+    loadSources()
+  }, [loadSources])
+
+  // ── 从数据源抽取事实入库 ──
   const handleExtract = useCallback(async () => {
     setExtracting(true)
     try {
-      const res = await triggerExtraction()
-      toast.success(`事实抽取已触发${typeof res.extracted === 'number' ? `（本次抽取 ${res.extracted} 条）` : ''}`)
-      // 抽取可能产生新记忆，刷新列表
-      setTimeout(() => refresh(), 1000)
+      const res = await autoExtractMemories(extractSource, extractDays, 7, extractForce)
+      if (res.added > 0) {
+        toast.success(`抽取完成：扫描 ${res.scanned} 个来源，新增 ${res.added} 条记忆`)
+      } else if (res.skipped > 0) {
+        toast.info(`扫描 ${res.scanned} 个来源，均已抽取过（可勾选「强制重跑」）`)
+      } else {
+        toast.warning(res.message || '未抽取到新记忆')
+      }
+      setTimeout(() => {
+        refresh()
+        loadSources()
+      }, 800)
     } catch (err: any) {
-      toast.error(err?.message || '触发抽取失败')
+      toast.error(err?.message || '抽取失败')
     } finally {
       setExtracting(false)
     }
-  }, [refresh, toast])
+  }, [extractSource, extractDays, extractForce, refresh, loadSources, toast])
 
   // ── 删除记忆 ──
   const handleDelete = useCallback(
@@ -286,28 +299,62 @@ export default function MemoryPage() {
           </>
         )}
 
-        {/* 操作按钮 */}
-        <div className="flex flex-wrap gap-3 pt-1">
-          <button
-            onClick={handleIndex}
-            disabled={indexing}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-cd-green text-white hover:opacity-90 transition-opacity disabled:opacity-40"
+        {/* 操作区：从已有数据源抽取事实入库 */}
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <select
+            value={extractSource}
+            onChange={(e) => setExtractSource(e.target.value)}
+            disabled={extracting}
+            className="px-2 py-1.5 rounded-lg text-xs bg-cd-bg-secondary text-cd-text border border-cd-border focus:outline-none focus:border-cd-green disabled:opacity-40"
           >
-            {indexing ? <Loader2 size={12} className="animate-spin" /> : <Database size={12} />}
-            {indexing ? '索引中...' : '手动索引'}
-          </button>
+            {sources.length > 0 ? (
+              sources.map((s) => (
+                <option key={s.source} value={s.source}>
+                  {s.label}（{s.available}）
+                </option>
+              ))
+            ) : (
+              <option value="report">日报</option>
+            )}
+          </select>
+
+          <select
+            value={extractDays}
+            onChange={(e) => setExtractDays(Number(e.target.value))}
+            disabled={extracting}
+            className="px-2 py-1.5 rounded-lg text-xs bg-cd-bg-secondary text-cd-text border border-cd-border focus:outline-none focus:border-cd-green disabled:opacity-40"
+          >
+            <option value={7}>近 7 天</option>
+            <option value={30}>近 30 天</option>
+            <option value={90}>近 90 天</option>
+            <option value={365}>近 1 年</option>
+          </select>
+
           <button
             onClick={handleExtract}
             disabled={extracting}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-cd-bg-secondary text-cd-text-secondary hover:bg-cd-hover transition-colors border border-cd-border disabled:opacity-40"
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-cd-green text-white hover:opacity-90 transition-opacity disabled:opacity-40"
           >
             {extracting ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-            {extracting ? '抽取中...' : '事实抽取'}
+            {extracting ? '抽取中...' : '抽取事实入库'}
           </button>
+
+          <label className="flex items-center gap-1 text-[11px] text-cd-text-secondary cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={extractForce}
+              onChange={(e) => setExtractForce(e.target.checked)}
+              disabled={extracting}
+              className="accent-cd-green"
+            />
+            强制重跑
+          </label>
         </div>
         <div className="text-[10px] text-cd-text-tertiary">
-          • 手动索引：将未向量化的记忆条目重新生成向量索引<br />
-          • 事实抽取：从已同步的文档中抽取关键事实写入记忆库
+          • 抽取事实入库：从选中数据源（日报 / 日记 / 反思 / 画像 / 活动记录）读取文本，
+          用 AI 抽取原子事实写入记忆库<br />
+          • 同一来源已抽取过会自动跳过；勾选「强制重跑」可重新抽取并追加<br />
+          • AI 限流或不可用时自动降级为关键词抽取，仍会产生记忆
         </div>
       </section>
 
