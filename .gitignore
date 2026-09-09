@@ -80,3 +80,6 @@ mypy_cache/
 循环工程日志*.md
 LOOP_ENGINEERING_PLAN.md
 PROJECT_FINAL_REPORT.md
+
+# vite 构建临时文件
+vite.config.js.timestamp-*

@@ -57,16 +57,17 @@ export default function ReportTemplateSelector({ onSelect, selected }: ReportTem
   const [templates, setTemplates] = useState<TemplateItem[]>(HARDCODED_TEMPLATES)
 
   useEffect(() => {
+    // request() 返回 Promise<unknown>，此处按后端契约断言（失败时 catch 吞掉，沿用内置模板）
     request('/api/report/templates')
-      .then((data: { templates?: { value: string; label: string }[] }) => {
-        if (data?.templates?.length) {
-          setTemplates(prev =>
-            prev.map(t => {
-              const remote = data.templates.find(r => r.value === t.value)
-              return remote ? { ...t, label: remote.label } : t
-            })
-          )
-        }
+      .then((data) => {
+        const templates = (data as { templates?: { value: string; label: string }[] } | null)?.templates
+        if (!templates?.length) return
+        setTemplates(prev =>
+          prev.map(t => {
+            const remote = templates.find(r => r.value === t.value)
+            return remote ? { ...t, label: remote.label } : t
+          })
+        )
       })
       .catch(() => {})
   }, [])

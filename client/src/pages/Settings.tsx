@@ -231,6 +231,23 @@ export default function Settings() {
     }
   }
 
+  // 单项即时保存（用于「每日定时生成日报」等开关）：
+  // 原代码调用的 updateSetting 并不存在（正确名称是 updateSettings），
+  // 渲染期尚可，一点击就 ReferenceError。这里补上：写后端后重新拉取，
+  // 让 settings 这个派生值同步刷新。
+  const updateSetting = async <K extends keyof BackendSettings>(
+    key: K,
+    value: BackendSettings[K],
+  ) => {
+    try {
+      await updateSettings({ [key]: value } as Partial<BackendSettings>)
+      await refreshData()
+    } catch (err) {
+      console.error('Failed to update setting:', err)
+      toast.error('保存失败，请重试')
+    }
+  }
+
   const handleTestAi = async (model: 'vision' | 'text') => {
     setAiTesting(model)
     setAiTestResult(null)
