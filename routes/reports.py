@@ -101,11 +101,14 @@ def report_list():
 
 @bp.route("/api/report/search")
 def report_search():
-    """P8-1：报告全文检索。
+    """P8-1：报告全文检索（支持日期范围）。
 
-    GET /api/report/search?q=关键词&limit=20
+    GET /api/report/search?q=关键词&limit=20&startDate=2026-09-01&endDate=2026-09-30
     返回 [{id, report_date, content, created_at, snippet}]
     snippet 中匹配关键词用【】包裹高亮
+
+    日期参数（对齐小黑日报助手的命名）：startDate / endDate，格式 YYYY-MM-DD，含端点。
+    只传其一表示单侧不限制；都不传则全量检索（保持旧行为）。
     """
     q = request.args.get("q", "").strip()
     try:
@@ -114,16 +117,34 @@ def report_search():
         limit = 20
     # 限制 limit 范围，防止恶意拉取
     limit = max(1, min(limit, 100))
+
+    # 日期范围：同时接受 camelCase（startDate/endDate）与 snake_case 别名
+    start_date = request.args.get("startDate") or request.args.get("start_date") or None
+    end_date = request.args.get("endDate") or request.args.get("end_date") or None
+    if start_date:
+        start_date = validate_date(start_date.strip())
+        if start_date is None:
+            return jsonify({"error": "startDate 格式应为 YYYY-MM-DD"}), 400
+    if end_date:
+        end_date = validate_date(end_date.strip())
+        if end_date is None:
+            return jsonify({"error": "endDate 格式应为 YYYY-MM-DD"}), 400
+    if start_date and end_date and start_date > end_date:
+        return jsonify({"error": "startDate 不能晚于 endDate"}), 400
+
     if not q:
-        return jsonify({"results": [], "query": "", "count": 0})
+        return jsonify({"results": [], "query": "", "count": 0,
+                        "startDate": start_date, "endDate": end_date})
     if len(q) > 100:
         return jsonify({"error": "关键词过长（最多 100 字符）"}), 400
     try:
-        results = search_reports(q, limit=limit)
+        results = search_reports(q, limit=limit, start_date=start_date, end_date=end_date)
         return jsonify({
             "results": results,
             "query": q,
             "count": len(results),
+            "startDate": start_date,
+            "endDate": end_date,
         })
     except Exception as e:
         return jsonify({"error": safe_error(e, "检索失败")}), 500

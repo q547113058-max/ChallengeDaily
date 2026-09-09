@@ -105,9 +105,16 @@ export interface ReportSearchResult {
   snippet: string
 }
 
-export async function searchReports(q: string, limit = 20): Promise<{ results: ReportSearchResult[]; query: string; count: number }> {
+/** 报告全文检索，range 为可选日期范围（YYYY-MM-DD，含端点，只传其一表示单侧不限制） */
+export async function searchReports(
+  q: string,
+  limit = 20,
+  range?: { startDate?: string; endDate?: string },
+): Promise<{ results: ReportSearchResult[]; query: string; count: number; startDate?: string | null; endDate?: string | null }> {
   const params = new URLSearchParams({ q, limit: String(limit) })
-  return request(`/api/report/search?${params.toString()}`) as Promise<{ results: ReportSearchResult[]; query: string; count: number }>
+  if (range?.startDate) params.set('startDate', range.startDate)
+  if (range?.endDate) params.set('endDate', range.endDate)
+  return request(`/api/report/search?${params.toString()}`) as Promise<{ results: ReportSearchResult[]; query: string; count: number; startDate?: string | null; endDate?: string | null }>
 }
 
 // ── P12-1：周报/月报深度洞察 ──

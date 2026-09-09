@@ -204,11 +204,26 @@ export async function createActivity(data: {
   return result as { status: string }
 }
 
-/** 搜索活动记录 */
-export async function searchActivities(q: string, date?: string): Promise<Activity[]> {
+/** 搜索活动记录
+ *
+ * 二选一：
+ * - date：单日检索（默认今天，旧行为）
+ * - range.startDate / range.endDate：日期范围检索，优先于 date；只传其一表示单侧不限制
+ */
+export async function searchActivities(
+  q: string,
+  date?: string,
+  range?: { startDate?: string; endDate?: string },
+): Promise<Activity[]> {
   const { formatLocalDate } = await import('./utils')
-  const d = date || formatLocalDate(new Date())
-  const data = await request(`/api/activities/search?q=${encodeURIComponent(q)}&date=${d}`) as { activities: Activity[] }
+  const params = new URLSearchParams({ q })
+  if (range?.startDate || range?.endDate) {
+    if (range.startDate) params.set('startDate', range.startDate)
+    if (range.endDate) params.set('endDate', range.endDate)
+  } else {
+    params.set('date', date || formatLocalDate(new Date()))
+  }
+  const data = await request(`/api/activities/search?${params.toString()}`) as { activities: Activity[] }
   return data.activities || []
 }
 

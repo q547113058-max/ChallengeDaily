@@ -358,6 +358,59 @@ def tool_list_activities(target_date: str | None = None, page: int = 1, per_page
     return _ok(data)
 
 
+def tool_create_activity(
+    timestamp: str,
+    category: str,
+    summary: str = "",
+    duration_min: int = 30,
+    app_name: str = "",
+    window_title: str = "",
+    source: str = "agent",
+) -> list[dict]:
+    """补记一条活动记录（Agent 写入通道，默认标记为 source=agent）
+
+    Args:
+        timestamp: 开始时间，格式 YYYY-MM-DD HH:MM:SS（必填）
+        category: 分类，可选：开发/会议/沟通/文档/测试/设计/运维/数据分析/学习/管理/产品/生活
+        summary: 工作内容摘要；留空则按分类自动生成
+        duration_min: 时长 5-480，默认 30
+        app_name: 应用名；留空则按来源填充（agent → 「agent添加」）
+        window_title: 窗口标题
+        source: 来源标记 agent/manual/import，默认 agent
+    """
+    body = {
+        "timestamp": timestamp,
+        "category": category,
+        "summary": summary,
+        "duration_min": duration_min,
+        "app_name": app_name,
+        "window_title": window_title,
+        "source": source,
+    }
+    data = _backend_request("POST", "/api/activities", json_body=body)
+    return _ok(data)
+
+
+def tool_search_activities(
+    q: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> list[dict]:
+    """按关键词检索活动记录（可限定日期范围）
+
+    Args:
+        q: 检索关键词（匹配窗口标题与 AI 摘要）
+        start_date: 起始日期 YYYY-MM-DD，含
+        end_date: 结束日期 YYYY-MM-DD，含
+    """
+    data = _backend_request("GET", "/api/activities/search", params={
+        "q": q,
+        "startDate": start_date,
+        "endDate": end_date,
+    })
+    return _ok(data)
+
+
 def tool_get_activity_stats(target_date: str | None = None) -> list[dict]:
     """获取某天活动分类统计（每类时长占比、专注度等）
 
@@ -657,6 +710,8 @@ _TOOL_REGISTRY: dict[str, Callable[..., list[dict]]] = {
     "create_todo": tool_create_todo,
     "complete_todo": tool_complete_todo,
     "list_activities": tool_list_activities,
+    "create_activity": tool_create_activity,
+    "search_activities": tool_search_activities,
     "get_activity_stats": tool_get_activity_stats,
     "list_habits": tool_list_habits,
     "check_habit": tool_check_habit,

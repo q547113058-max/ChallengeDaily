@@ -94,12 +94,17 @@ def create_activity():
     if category not in CATEGORIES:
         return jsonify({"error": f"无效分类: {category}，可选: {', '.join(CATEGORIES)}"}), 400
 
-    app_name = data.get("app_name", "手动补录").strip()
+    # 来源标记（V38）：auto 自动采集 / manual 界面补录 / agent Agent(MCP)写入 / import 导入
+    source = (data.get("source") or "").strip().lower() or "manual"
+    if source not in config.ACTIVITY_SOURCES:
+        return jsonify({"error": f"无效来源: {source}，可选: {', '.join(config.ACTIVITY_SOURCES)}"}), 400
+
+    app_name = data.get("app_name", "").strip() or ("agent添加" if source == "agent" else "手动补录")
     window_title = data.get("window_title", "").strip()
     duration_min = max(5, min(480, int(data.get("duration_min", 30))))
 
     if not summary:
-        summary = f"[手动补录] {category}"
+        summary = f"[{'agent补录' if source == 'agent' else '手动补录'}] {category}"
 
     try:
         new_id = insert_manual_activity(
@@ -109,8 +114,9 @@ def create_activity():
             category=category,
             summary=summary,
             duration_min=duration_min,
+            source=source,
         )
-        return jsonify({"status": "ok", "id": new_id}), 201
+        return jsonify({"status": "ok", "id": new_id, "source": source}), 201
     except Exception as e:
         error_str = str(e)
         if "UNIQUE constraint" in error_str or "unique" in error_str.lower():
@@ -264,20 +270,58 @@ def undo_delete_activity(act_id):
 
 @bp.route("/api/activities/search")
 def search_activities():
+    """活动关键词检索，支持日期范围。
+
+    GET /api/activities/search?q=关键词&startDate=2026-09-01&endDate=2026-09-30
+    GET /api/activities/search?q=关键词&date=2026-09-09      # 单日（旧行为，保留）
+
+    优先级：startDate/endDate > date > 今天。
+    只传 startDate 或 endDate 其一表示单侧不限制。匹配 window_title 与 summary。
+    """
     q = request.args.get("q", "").strip()
-    target_date = request.args.get("date", date.today().isoformat())
     if not q:
-        return jsonify({"activities": []})
+        return jsonify({"activities": [], "query": "", "count": 0})
+
+    start_date = (request.args.get("startDate") or request.args.get("start_date") or "").strip()
+    end_date = (request.args.get("endDate") or request.args.get("end_date") or "").strip()
+    if start_date:
+        start_date = validate_date(start_date) or ""
+        if not start_date:
+            return jsonify({"error": "startDate 格式应为 YYYY-MM-DD"}), 400
+    if end_date:
+        end_date = validate_date(end_date) or ""
+        if not end_date:
+            return jsonify({"error": "endDate 格式应为 YYYY-MM-DD"}), 400
+
+    range_sql = ""
+    range_params: list = []
+    if start_date or end_date:
+        if start_date:
+            range_sql += " AND timestamp >= ?"
+            range_params.append(f"{start_date} 00:00:00")
+        if end_date:
+            range_sql += " AND timestamp <= ?"
+            range_params.append(f"{end_date} 23:59:59")
+        if start_date and end_date and start_date > end_date:
+            return jsonify({"error": "startDate 不能晚于 endDate"}), 400
+    else:
+        # 兼容旧行为：默认查当天
+        target_date = request.args.get("date", date.today().isoformat())
+        range_sql += " AND date(timestamp) = ?"
+        range_params.append(target_date)
 
     from db import get_conn
     safe_q = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT * FROM activities "
-            "WHERE date(timestamp) = ? AND (window_title LIKE ? ESCAPE '\\' OR summary LIKE ? ESCAPE '\\') "
+            "WHERE 1=1" + range_sql + " "
+            "AND (window_title LIKE ? ESCAPE '\\' OR summary LIKE ? ESCAPE '\\') "
             "ORDER BY timestamp DESC",
-            (target_date, f"%{safe_q}%", f"%{safe_q}%"),
+            (*range_params, f"%{safe_q}%", f"%{safe_q}%"),
         ).fetchall()
+    # 统一转 dict：sqlite3.Row 没有 .get()，直接遍历会抛 AttributeError 导致整个接口 500
+    rows = [dict(r) for r in rows]
 
     from app_tracker import get_display_name as _gdn_s
     import json as _json
@@ -299,8 +343,15 @@ def search_activities():
             "ai_detail": r["ai_detail"] if "ai_detail" in r.keys() else "",
             "duration_min": interval / 60,
             "windows": windows,
+            "source": r["source"] if "source" in r.keys() and r["source"] else "auto",
         })
-    return jsonify({"activities": result})
+    return jsonify({
+        "activities": result,
+        "query": q,
+        "count": len(result),
+        "startDate": start_date or None,
+        "endDate": end_date or None,
+    })
 
 
 @bp.route("/api/timeline")

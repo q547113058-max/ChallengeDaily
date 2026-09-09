@@ -1,6 +1,6 @@
 """
 ChallengeDaily Windows 版 — SQLite Schema 迁移管理
-从 db.py 拆分：包含 SCHEMA_VERSION、默认配置、ACL 设置、init_db 及完整 V1-V37 迁移逻辑
+从 db.py 拆分：包含 SCHEMA_VERSION、默认配置、ACL 设置、init_db 及完整 V1-V38 迁移逻辑
 """
 import sqlite3
 import logging
@@ -10,7 +10,7 @@ from config import DB_PATH
 logger = logging.getLogger(__name__)
 
 # ── 数据库 Schema 版本 ──
-SCHEMA_VERSION = 37
+SCHEMA_VERSION = 38
 
 # P-01: 默认数据保留天数（90 天）
 DEFAULT_DATA_RETENTION_DAYS = 90
@@ -72,6 +72,7 @@ def _init_db_impl():
                     window_title TEXT,
                     category    TEXT,
                     summary     TEXT,
+                    source      TEXT DEFAULT 'auto',   -- auto/manual/agent/import（V38）
                     created_at  TEXT DEFAULT (datetime('now','localtime'))
                 );
 
@@ -965,6 +966,26 @@ def _init_db_impl():
                 logger.info("V37: 记忆系统遗留表已清理（memories/doc_chunks/ingest_jobs 及关联索引与虚表）")
             except Exception as e:
                 logger.warning(f"V37 清理遗留表失败: {e}")
+
+        # V38: activities 增加 source 来源标记
+        # auto=自动采集 / manual=界面补录 / agent=Agent(MCP)写入 / import=导入
+        # 历史数据统一回填为 auto，便于区分"采到的"与"补的/Agent 写的"。
+        if current_version < 38:
+            try:
+                cols = {r[1] for r in conn.execute("PRAGMA table_info(activities)").fetchall()}
+                if "source" not in cols:
+                    conn.execute(
+                        "ALTER TABLE activities ADD COLUMN source TEXT DEFAULT 'auto'"
+                    )
+                conn.execute(
+                    "UPDATE activities SET source = 'auto' WHERE source IS NULL OR source = ''"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_activities_source ON activities(source)"
+                )
+                logger.info("V38: activities 表新增 source 字段（历史数据回填 auto）")
+            except Exception as e:
+                logger.warning(f"V38 schema 升级失败: {e}")
 
         # 更新版本号
         conn.execute(

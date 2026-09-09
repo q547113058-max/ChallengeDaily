@@ -145,6 +145,14 @@ CATEGORIES = [
     "设计", "运维", "数据分析", "学习", "管理", "产品", "生活",
 ]
 
+# ── 活动记录来源（activities.source，V38 起）──
+# auto   自动采集（截图/窗口追踪写入，含历史数据回填）
+# manual 界面手动补录
+# agent  Agent 通过 MCP / API 写入
+# import 外部数据导入
+ACTIVITY_SOURCES = ["auto", "manual", "agent", "import"]
+DEFAULT_ACTIVITY_SOURCE = "auto"
+
 # ── 隐私关键词（截图分析时脱敏）──
 PRIVACY_KEYWORDS = os.getenv("PRIVACY_KEYWORDS", "").split(",") if os.getenv("PRIVACY_KEYWORDS") else []
 

@@ -47,6 +47,8 @@ export interface Activity {
   ai_detail: string
   duration_min: number
   windows?: VisibleWindow[]
+  /** V38：记录来源 auto 自动采集 / manual 界面补录 / agent Agent写入 / import 导入 */
+  source?: string
 }
 
 export interface ReportContent {

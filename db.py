@@ -11,7 +11,7 @@ import random
 from datetime import datetime, date, timedelta
 from typing import Optional
 from contextlib import contextmanager
-from config import DB_PATH, CATEGORIES
+from config import DB_PATH, CATEGORIES, ACTIVITY_SOURCES
 from db_migrations import init_db, SCHEMA_VERSION, DEFAULT_DATA_RETENTION_DAYS, _set_db_acl
 
 logger = logging.getLogger(__name__)
@@ -188,13 +188,21 @@ def insert_activity(timestamp: str, screenshot: str, app_name: str,
                 _pending_commits = 0
 
 def insert_manual_activity(timestamp: str, app_name: str, window_title: str,
-                           category: str, summary: str, duration_min: int = 30):
-    """手动补录一条活动记录（含生成 app_usage），返回新记录 id"""
+                           category: str, summary: str, duration_min: int = 30,
+                           source: str = "manual"):
+    """手动补录一条活动记录（含生成 app_usage），返回新记录 id
+
+    Args:
+        source: 记录来源，见 ACTIVITY_SOURCES。
+                manual=界面补录 / agent=Agent(MCP)写入 / import=导入 / auto=自动采集
+    """
+    if source not in ACTIVITY_SOURCES:
+        source = "manual"
     with get_conn() as conn:
         cursor = _execute_with_retry(conn,
-            "INSERT INTO activities (timestamp, screenshot, app_name, window_title, category, summary) "
-            "VALUES (?, '', ?, ?, ?, ?)",
-            (timestamp, app_name, window_title, category, summary),
+            "INSERT INTO activities (timestamp, screenshot, app_name, window_title, category, summary, source) "
+            "VALUES (?, '', ?, ?, ?, ?, ?)",
+            (timestamp, app_name, window_title, category, summary, source),
         )
         new_id = cursor.lastrowid
         # 同时写入 app_usage，让统计准确
@@ -419,12 +427,39 @@ def get_reports(start_date: str, end_date: str):
     return [dict(r) for r in rows]
 
 
-def search_reports(query: str, limit: int = 20) -> list:
+def _make_snippet(content: str, query: str, width: int = 60) -> str:
+    """为 LIKE 回退分支生成带高亮的摘要（对齐 FTS5 snippet() 的【】标记）。
+
+    FTS5 的 snippet() 在 unicode61 下对中文无效，回退路径需要自己截取。
+    取首个匹配位置前后各 width/2 字符，用【】包裹匹配词。
+    """
+    if not content:
+        return ""
+    pos = content.lower().find(query.lower()) if query else -1
+    if pos < 0:
+        return content[:width * 2] + ("..." if len(content) > width * 2 else "")
+    half = width // 2
+    start = max(0, pos - half)
+    end = min(len(content), pos + len(query) + half)
+    prefix = "..." if start > 0 else ""
+    suffix = "..." if end < len(content) else ""
+    return (prefix
+            + content[start:pos]
+            + "【" + content[pos:pos + len(query)] + "】"
+            + content[pos + len(query):end]
+            + suffix)
+
+
+def search_reports(query: str, limit: int = 20,
+                   start_date: str | None = None,
+                   end_date: str | None = None) -> list:
     """P8-1：FTS5 全文检索报告内容。
 
     Args:
         query: 检索关键词（自动加引号避免 FTS5 特殊语法注入）
         limit: 最多返回条数
+        start_date: 起始日期 YYYY-MM-DD（含），不传则不限制
+        end_date: 结束日期 YYYY-MM-DD（含），不传则不限制
 
     Returns:
         [{id, report_date, content, created_at, snippet}] 每条带高亮摘要
@@ -435,6 +470,15 @@ def search_reports(query: str, limit: int = 20) -> list:
     q = query.strip()
     # 转义双引号并用引号包裹，规避 FTS5 语法注入
     safe_q = '"' + q.replace('"', '""') + '"'
+    # 日期范围：两条分支（FTS5 / LIKE）共用，参数占位符顺序与 SQL 拼接一致
+    date_sql = ""
+    date_params: list = []
+    if start_date:
+        date_sql += " AND report_date >= ?"
+        date_params.append(start_date)
+    if end_date:
+        date_sql += " AND report_date <= ?"
+        date_params.append(end_date)
     try:
         with get_conn() as conn:
             # 先尝试 FTS5（外部内容表）
@@ -443,27 +487,36 @@ def search_reports(query: str, limit: int = 20) -> list:
                     "SELECT r.id, r.report_date, r.content, r.created_at, "
                     "       snippet(reports_fts, 1, '【', '】', '...', 24) AS snippet "
                     "FROM reports_fts f JOIN reports r ON r.id = f.rowid "
-                    "WHERE reports_fts MATCH ? "
+                    "WHERE reports_fts MATCH ?" + date_sql.replace("report_date", "r.report_date") + " "
                     "ORDER BY r.report_date DESC LIMIT ?",
-                    (safe_q, limit),
+                    (safe_q, *date_params, limit),
                 ).fetchall()
                 if rows:
                     return [dict(r) for r in rows]
-                # FTS5 查询成功但无结果，确认是真空结果而非回退
-                # 这里若 FTS5 启用则直接返回空
-                return []
             except Exception:
                 # FTS5 未启用，回退到 LIKE
                 logger.warning("FTS5 不可用，回退到 LIKE 模糊匹配")
-                like = f"%{q}%"
-                rows = conn.execute(
-                    "SELECT id, report_date, content, created_at, "
-                    "       substr(content, 1, 200) AS snippet "
-                    "FROM reports WHERE content LIKE ? "
-                    "ORDER BY report_date DESC LIMIT ?",
-                    (like, limit),
-                ).fetchall()
-                return [dict(r) for r in rows]
+            # 走到这里有两种情况：FTS5 不可用，或 FTS5 可用但零命中。
+            # 后者对中文是常态——unicode61 分词器不切分连续汉字，
+            # "讨论检索架构" 整体是一个 token，查 "检索" 必然 0 命中。
+            # 因此统一回退 LIKE，保证中文关键词（含 2 字词）可检索。
+            like = f"%{q}%"
+            rows = conn.execute(
+                "SELECT id, report_date, content, created_at "
+                "FROM reports WHERE content LIKE ?" + date_sql + " "
+                "ORDER BY report_date DESC LIMIT ?",
+                (like, *date_params, limit),
+            ).fetchall()
+            return [
+                {
+                    "id": r["id"],
+                    "report_date": r["report_date"],
+                    "content": r["content"],
+                    "created_at": r["created_at"],
+                    "snippet": _make_snippet(r["content"] or "", q),
+                }
+                for r in rows
+            ]
     except Exception as e:
         logger.error(f"search_reports 失败: {e}", exc_info=True)
         return []
