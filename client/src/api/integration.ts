@@ -139,10 +139,15 @@ export async function getSeasonHistory(months = 6): Promise<{ history: SeasonHis
   return request(`/api/achievements/season/history?months=${months}`) as Promise<{ history: SeasonHistoryItem[] }>
 }
 
-/** 创建备份（安全下载：使用 header 传 token） */
+/** 创建备份（安全下载：使用 header 传 token）
+ *
+ * 后端只注册了 POST /api/backup，此前这里用默认 GET → 405 Method Not Allowed，
+ * 整个备份下载功能不可用。
+ */
 export async function downloadBackup(): Promise<void> {
   const token = await getApiToken()
   const res = await fetch(`${getBaseUrl()}/api/backup`, {
+    method: 'POST',
     headers: token ? { 'X-API-Token': token } : {},
   })
   if (!res.ok) throw new Error(`备份失败: HTTP ${res.status}`)

@@ -91,6 +91,8 @@ def retention_policy():
             return jsonify({"error": "days 必须是 1-3650 的整数"}), 400
         with db.get_conn() as conn:
             conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('data_retention_days', ?)", (str(days),))
+            # get_conn() 退出时不自动提交；漏这句保留天数只在本连接可见，重启即失效
+            conn.commit()
         logger.info(f"[AUDIT] Retention set to {days} days by {request.remote_addr}")
         return jsonify({"status": "updated", "retention_days": days})
 

@@ -7,6 +7,7 @@
 - init_db 后所有表存在
 """
 import db
+from db_migrations import SCHEMA_VERSION
 
 
 def test_v22_migration_idempotent(temp_db):
@@ -30,7 +31,9 @@ def test_v24_migration_idempotent(temp_db):
     with db.get_conn() as conn:
         row = conn.execute("SELECT value FROM schema_version WHERE key='version'").fetchone()
         assert row is not None
-        assert int(row["value"]) == 24
+        # 原先硬编码 == 24，每加一次迁移就红一次；
+        # 本用例真正要验证的是「幂等后版本号停在 SCHEMA_VERSION」
+        assert int(row["value"]) == SCHEMA_VERSION
 
 
 def test_init_db_creates_tables(temp_db):

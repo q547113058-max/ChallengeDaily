@@ -33,10 +33,17 @@ def update_settings():
 
     ai_api_key_raw = data.pop("ai_api_key", None)
 
+    # auto_daily_report* 由 auto_report_scheduler 读取（驱动每日定时生成日报），
+    # 原先这三个键不在白名单里 → 设置页的开关写入被静默丢弃，
+    # 调度器永远读到默认 False，定时日报从未真正启用过。
+    # 注意：另一套配置 /api/auto-report/config（enabled/auto_time/auto_push）
+    # 由 routes/auto_report.py 的 check_auto_report 使用，与本套并存。
     for key in ["exclude_apps", "screenshot_interval_sec", "work_start_hour",
                 "work_end_hour", "custom_report_instructions",
                 "ai_base_url", "ai_vision_model", "ai_text_model", "ai_enabled",
-                "birthday", "life_expectancy"]:
+                "birthday", "life_expectancy",
+                "auto_daily_report", "auto_daily_report_hour",
+                "auto_daily_report_template"]:
         if key in data:
             current[key] = data[key]
 
@@ -51,6 +58,16 @@ def update_settings():
     for field, max_len in _MAX_FIELD_LEN.items():
         if field in current and isinstance(current[field], str) and len(current[field]) > max_len:
             return jsonify({"error": f"{field} 长度超过限制（最大 {max_len} 字符）"}), 400
+
+    # 自动日报小时：调度器会 now.replace(hour=n)，越界会直接抛 ValueError 打挂调度线程
+    if "auto_daily_report_hour" in data:
+        try:
+            _h = int(data["auto_daily_report_hour"])
+        except (ValueError, TypeError):
+            return jsonify({"error": "auto_daily_report_hour 必须是整数"}), 400
+        if not 0 <= _h <= 23:
+            return jsonify({"error": "auto_daily_report_hour 范围为 0-23"}), 400
+        current["auto_daily_report_hour"] = _h
 
     if ai_api_key_raw is not None and ai_api_key_raw.strip():
         try:
@@ -148,5 +165,8 @@ def privacy_apps():
     with db.get_conn() as conn:
         conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('privacy_apps', ?)",
                     (__import__('json').dumps(apps, ensure_ascii=False),))
+        # get_conn() 退出时不自动提交，漏这一句会导致写入只在同一连接内可见，
+        # 换个请求线程就读不到、重启后彻底丢失
+        conn.commit()
     logger.info(f"[AUDIT] Privacy apps updated by {request.remote_addr}: {len(apps)} apps")
     return jsonify({"status": "updated", "apps": apps})

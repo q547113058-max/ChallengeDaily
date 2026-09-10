@@ -83,3 +83,8 @@ PROJECT_FINAL_REPORT.md
 
 # vite 构建临时文件
 vite.config.js.timestamp-*
+
+# 测试覆盖率产物
+.coverage
+htmlcov/
+coverage.xml

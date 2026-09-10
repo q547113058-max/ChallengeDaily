@@ -73,9 +73,8 @@ def set_collector(collector_instance):
 # ── 鉴权中间件 ──
 
 _PUBLIC_PATHS = {"/", "/api/health", "/api/metrics"}
-# 自习室心跳：局域网内其他设备不可能持有本机 token（每台独立生成），
-# 免鉴权开放；仅写入内存成员列表，非 localhost 仍受 rate limit 约束
-_PUBLIC_PREFIXES = ["/api/icons/", "/api/study-room/heartbeat"]
+# 自习室功能已在 875ca12 移除（routes/study_room.py 已删），此处前缀随之清理
+_PUBLIC_PREFIXES = ["/api/icons/"]
 # SSE 端点：不能通过 header 传 token，改用 query param ?token=xxx，在 handler 内自行校验
 _SSE_PATHS = {"/api/events/stream"}
 

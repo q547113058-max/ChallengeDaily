@@ -122,6 +122,9 @@ def reset_preferences():
     try:
         with db.get_conn() as conn:
             conn.execute("DELETE FROM user_preferences")
+            # _set_pref 内部会 commit，因此 DELETE 依赖它有后续写入才会落盘；
+            # 显式提交一次，避免 DEFAULT_PREFS 为空时重置变成空操作
+            conn.commit()
             for k, v in DEFAULT_PREFS.items():
                 _set_pref(conn, k, v)
         return jsonify({"status": "ok", "preferences": DEFAULT_PREFS})
