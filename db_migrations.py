@@ -1,6 +1,6 @@
 """
 ChallengeDaily Windows 版 — SQLite Schema 迁移管理
-从 db.py 拆分：包含 SCHEMA_VERSION、默认配置、ACL 设置、init_db 及完整 V1-V38 迁移逻辑
+从 db.py 拆分：包含 SCHEMA_VERSION、默认配置、ACL 设置、init_db 及完整 V1-V39 迁移逻辑
 """
 import sqlite3
 import logging
@@ -10,7 +10,7 @@ from config import DB_PATH
 logger = logging.getLogger(__name__)
 
 # ── 数据库 Schema 版本 ──
-SCHEMA_VERSION = 38
+SCHEMA_VERSION = 39
 
 # P-01: 默认数据保留天数（90 天）
 DEFAULT_DATA_RETENTION_DAYS = 90
@@ -765,26 +765,28 @@ def _init_db_impl():
         # 2. 新增复合索引：activities(category, timestamp) — 按分类查询历史趋势
         # 3. 移除冗余索引 idx_activities_cat（已被 idx_activities_cat_ts 覆盖左前缀）
         #    （SQLite 不支持 DROP INDEX IF EXISTS，需先检查是否存在）
-        # 4. 新增 habits(last_logged_date) 索引 — recommend_habits 高频查询
+        # 说明：此处原有第 4 条 `CREATE INDEX idx_habits_last_logged ON habits(last_logged_date)`，
+        # 但 habits 表从建表起就没有 last_logged_date 列，该语句必然抛错，并连带跳过同块内的
+        # "移除冗余索引"步骤，导致冗余索引在存量库中长期残留。已删除该条，遗留清理由 V39 兜底。
         if current_version < 33:
             try:
                 # 复合索引：按时间过滤后按分类聚合（日报统计主路径）
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_activities_ts_cat ON activities(timestamp, category)")
                 # 复合索引：按分类查询历史趋势（深度分析、基准对比）
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_activities_cat_ts ON activities(category, timestamp)")
-                # 习惯推荐路径：按最后打卡日期排序
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_habits_last_logged ON habits(last_logged_date DESC)")
-                # 移除冗余索引（被 idx_activities_cat_ts 覆盖）
-                try:
-                    cur = conn.execute("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_activities_cat'")
-                    if cur.fetchone():
-                        conn.execute("DROP INDEX idx_activities_cat")
-                        logger.info("V33: 已移除冗余索引 idx_activities_cat（被 idx_activities_cat_ts 覆盖）")
-                except Exception as drop_err:
-                    logger.debug(f"V33: 移除 idx_activities_cat 失败（可忽略）: {drop_err}")
-                logger.info("V33: 索引优化完成（新增 3 个复合索引，移除 1 个冗余索引）")
+                logger.info("V33: 复合索引创建完成（idx_activities_ts_cat / idx_activities_cat_ts）")
             except Exception as e:
-                logger.warning(f"V33 schema 升级失败: {e}")
+                logger.warning(f"V33 复合索引创建失败: {e}")
+
+            # 移除冗余索引（已被 idx_activities_cat_ts 覆盖左前缀）—— 独立 try，
+            # 避免上方任一索引创建失败时被连带跳过（历史 bug，见上方说明）
+            try:
+                cur = conn.execute("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_activities_cat'")
+                if cur.fetchone():
+                    conn.execute("DROP INDEX idx_activities_cat")
+                    logger.info("V33: 已移除冗余索引 idx_activities_cat（被 idx_activities_cat_ts 覆盖）")
+            except Exception as drop_err:
+                logger.debug(f"V33: 移除 idx_activities_cat 失败（可忽略）: {drop_err}")
 
         # V34: 甘特图支持——任务计划开始时刻（分钟偏移，如 540=9:00）
         if current_version < 34:
@@ -986,6 +988,22 @@ def _init_db_impl():
                 logger.info("V38: activities 表新增 source 字段（历史数据回填 auto）")
             except Exception as e:
                 logger.warning(f"V38 schema 升级失败: {e}")
+
+        # V39: 修复 V33 静默失效的遗留 —— 清理冗余索引 idx_activities_cat
+        # 背景：V33 曾在同一 try 块内创建 habits(last_logged_date) 索引，但 habits 表从建表起
+        # 就没有该列，语句必然抛错并被 except 吞成 warning，同时导致同块内"移除冗余索引"
+        # 从未执行。存量库因此至今仍保留 idx_activities_cat —— 它已被 idx_activities_cat_ts
+        # 完全覆盖左前缀，纯属额外的写入开销。本迁移为存量库做一次兜底清理（幂等）。
+        if current_version < 39:
+            try:
+                cur = conn.execute("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_activities_cat'")
+                if cur.fetchone():
+                    conn.execute("DROP INDEX idx_activities_cat")
+                    logger.info("V39: 已清理 V33 遗留的冗余索引 idx_activities_cat")
+                else:
+                    logger.debug("V39: idx_activities_cat 不存在，无需清理")
+            except Exception as e:
+                logger.warning(f"V39 清理冗余索引失败: {e}")
 
         # 更新版本号
         conn.execute(
