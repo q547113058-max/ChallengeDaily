@@ -304,10 +304,18 @@ def health_check():
         overall = "down"
 
     # 2. AI 在线状态
+    # 依据 ai_client 的熔断器：连续失败触发熔断即视为离线。
+    # （原先依赖 offline_ai.is_online()，该模块已下线，导致此处恒为 unknown）
     try:
-        from offline_ai import is_online, get_queue_size
-        checks["ai"] = {"status": "online" if is_online() else "offline", "queue_size": get_queue_size()}
-        if not is_online():
+        import ai_client
+        cb = ai_client.get_circuit_breaker_status()
+        online = cb.get("state") != "open"
+        checks["ai"] = {
+            "status": "online" if online else "offline",
+            "circuit": cb.get("state"),
+            "consecutive_failures": cb.get("consecutive_failures", 0),
+        }
+        if not online:
             overall = "degraded" if overall == "ok" else overall
     except Exception as e:
         checks["ai"] = {"status": "unknown", "error": str(e)[:80]}

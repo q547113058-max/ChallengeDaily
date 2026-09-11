@@ -386,11 +386,6 @@ def analyze_screenshot(image_path: str, app_name: str = "", window_title: str = 
                 # 后校验：过滤 AI 幻觉
                 result = _sanitize_analysis_result(result, app_name, visible_windows)
                 _cb_record_success()
-                try:
-                    from offline_ai import mark_ai_success
-                    mark_ai_success()
-                except Exception:
-                    pass
                 # P11-3：审计日志 — AI 视觉分析成功
                 try:
                     from audit_logger import log_audit
@@ -427,17 +422,6 @@ def analyze_screenshot(image_path: str, app_name: str = "", window_title: str = 
                     log_audit("ai_vision", "analyze_screenshot", "failure",
                               detail=_sanitize_log(str(e))[:200],
                               metadata={"app_name": app_name, "retries": max_retries})
-                except Exception:
-                    pass
-                # P10-1：标记离线状态 + 入队重试
-                try:
-                    from offline_ai import mark_ai_failure, enqueue_retry
-                    mark_ai_failure()
-                    enqueue_retry({
-                        "image_path": image_path,
-                        "app_name": app_name,
-                        "window_title": window_title,
-                    }, kind="screenshot")
                 except Exception:
                     pass
                 return {"category": "生活", "summary": "分析异常", "detail": str(e)[:50]}

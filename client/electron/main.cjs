@@ -15,6 +15,8 @@ const { spawn, exec } = require('child_process')
 const http = require('http')
 const fs = require('fs')
 const crypto = require('crypto')
+// CSP 单一数据源：与 vite 注入到 index.html 的 meta CSP 同源
+const { buildCSP, buildBaseCSP } = require('./csp.cjs')
 
 // 把主进程 console 输出持久化到文件，方便排查无窗口启动问题
 // 注意：__dirname 在打包后位于 asar 只读区，必须使用外部可写路径
@@ -433,17 +435,7 @@ function stopBackend() {
 // 主窗口仍使用其更严格的 onHeadersReceived CSP（含 connect-src 白名单），此函数仅作为子窗口的下限保护
 function applyCSPToSession(targetSession) {
   if (!targetSession) return
-  const csp = [
-    "default-src 'self'",
-    isDev ? "script-src 'self' 'unsafe-inline'" : "script-src 'self'",
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
-    "font-src 'self' data:",
-    "connect-src 'self' http://127.0.0.1:58888 http://localhost:5173 http://localhost:58888",
-    "media-src 'none'",
-    "object-src 'none'",
-    "frame-src 'none'",
-  ].join('; ') + ';'
+  const csp = buildBaseCSP({ dev: isDev })
   try {
     targetSession.webRequest.onHeadersReceived((details, callback) => {
       callback({
@@ -488,36 +480,14 @@ function createMainWindow() {
   // Content Security Policy：限制资源加载来源，防止 XSS 等注入攻击
   // P20-1: 应用统一 CSP 到主窗口（含子窗口）
   applyCSPToSession(mainWindow.webContents.session)
-  // script-src：开发模式允许 'unsafe-inline'（Vite HMR 需要），生产模式仅 'self'
-  const _cspScriptSrc = isDev ? "script-src 'self' 'unsafe-inline'; " : "script-src 'self'; "
+  // CSP 由 electron/csp.cjs 单点生成（与 index.html 的 meta 同源，见 vite.config.js 的
+  // injectCSP 插件）。开发模式放宽 script-src 以支持 Vite HMR。
+  const _csp = buildCSP({ dev: isDev })
   mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
-    // 每次响应生成一次性 nonce，供未来 style-src 收紧使用
-    const _styleNonce = crypto.randomBytes(16).toString('base64')
     callback({
       responseHeaders: {
         ...details.responseHeaders,
-        'Content-Security-Policy': [
-          "default-src 'self'; " +
-          _cspScriptSrc +
-          // TODO(P0-02): style-src 仍保留 'unsafe-inline'，存在 CSS data exfiltration 风险。
-          // 未直接改用 'nonce-${_styleNonce}' 的原因：React 内联样式（style={{...}}）会生成
-          // style 属性，CSP3 规定当 style-src 含 nonce 时 'unsafe-inline' 会被忽略，导致所有
-          // 内联 style 属性被拦截、UI 渲染崩溃。要彻底移除 'unsafe-inline'，需先将所有内联
-          // 样式迁移到 CSS 类，再启用 style-src-elem 'nonce-...' + style-src-attr。
-          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
-          "img-src 'self' data: blob: http: https:; " +
-          "font-src 'self' data: https://fonts.gstatic.com; " +
-          "connect-src 'self' http://127.0.0.1:58888 http://localhost:5173 http://localhost:58888 " +
-            "https://wttr.in https://api.open-meteo.com https://geocoding-api.open-meteo.com " +
-            "https://api.bigdatacloud.net https://qifu-api.baidubce.com https://pv.sohu.com " +
-            "https://int.dpool.sina.com.cn https://nominatim.openstreetmap.org " +
-            "https://ipapi.co https://ipinfo.io https://ip-api.com " +
-            "https://apis.map.qq.com " +
-            "https://open.bigmodel.cn; " +
-          "media-src 'none'; " +
-          "object-src 'none'; " +
-          "frame-src 'none';"
-        ]
+        'Content-Security-Policy': [_csp]
       }
     })
   })

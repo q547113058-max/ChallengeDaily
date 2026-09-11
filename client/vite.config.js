@@ -2,8 +2,33 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { fileURLToPath } from 'url'
 import path from 'path'
+import { createRequire } from 'node:module'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+// CSP 单一数据源（与 electron/main.cjs 用同一份，避免双份维护）
+const require = createRequire(import.meta.url)
+const { buildCSP } = require('./electron/csp.cjs')
+
+/**
+ * Vite 插件：把 CSP 注入 index.html 的 <!--CSP_META--> 占位符
+ *
+ * 生产环境以 file:// 加载，Electron 的响应头 CSP 对 file 协议不生效，
+ * 因此 HTML 里必须有一份 meta CSP —— 但内容不能手写，否则又变成双份维护。
+ */
+function injectCSP(isServe) {
+  return {
+    name: 'inject-csp',
+    transformIndexHtml(html) {
+      const meta =
+        `<meta http-equiv="Content-Security-Policy" content="${buildCSP({ dev: isServe })}">`
+      if (!html.includes('<!--CSP_META-->')) {
+        // 宁可构建失败，也不能静默产出一份没有 CSP 的页面
+        throw new Error('index.html 缺少 <!--CSP_META--> 占位符，CSP 注入失败')
+      }
+      return html.replace('<!--CSP_META-->', meta)
+    }
+  }
+}
 
 /**
  * Vite 插件：移除构建产物中的 crossorigin 属性
@@ -21,8 +46,9 @@ function removeCrossorigin() {
   }
 }
 
-export default defineConfig({
-  plugins: [react(), removeCrossorigin()],
+export default defineConfig(({ command }) => ({
+  // command: 'serve'（开发）| 'build'（打包）—— 开发期需放宽 script-src 以支持 HMR
+  plugins: [react(), removeCrossorigin(), injectCSP(command === 'serve')],
   base: './',
   root: '.',
   build: {
@@ -59,4 +85,4 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
   },
-})
+}))

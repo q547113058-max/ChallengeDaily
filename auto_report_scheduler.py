@@ -70,8 +70,11 @@ def _generate_auto_report(settings: dict):
         today = date.today().isoformat()
 
         # 检查今天是否已生成
-        from db import get_report
-        existing = get_report(today)
+        # 注意：db 里只有 get_reports(start, end)（复数、需两个日期参数），
+        # 此前写成 get_report(today) 会 ImportError，而整个函数体在 try 内，
+        # 异常被 logger 吞掉 —— 导致自动日报永远生成不了
+        from db import get_reports
+        existing = get_reports(today, today)
         if existing:
             logger.info(f"今日日报已存在，跳过自动生成")
             return

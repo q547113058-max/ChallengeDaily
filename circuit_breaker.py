@@ -187,7 +187,6 @@ def _is_infra_error(e: Exception) -> bool:
 # ── 预置熔断器实例（按子系统分组） ──
 _calendar_cb = None
 _git_cb = None
-_coach_cb = None
 _instances_lock = threading.Lock()
 
 
@@ -221,25 +220,9 @@ def get_git_breaker() -> CircuitBreaker:
         return _git_cb
 
 
-def get_coach_breaker() -> CircuitBreaker:
-    """realtime_coach 数据库查询熔断器"""
-    global _coach_cb
-    with _instances_lock:
-        if _coach_cb is None:
-            _coach_cb = CircuitBreaker(
-                name="realtime_coach",
-                failure_threshold=3,
-                cooldown_init_sec=30,
-                cooldown_max_sec=300,
-                half_open_max=2,
-            )
-        return _coach_cb
-
-
 def all_breakers_status() -> dict:
     """获取所有预置熔断器状态（供 /api/health 端点使用）"""
     return {
         "calendar_sync": get_calendar_breaker().status(),
         "git_integration": get_git_breaker().status(),
-        "realtime_coach": get_coach_breaker().status(),
     }

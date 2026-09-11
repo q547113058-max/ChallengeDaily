@@ -57,12 +57,23 @@ def _get_thread_conn() -> sqlite3.Connection:
 def get_conn():
     """获取数据库连接（contextmanager，使用线程局部连接，不关闭）
 
-    异常时重置当前线程的连接，避免损坏后影响后续操作。
+    事务语义：
+    - 正常退出：若块内仍有未提交的事务则自动提交。这样调用方不必每次手写
+      commit()（历史上已出现过 2 处漏写导致"返回成功但换个请求就读不到"）。
+      块内已显式 commit() 的（如 BEGIN IMMEDIATE 显式事务）不受影响——
+      此时 in_transaction 为假，会自动跳过。
+    - 异常退出：回滚未提交的写入，避免半个事务留下脏数据。
+    - DatabaseError：连接可能损坏，回滚后关闭并重置线程连接以便下次重建。
+
+    注意：连接是线程局部且长期持有的，本函数不会关闭它（仅损坏时关闭）。
     """
     conn = _get_thread_conn()
     try:
         yield conn
+        if conn.in_transaction:
+            conn.commit()
     except sqlite3.DatabaseError as e:
+        _safe_rollback(conn)
         # 连接可能损坏，重置当前线程连接以便下次重建
         logger.error(f"数据库连接异常，将重建: {e}")
         try:
@@ -71,6 +82,21 @@ def get_conn():
             pass
         _local.conn = None
         raise
+    except BaseException:
+        # 包括 HTTPException(abort)、ValueError 等业务异常：
+        # 块内可能已执行过部分写入，必须回滚，否则脏数据会留在连接里
+        # 并被下一个复用该线程连接的请求意外提交
+        _safe_rollback(conn)
+        raise
+
+
+def _safe_rollback(conn):
+    """仅在确有活动事务时回滚，且吞掉回滚本身的异常（连接可能已不可用）"""
+    try:
+        if conn.in_transaction:
+            conn.rollback()
+    except Exception as e:
+        logger.debug(f"回滚失败（连接可能已损坏）: {e}")
 
 
 # T7: 归档数据库路径（与主库同目录下的 archives 子目录）

@@ -259,11 +259,6 @@ def main():
     # P21: 延迟非关键启动任务到后台线程，加速主循环启动
     def _deferred_startup():
         try:
-            from offline_ai import start_retry_queue
-            start_retry_queue()
-        except Exception as e:
-            logger.debug(f"AI 重试队列启动失败（不影响主流程）: {e}")
-        try:
             import calendar_sync
             calendar_sync.start_background_refresh()
             logger.info("日历订阅后台刷新已启动")
