@@ -145,10 +145,6 @@ export const METRIC_EXPLANATIONS: Record<string, { title: string; text: string }
     title: '分类数',
     text: '当日活动涉及的不同分类数（如开发、学习、沟通等）。反映工作多样性。',
   },
-  pomodoro_count: {
-    title: '番茄数',
-    text: '当日完成的番茄钟会话数。一个标准番茄钟为 25 分钟专注 + 5 分钟休息。',
-  },
   flow_state: {
     title: '心流状态',
     text: '当连续专注 ≥90 分钟且分心切换 ≤2 次时进入心流。心流时段产出最高，建议保护不被打断。',

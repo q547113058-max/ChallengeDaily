@@ -123,19 +123,6 @@ def export_excel():
             ])
 
         output.write('\n\n')
-        # Sheet3: 番茄钟
-        writer = csv.writer(output)
-        writer.writerow(['开始时间', '结束时间', '时长(分)', '任务', '分类', '状态'])
-        sessions = db.get_pomodoro_sessions(target_date)
-        for s in sessions:
-            writer.writerow([
-                _csv_escape(s.get('start_time', '')),
-                _csv_escape(s.get('end_time', '')),
-                _csv_escape(s.get('duration_min', 0)),
-                _csv_escape(s.get('task', '')),
-                _csv_escape(s.get('category', '')),
-                _csv_escape(s.get('status', '')),
-            ])
 
         content = output.getvalue()
         output.close()
@@ -161,7 +148,6 @@ def export_json():
             'date': target_date,
             'activities': db.get_activities(target_date, target_date),
             'app_usage': db.get_app_usage(target_date, target_date),
-            'pomodoro_sessions': db.get_pomodoro_sessions(target_date),
             'diary': db.get_diary(target_date),
             'todos': db.get_todos(),
             'achievements': db.get_achievements(),
@@ -191,16 +177,10 @@ def _week_dates(week_start: str):
 
 
 def _gather_week_data(week_start: str) -> dict:
-    """汇总本周数据：任务 + 番茄 + 活动"""
+    """汇总本周数据：任务 + 活动"""
     dates = _week_dates(week_start)
     # 任务：本周日任务 + 周任务
     week_tasks = db.get_week_tasks(week_start)
-    # 番茄：遍历 7 天
-    pomodoro_sessions = []
-    for d in dates:
-        pomodoro_sessions.extend(db.get_pomodoro_sessions(d))
-    completed_pomodoros = [s for s in pomodoro_sessions if s.get("status") == "completed"]
-    total_focus_min = sum(s.get("duration_min", 0) for s in completed_pomodoros)
     # 活动：本周所有活动
     activities = db.get_activities(dates[0], dates[6])
     # 分类分布
@@ -222,19 +202,15 @@ def _gather_week_data(week_start: str) -> dict:
         "total_day_tasks": total_day,
         "completed_day_tasks": completed_day,
         "completion_rate": int(completed_day / total_day * 100) if total_day > 0 else 0,
-        "pomodoro_total": len(pomodoro_sessions),
-        "pomodoro_completed": len(completed_pomodoros),
-        "total_focus_min": total_focus_min,
         "activities_count": len(activities),
         "category_distribution": cat_dist,
-        "pomodoro_sessions": pomodoro_sessions,
         "activities": activities,
     }
 
 
 @bp.route('/api/exports/weekly-report', methods=['GET'])
 def export_weekly_report():
-    """导出周报：本周任务完成 + 番茄统计 + 活动汇总"""
+    """导出周报：本周任务完成 + 活动汇总"""
     ok, err = _auth_check()
     if not ok:
         return err
@@ -262,14 +238,13 @@ def export_weekly_report():
             output = io.StringIO()
             output.write('\ufeff')
             writer = csv.writer(output)
-            writer.writerow(["日期", "任务标题", "分类", "状态", "预估番茄", "进度分钟", "目标分钟"])
+            writer.writerow(["日期", "任务标题", "分类", "状态", "进度分钟", "目标分钟"])
             for t in data["day_tasks"]:
                 writer.writerow([
                     _csv_escape(t.get("assigned_date", "")),
                     _csv_escape(t.get("title", "")),
                     _csv_escape(t.get("category", "")),
                     _csv_escape(t.get("status", "")),
-                    _csv_escape(t.get("estimated_pomodoros", 0)),
                     _csv_escape(t.get("progress_min", 0)),
                     _csv_escape(t.get("target_min", 0)),
                 ])
@@ -288,11 +263,6 @@ def export_weekly_report():
             f"- 日任务总数：**{data['total_day_tasks']}**",
             f"- 已完成：**{data['completed_day_tasks']}**",
             f"- 完成率：**{data['completion_rate']}%**",
-            "",
-            "## 🍅 番茄钟统计",
-            f"- 番茄钟总数：**{data['pomodoro_total']}**",
-            f"- 已完成：**{data['pomodoro_completed']}**",
-            f"- 累计专注：**{data['total_focus_min']} 分钟** ≈ {data['total_focus_min'] / 60:.1f} 小时",
             "",
             "## 💻 活动汇总",
             f"- 活动记录条数：**{data['activities_count']}**",
@@ -332,7 +302,7 @@ def _gather_month_data(month_key: str) -> dict:
     month_tasks = db.get_month_tasks(month_key)
     # 月统计
     stats = db.get_month_plan_stats(month_key)
-    # 每日热力：番茄分钟
+    # 每日热力：已完成 day 级待办的 progress_min
     daily_heat = []
     try:
         year, mon = month_key.split("-")
@@ -342,8 +312,8 @@ def _gather_month_data(month_key: str) -> dict:
             for d in range(1, days_in_month + 1):
                 ds = f"{year}-{mon}-{d:02d}"
                 row = conn.execute(
-                    "SELECT COALESCE(SUM(duration_min),0) as total FROM pomodoro_sessions "
-                    "WHERE date(start_time)=? AND status='completed'",
+                    "SELECT COALESCE(SUM(progress_min),0) as total FROM todos "
+                    "WHERE task_level='day' AND assigned_date=? AND status='completed'",
                     (ds,)
                 ).fetchone()
                 daily_heat.append({"date": ds, "focus_min": row["total"] or 0})
@@ -457,15 +427,16 @@ def export_monthly_report():
 def _gather_yearly_data(year: int) -> dict:
     """汇总全年数据：热力图 + 月度趋势 + 成就"""
     year_str = str(year)
-    # 全年热力图：每日专注分钟
+    # 全年热力图：每日已完成 day 级待办的 progress_min
     daily_heat = []
     try:
         with db.get_conn() as conn:
             rows = conn.execute(
-                "SELECT date(start_time) as d, COALESCE(SUM(duration_min),0) as total "
-                "FROM pomodoro_sessions "
-                "WHERE strftime('%Y', start_time)=? AND status='completed' "
-                "GROUP BY date(start_time) ORDER BY d",
+                "SELECT assigned_date as d, COALESCE(SUM(progress_min),0) as total "
+                "FROM todos "
+                "WHERE task_level='day' AND status='completed' "
+                "AND strftime('%Y', assigned_date)=? "
+                "GROUP BY assigned_date ORDER BY d",
                 (year_str,)
             ).fetchall()
             for r in rows:
@@ -477,10 +448,11 @@ def _gather_yearly_data(year: int) -> dict:
     try:
         with db.get_conn() as conn:
             rows = conn.execute(
-                "SELECT strftime('%Y-%m', start_time) as m, COUNT(*) as cnt, COALESCE(SUM(duration_min),0) as total "
-                "FROM pomodoro_sessions "
-                "WHERE strftime('%Y', start_time)=? AND status='completed' "
-                "GROUP BY strftime('%Y-%m', start_time) ORDER BY m",
+                "SELECT strftime('%Y-%m', assigned_date) as m, COUNT(*) as cnt, COALESCE(SUM(progress_min),0) as total "
+                "FROM todos "
+                "WHERE task_level='day' AND status='completed' "
+                "AND strftime('%Y', assigned_date)=? "
+                "GROUP BY strftime('%Y-%m', assigned_date) ORDER BY m",
                 (year_str,)
             ).fetchall()
             for r in rows:
@@ -491,11 +463,11 @@ def _gather_yearly_data(year: int) -> dict:
     achievements = db.get_achievements()
     # 年度统计
     total_focus = sum(d["focus_min"] for d in daily_heat)
-    total_pomodoros = sum(m["count"] for m in monthly_trend)
+    total_completed_todos = sum(m["count"] for m in monthly_trend)
     return {
         "year": year,
         "total_focus_min": total_focus,
-        "total_pomodoros": total_pomodoros,
+        "total_completed_todos": total_completed_todos,
         "active_days": len(daily_heat),
         "daily_heatmap": daily_heat,
         "monthly_trend": monthly_trend,
@@ -535,13 +507,13 @@ def export_yearly_summary():
             "",
             "## 🎉 年度概览",
             f"- 活跃天数：**{data['active_days']}** 天",
-            f"- 番茄钟总数：**{data['total_pomodoros']}** 个",
+            f"- 完成待办总数：**{data['total_completed_todos']}** 个",
             f"- 累计专注：**{data['total_focus_min']}** 分钟 ≈ {data['total_focus_min'] / 60:.1f} 小时",
             "",
             "## 📈 月度趋势",
         ]
         if data["monthly_trend"]:
-            lines.append("| 月份 | 番茄数 | 专注分钟 |")
+            lines.append("| 月份 | 完成待办 | 专注分钟 |")
             lines.append("| --- | --- | --- |")
             for m in data["monthly_trend"]:
                 lines.append(f"| {m['month']} | {m['count']} | {m['total_min']} |")
@@ -583,7 +555,7 @@ def export_yearly_summary():
 
 @bp.route('/api/exports/all-data', methods=['GET'])
 def export_all_data():
-    """导出全部数据：activities + todos + pomodoro_sessions + diaries"""
+    """导出全部数据：activities + todos + diaries"""
     ok, err = _auth_check()
     if not ok:
         return err
@@ -595,8 +567,6 @@ def export_all_data():
         # 拉取全量数据
         diaries = db.get_diaries(limit=10000)
         todos = db.get_todos()
-        # 番茄钟全量：最近 1000 条
-        pomodoro_sessions = db.get_pomodoro_sessions()
         # 活动记录：最近 90 天
         today = date.today()
         start_90 = (today - timedelta(days=89)).isoformat()
@@ -607,7 +577,6 @@ def export_all_data():
                 "exported_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "activities": activities,
                 "todos": todos,
-                "pomodoro_sessions": pomodoro_sessions,
                 "diaries": diaries,
             }
             content = json.dumps(payload, ensure_ascii=False, indent=2, default=str)
@@ -636,7 +605,7 @@ def export_all_data():
         # Sheet2: 待办
         writer = csv.writer(output)
         writer.writerow(["── 待办事项 ──"])
-        writer.writerow(["ID", "标题", "分类", "层级", "状态", "预估番茄", "进度分钟", "目标分钟", "分配日期"])
+        writer.writerow(["ID", "标题", "分类", "层级", "状态", "进度分钟", "目标分钟", "分配日期"])
         for t in todos:
             writer.writerow([
                 _csv_escape(t.get("id", "")),
@@ -644,25 +613,9 @@ def export_all_data():
                 _csv_escape(t.get("category", "")),
                 _csv_escape(t.get("task_level", "")),
                 _csv_escape(t.get("status", "")),
-                _csv_escape(t.get("estimated_pomodoros", 0)),
                 _csv_escape(t.get("progress_min", 0)),
                 _csv_escape(t.get("target_min", 0)),
                 _csv_escape(t.get("assigned_date", "")),
-            ])
-        output.write("\n\n")
-        # Sheet3: 番茄钟
-        writer = csv.writer(output)
-        writer.writerow(["── 番茄钟会话 ──"])
-        writer.writerow(["开始时间", "结束时间", "时长(分)", "任务", "分类", "状态", "中断次数"])
-        for s in pomodoro_sessions:
-            writer.writerow([
-                _csv_escape(s.get("start_time", "")),
-                _csv_escape(s.get("end_time", "")),
-                _csv_escape(s.get("duration_min", 0)),
-                _csv_escape(s.get("task", "")),
-                _csv_escape(s.get("category", "")),
-                _csv_escape(s.get("status", "")),
-                _csv_escape(s.get("interrupted_count", 0)),
             ])
         output.write("\n\n")
         # Sheet4: 日记
@@ -807,7 +760,7 @@ def export_activities_detail():
 _WIPEABLE_TABLES = [
     "activities", "app_usage", "app_usage_v3", "app_usage_v9",
     "app_category_rules", "daily_profiles", "user_profile", "user_corrections",
-    "pomodoro_sessions", "todos", "diaries", "achievements", "countdowns",
+    "todos", "diaries", "achievements", "countdowns",
     "chat_history", "habits", "habit_logs", "plan_meta", "profile_analysis_cache",
     "goals", "ai_retry_queue", "achievement_seasons", "season_achievements",
     "audit_log", "user_preferences", "reports",

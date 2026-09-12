@@ -5,7 +5,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Timer, Target, RotateCw, ChevronDown, ChevronUp } from 'lucide-react'
 import Modal from './Modal'
-import { createTodo, getGoals, POMODORO_SIZES, type TaskLevel, formatLocalDate, getWeekStart, type Goal } from '../api/client'
+import { createTodo, getGoals, type TaskLevel, formatLocalDate, getWeekStart, type Goal } from '../api/client'
 
 const CATEGORIES: { value: string; emoji: string }[] = [
   { value: '开发', emoji: '💻' }, { value: '测试', emoji: '🧪' },
@@ -16,7 +16,6 @@ const CATEGORIES: { value: string; emoji: string }[] = [
   { value: '学习', emoji: '📖' }, { value: '生活', emoji: '🏠' },
 ]
 
-type PomodoroSize = 'big' | 'small'
 type TaskMode = 'timer' | 'goal' | 'habit'
 
 interface TaskCreateModalProps {
@@ -41,13 +40,11 @@ export default function TaskCreateModal({ open, onClose, onCreated, defaults }: 
   const [category, setCategory] = useState('开发')
   const [mode, setMode] = useState<TaskMode>('timer')
   const [priority, setPriority] = useState(2)
-  const [estimatedPomodoros, setEstimatedPomodoros] = useState(1)
-  const [pomodoroSize, setPomodoroSize] = useState<PomodoroSize>('big')
+  const [targetMin, setTargetMin] = useState(25)
   const [dueDate, setDueDate] = useState('')
   const [assignedDate, setAssignedDate] = useState('')
   const [planStartTime, setPlanStartTime] = useState('')  // HH:MM 格式，甘特图计划开始时间
   const [taskLevel, setTaskLevel] = useState<TaskLevel>('day')
-  const [targetMinOverride, setTargetMinOverride] = useState<number>(0)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [saving, setSaving] = useState(false)
   const [goals, setGoals] = useState<Goal[]>([])
@@ -60,12 +57,10 @@ export default function TaskCreateModal({ open, onClose, onCreated, defaults }: 
       setCategory(defaults?.category ?? '开发')
       setMode(defaults?.mode ?? 'timer')
       setPriority(defaults?.priority ?? 2)
-      setEstimatedPomodoros(1)
-      setPomodoroSize('big')
+      setTargetMin(25)
       setDueDate('')
       setAssignedDate(defaults?.assigned_date ?? formatLocalDate(new Date()))
       setTaskLevel(defaults?.task_level ?? 'day')
-      setTargetMinOverride(0)
       setShowAdvanced(false)
       setSaving(false)
       setGoalId(null)
@@ -75,12 +70,7 @@ export default function TaskCreateModal({ open, onClose, onCreated, defaults }: 
     }
   }, [open, defaults])
 
-  const sizeConfig = POMODORO_SIZES[pomodoroSize]
-  const derivedMinutes = estimatedPomodoros * sizeConfig.work
-  const totalMinutes = targetMinOverride > 0 ? targetMinOverride : derivedMinutes
-  const breakMinutes = estimatedPomodoros > 1
-    ? (Math.floor((estimatedPomodoros - 1) / 4) * 15 + (estimatedPomodoros - 1 - Math.floor((estimatedPomodoros - 1) / 4) * 4) * sizeConfig.short_break)
-    : 0
+  const totalMinutes = targetMin
 
   const handleCreate = async () => {
     if (!title.trim() || saving) return
@@ -90,10 +80,8 @@ export default function TaskCreateModal({ open, onClose, onCreated, defaults }: 
         title: title.trim(),
         category,
         mode,
-        target_min: targetMinOverride > 0 ? targetMinOverride : estimatedPomodoros * sizeConfig.work,
+        target_min: targetMin,
         priority,
-        estimated_pomodoros: estimatedPomodoros,
-        pomodoro_size: pomodoroSize,
         task_level: taskLevel,
       }
       if (dueDate) data.due_date = dueDate
@@ -165,7 +153,7 @@ export default function TaskCreateModal({ open, onClose, onCreated, defaults }: 
         <label className="block text-xs font-medium text-cd-text-secondary mb-1.5">模式</label>
         <div className="flex gap-2">
           {([
-            { key: 'timer' as TaskMode, icon: Timer, label: '计时', desc: '番茄钟计时' },
+            { key: 'timer' as TaskMode, icon: Timer, label: '计时', desc: '专注计时' },
             { key: 'goal' as TaskMode, icon: Target, label: '目标', desc: '累计到目标' },
             { key: 'habit' as TaskMode, icon: RotateCw, label: '习惯', desc: '每日打卡' },
           ]).map(m => (
@@ -226,53 +214,25 @@ export default function TaskCreateModal({ open, onClose, onCreated, defaults }: 
         </div>
       </div>
 
-      {/* 预估番茄数 + 番茄大小 */}
-      <div className="flex gap-3">
-        <div className="flex-1">
-          <label className="block text-xs font-medium text-cd-text-secondary mb-1.5">预估番茄数</label>
-          <div className="flex items-center gap-1 bg-cd-bg-input border border-cd-border rounded-lg px-2 py-1.5">
-            <button
-              onClick={() => setEstimatedPomodoros(Math.max(1, estimatedPomodoros - 1))}
-              className="w-6 h-6 flex items-center justify-center rounded bg-cd-hover text-cd-text hover:bg-cd-accent/20 transition text-sm font-bold"
-            >−</button>
-            <span className="flex-1 text-center text-lg font-bold text-cd-text tabular-nums">{estimatedPomodoros}</span>
-            <button
-              onClick={() => setEstimatedPomodoros(Math.min(12, estimatedPomodoros + 1))}
-              className="w-6 h-6 flex items-center justify-center rounded bg-cd-hover text-cd-text hover:bg-cd-accent/20 transition text-sm font-bold"
-            >+</button>
-          </div>
-        </div>
-        <div className="flex-1">
-          <label className="block text-xs font-medium text-cd-text-secondary mb-1.5">番茄大小</label>
-          <div className="flex gap-1.5">
-            {(['big', 'small'] as PomodoroSize[]).map(s => {
-              const cfg = POMODORO_SIZES[s]
-              return (
-                <button
-                  key={s}
-                  onClick={() => setPomodoroSize(s)}
-                  className={`flex-1 py-2 rounded-lg text-sm transition border ${
-                    pomodoroSize === s
-                      ? 'bg-cd-accent/15 text-cd-accent border-cd-accent/30 font-medium'
-                      : 'bg-cd-bg-input text-cd-text border-cd-border hover:bg-cd-hover'
-                  }`}
-                >
-                  <div>{s === 'big' ? '🍅 大' : '🍅 小'}</div>
-                  <div className="text-[10px] text-cd-text-tertiary">{cfg.work}+{cfg.short_break}min</div>
-                </button>
-              )
-            })}
-          </div>
+      {/* 目标时长 */}
+      <div>
+        <label className="block text-xs font-medium text-cd-text-secondary mb-1.5">目标时长（分钟）</label>
+        <div className="flex items-center gap-1 bg-cd-bg-input border border-cd-border rounded-lg px-2 py-1.5">
+          <button
+            onClick={() => setTargetMin(Math.max(5, targetMin - 5))}
+            className="w-6 h-6 flex items-center justify-center rounded bg-cd-hover text-cd-text hover:bg-cd-accent/20 transition text-sm font-bold"
+          >−</button>
+          <span className="flex-1 text-center text-lg font-bold text-cd-text tabular-nums">{targetMin}</span>
+          <button
+            onClick={() => setTargetMin(Math.min(480, targetMin + 5))}
+            className="w-6 h-6 flex items-center justify-center rounded bg-cd-hover text-cd-text hover:bg-cd-accent/20 transition text-sm font-bold"
+          >+</button>
         </div>
       </div>
 
       {/* 时间预估摘要 */}
       <div className="rounded-lg px-3 py-2 text-xs text-cd-text-secondary" style={{ background: 'var(--cd-bg-input)', border: '1px solid var(--cd-border)' }}>
         约 <span className="text-cd-accent font-bold">{totalMinutes}</span> 分钟专注
-        {estimatedPomodoros > 1 && (
-          <> + <span className="font-bold" style={{ color: '#34d399' }}>{breakMinutes}</span> 分钟休息（含长休息）</>
-        )}
-        ，总计 <span className="text-cd-text font-bold">{totalMinutes + breakMinutes}</span> 分钟
       </div>
 
       {/* 高级选项 */}
@@ -311,26 +271,7 @@ export default function TaskCreateModal({ open, onClose, onCreated, defaults }: 
             </div>
           </div>
 
-          {/* 目标时长（直接输入，覆盖番茄派生值） */}
-          <div>
-            <label className="block text-xs font-medium text-cd-text-secondary mb-1.5">
-              目标时长（分钟，0 表示由番茄数推算）
-            </label>
-            <input
-              type="number"
-              min={0}
-              max={480}
-              step={5}
-              value={targetMinOverride || ''}
-              onChange={e => {
-                const v = parseInt(e.target.value, 10)
-                setTargetMinOverride(isNaN(v) ? 0 : Math.max(0, Math.min(480, v)))
-              }}
-              placeholder={`默认 ${derivedMinutes} 分钟`}
-              className="w-full bg-cd-bg-input border border-cd-border rounded-lg px-3 py-2 text-sm text-cd-text placeholder:text-cd-text-tertiary focus:outline-none focus:border-cd-accent/50"
-            />
-          </div>
-
+          {/* 关联长期目标（可选） */}
           <div>
             <label className="block text-xs font-medium text-cd-text-secondary mb-1.5">
               <Target size={11} className="inline mr-1 -mt-0.5" />关联长期目标（可选）

@@ -10,7 +10,7 @@ from config import DB_PATH
 logger = logging.getLogger(__name__)
 
 # ── 数据库 Schema 版本 ──
-SCHEMA_VERSION = 39
+SCHEMA_VERSION = 40
 
 # P-01: 默认数据保留天数（90 天）
 DEFAULT_DATA_RETENTION_DAYS = 90
@@ -1004,6 +1004,34 @@ def _init_db_impl():
                     logger.debug("V39: idx_activities_cat 不存在，无需清理")
             except Exception as e:
                 logger.warning(f"V39 清理冗余索引失败: {e}")
+
+        # V40: 全量移除番茄钟（Pomodoro）功能
+        # 保留历史迁移（V12 建表 / V19 加列 / V24 加列）不动；在此一次性清理。
+        if current_version < 40:
+            try:
+                conn.execute("DROP TABLE IF EXISTS pomodoro_sessions")
+                # 重建 todos 表，剔除 pomodoro 相关列（兼容重建方案）
+                cols = [r[1] for r in conn.execute("PRAGMA table_info(todos)").fetchall()]
+                keep = [c for c in cols if c not in ("estimated_pomodoros", "pomodoro_size", "pomodoro_count")]
+                col_list = ", ".join(keep)
+                conn.execute(f"CREATE TABLE todos_new AS SELECT {col_list} FROM todos")
+                conn.execute("DROP TABLE todos")
+                conn.execute("ALTER TABLE todos_new RENAME TO todos")
+                # 重建表会丢失索引，补回 todos 上的功能性索引
+                for _sql in [
+                    "CREATE INDEX IF NOT EXISTS idx_todos_status ON todos(status)",
+                    "CREATE INDEX IF NOT EXISTS idx_todos_due ON todos(due_date)",
+                    "CREATE INDEX IF NOT EXISTS idx_todos_parent ON todos(parent_id)",
+                    "CREATE INDEX IF NOT EXISTS idx_todos_assigned ON todos(assigned_date)",
+                    "CREATE INDEX IF NOT EXISTS idx_todos_week ON todos(week_start)",
+                    "CREATE INDEX IF NOT EXISTS idx_todos_month ON todos(month_key)",
+                    "CREATE INDEX IF NOT EXISTS idx_todos_level ON todos(task_level)",
+                    "CREATE INDEX IF NOT EXISTS idx_todos_goal_id ON todos(goal_id)",
+                ]:
+                    conn.execute(_sql)
+                logger.info("V40: 已删除番茄钟表并移除 todos 的 pomodoro 列")
+            except Exception as e:
+                logger.warning(f"V40 迁移失败（可忽略，不影响其他功能）: {e}")
 
         # 更新版本号
         conn.execute(

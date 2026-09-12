@@ -20,34 +20,6 @@ logger = logging.getLogger(__name__)
 _VALID_TEMPLATES = ('standard', 'simple', 'technical', 'okr', 'ai', 'deep')
 
 
-def _get_pomodoro_summary_for_date(date_str: str) -> dict:
-    """查询当日番茄会话汇总，供日报 AI 上下文与前端可视化使用。
-
-    返回:
-      {"total": int, "completed": int, "total_min": int, "distractions": int}
-    任何异常都返回零值，确保日报生成不会因番茄查询失败而中断。
-    """
-    try:
-        with db.get_conn() as conn:
-            rows = conn.execute("""
-                SELECT COUNT(*) as total,
-                       SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) as completed,
-                       SUM(duration_min) as total_min,
-                       SUM(interrupted_count) as distractions
-                FROM pomodoro_sessions
-                WHERE date(start_time) = ?
-            """, (date_str,)).fetchone()
-            return {
-                "total": rows[0] or 0,
-                "completed": rows[1] or 0,
-                "total_min": rows[2] or 0,
-                "distractions": rows[3] or 0,
-            }
-    except Exception as e:
-        logger.warning(f"查询番茄汇总失败: {e}")
-        return {"total": 0, "completed": 0, "total_min": 0, "distractions": 0}
-
-
 def _validate_template(template: str) -> str:
     """校验模板参数，非法值回退 standard"""
     return template if template in _VALID_TEMPLATES else 'standard'
@@ -61,7 +33,6 @@ def report_daily():
         return jsonify({"error": f"Invalid date format: {target_date}"}), 400
     try:
         content = generate_daily_report(target_date, template=template)
-        content += _get_pomodoro_section(target_date)
         return jsonify({"date": target_date, "content": content, "template": template})
     except Exception as e:
         return jsonify({"error": safe_error(e, "日报生成失败")}), 500
@@ -148,15 +119,6 @@ def report_search():
         })
     except Exception as e:
         return jsonify({"error": safe_error(e, "检索失败")}), 500
-
-
-@bp.route("/api/report/pomodoro-summary")
-def report_pomodoro_summary():
-    """返回当日番茄会话汇总（供 Report.tsx 番茄统计卡片渲染）"""
-    target_date = request.args.get("date", date.today().isoformat())
-    if not validate_date(target_date):
-        return jsonify({"error": f"Invalid date format: {target_date}"}), 400
-    return jsonify({"date": target_date, **_get_pomodoro_summary_for_date(target_date)})
 
 
 @bp.route("/api/generate-report", methods=["POST"])
@@ -324,27 +286,6 @@ def report_export_obsidian():
         return jsonify({"error": safe_error(e, "Obsidian 导出失败")}), 500
 
 
-
-
-def _get_pomodoro_section(target_date):
-    """获取专注统计板块（专注+日报联动）"""
-    sessions = db.get_pomodoro_sessions(target_date)
-    completed = [s for s in sessions if s.get('status') == 'completed']
-    total_min = sum(s.get('duration_min', 0) for s in completed)
-    count = len(completed)
-    if count == 0:
-        return "\n\n## 专注统计\n今日暂无专注记录。"
-
-    tasks = [s.get('task', '') for s in completed if s.get('task')]
-    task_text = '、'.join(tasks[:5]) if tasks else '未指定任务'
-
-    return f"""
-## 专注统计
-- 完成番茄钟：{count} 个
-- 专注总时长：{total_min} 分钟
-- 主要任务：{task_text}
-- 平均专注时长：{total_min // count if count else 0} 分钟/个
-"""
 
 
 def _get_weekly_goal_comparison(week_start: str) -> dict:

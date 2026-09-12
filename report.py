@@ -20,25 +20,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def _get_pomodoro_summary_line(target_date: str) -> str:
-    """构造一行番茄统计文本，注入到 AI 日报 prompt 上下文中。
-
-    复用 db.get_pomodoro_sessions 查询当日会话；失败时返回空串不影响日报生成。
-    """
-    try:
-        sessions = _db.get_pomodoro_sessions(target_date)
-        completed = [s for s in sessions if s.get('status') == 'completed']
-        total_min = sum(s.get('duration_min', 0) for s in completed)
-        distractions = sum(s.get('interrupted_count', 0) or 0 for s in sessions)
-        if not sessions:
-            return ""
-        return (f"番茄统计：今日完成 {len(completed)} 个番茄"
-                f"（{total_min}分钟），分心 {distractions} 次")
-    except Exception as e:
-        logger.debug(f"番茄统计行构造失败(非致命): {e}")
-        return ""
-
-
 # ── 公共工具函数 ──────────────────────────────────
 
 def _format_duration(total_seconds: float) -> str:
@@ -1094,12 +1075,6 @@ def _build_rich_data_context(target_date, summary_data, app_usage, activities) -
     lines.append(f"专注时长：{focus_hours}，深度会话 {focus_sessions} 次")
     lines.append("")
 
-    # 注入番茄统计（一行，不超过 100 字符，不影响 prompt 预算）
-    pomo_line = _get_pomodoro_summary_line(target_date)
-    if pomo_line:
-        lines.append(pomo_line)
-        lines.append("")
-
     # 心流与专注
     lines.append("═══ 心流与专注 ═══")
     focus_ses = patterns.get("focus_sessions", [])
@@ -1579,11 +1554,6 @@ def _build_ai_report_prompt(target_date: str, activities, summary_data, app_usag
     for cat, cnt in (summary_data.get("categories") or {}).items():
         lines.append(f"- {cat}: {cnt} 次记录")
 
-    # 注入番茄统计（一行，不超过 100 字符，不影响 _USER_PROMPT_BUDGET）
-    pomo_line = _get_pomodoro_summary_line(target_date)
-    if pomo_line:
-        lines.extend(["", pomo_line])
-
     lines.extend(["", "主要工作段落："])
     for narr in cat_narratives[:8]:
         lines.append(
@@ -2048,7 +2018,7 @@ def _fallback_analysis(period_type: str, avg_daily_deep: float,
         lines.append(f"**会议占比健康**：{meeting_ratio*100:.0f}%，在合理范围内。\n")
 
     if distraction_ratio > benchmarks["distraction_ratio_max"]:
-        lines.append(f"**摸鱼占比偏高**：{distraction_ratio*100:.0f}%，建议设置番茄钟限制分心时段。\n")
+        lines.append(f"**摸鱼占比偏高**：{distraction_ratio*100:.0f}%，建议设置专注时段限制分心。\n")
     else:
         lines.append(f"**摸鱼控制良好**：{distraction_ratio*100:.0f}%，专注力不错。\n")
 

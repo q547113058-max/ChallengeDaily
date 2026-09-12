@@ -129,7 +129,7 @@ def generate_schedule(target_date: str = None) -> dict:
     try:
         with db.get_conn() as conn:
             rows = conn.execute(
-                "SELECT id, title, priority, category, estimated_pomodoros, target_min "
+                "SELECT id, title, priority, category, target_min "
                 "FROM todos WHERE status != 'completed' AND status != 'deleted' "
                 "ORDER BY priority ASC, created_at ASC LIMIT 10"
             ).fetchall()
@@ -170,7 +170,7 @@ def _try_ai_schedule(tasks: list, energy: list, target_date: str) -> list | None
 
         # 构建 prompt
         task_desc = "\n".join([
-            f"- {t['title']} (优先级:{t.get('priority', 3)}, 分类:{t.get('category', '开发')}, 预估:{t.get('estimated_pomodoros', 1)}个番茄)"
+            f"- {t['title']} (优先级:{t.get('priority', 3)}, 分类:{t.get('category', '开发')}, 预估时长:{t.get('target_min', 25)}分钟)"
             for t in tasks
         ])
         energy_desc = "\n".join([

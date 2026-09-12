@@ -14,11 +14,8 @@ export interface Todo {
   priority: number
   status: 'pending' | 'in_progress' | 'completed' | 'archived'
   progress_min: number
-  pomodoro_count: number
   created_at: string
   completed_at: string | null
-  estimated_pomodoros: number
-  pomodoro_size: 'big' | 'small'
   goal_id?: number | null
   plan_start_min?: number | null
   sort_order?: number
@@ -29,7 +26,7 @@ export async function getTodos(status?: string): Promise<{ todos: Todo[] }> {
   return request(`/api/todos${params}`) as Promise<{ todos: Todo[] }>
 }
 
-export async function createTodo(data: { title: string; category?: string; mode?: string; target_min?: number; priority?: number; due_date?: string; task_level?: string; assigned_date?: string; week_start?: string; month_key?: string; parent_id?: number; estimated_pomodoros?: number; pomodoro_size?: string; goal_id?: number | null }): Promise<{ status: string; id: number }> {
+export async function createTodo(data: { title: string; category?: string; mode?: string; target_min?: number; priority?: number; due_date?: string; task_level?: string; assigned_date?: string; week_start?: string; month_key?: string; parent_id?: number; goal_id?: number | null }): Promise<{ status: string; id: number }> {
   return request('/api/todos', { method: 'POST', body: JSON.stringify(data) }) as Promise<{ status: string; id: number }>
 }
 
@@ -41,7 +38,7 @@ export async function deleteTodo(id: number): Promise<{ status: string }> {
   return request(`/api/todos/${id}`, { method: 'DELETE' }) as Promise<{ status: string }>
 }
 
-// ── 周计划（月/周/日三级层级 + 拖拽分配 + 番茄数据条） ──
+// ── 周计划（月/周/日三级层级 + 拖拽分配 + 时长数据条） ──
 
 export type TaskLevel = 'month' | 'week' | 'day'
 

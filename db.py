@@ -556,8 +556,7 @@ def cleanup_old_data(days: int):
         conn.execute("DELETE FROM activities WHERE timestamp < ?", (f"{cutoff} 00:00:00",))
         conn.execute("DELETE FROM app_usage WHERE start_time < ?", (f"{cutoff} 00:00:00",))
         conn.execute("DELETE FROM reports WHERE report_date < ?", (cutoff,))
-        # 扩展清理范围：番茄钟、对话历史、习惯日志、每日画像、用户纠错
-        conn.execute("DELETE FROM pomodoro_sessions WHERE start_time < ?", (f"{cutoff} 00:00:00",))
+        # 扩展清理范围：对话历史、习惯日志、每日画像、用户纠错
         conn.execute("DELETE FROM chat_history WHERE created_at < ?", (f"{cutoff} 00:00:00",))
         conn.execute("DELETE FROM habit_logs WHERE log_date < ?", (cutoff,))
         conn.execute("DELETE FROM daily_profiles WHERE date < ?", (cutoff,))
@@ -800,165 +799,25 @@ def get_known_apps() -> list[dict]:
     return result
 
 
-# ── 番茄钟 ──
-def insert_pomodoro_session(start_time, end_time, duration_min, task="", category="开发", status="completed", interrupted_count=0, source="manual"):
-    _flush_pending_commits()
-    with get_conn() as conn:
-        cursor = conn.execute(
-            "INSERT INTO pomodoro_sessions (start_time, end_time, duration_min, task, category, status, interrupted_count, source) VALUES (?,?,?,?,?,?,?,?)",
-            (start_time, end_time, duration_min, task, category, status, interrupted_count, source)
-        )
-        conn.commit()
-        return cursor.lastrowid
-
-def update_pomodoro_session(session_id, **kwargs):
-    # 白名单校验：防止通过 kwargs 注入非法列名
-    safe = {k: v for k, v in kwargs.items() if k in _ALLOWED_POMODORO_FIELDS}
-    if not safe:
-        logger.warning(f"update_pomodoro_session: 无合法字段可更新, kwargs={list(kwargs.keys())}")
-        return False
-    _flush_pending_commits()
-    with get_conn() as conn:
-        sets = ", ".join([f"{k}=?" for k in safe])
-        vals = list(safe.values()) + [session_id]
-        conn.execute(f"UPDATE pomodoro_sessions SET {sets} WHERE id=?", vals)
-        conn.commit()
-        return True
-
-def get_pomodoro_sessions(date_str=None):
-    _flush_pending_commits()
-    with get_conn() as conn:
-        if date_str:
-            rows = conn.execute("SELECT * FROM pomodoro_sessions WHERE start_time LIKE ? ORDER BY start_time DESC", (f"{date_str}%",)).fetchall()
-        else:
-            rows = conn.execute("SELECT * FROM pomodoro_sessions ORDER BY start_time DESC LIMIT 100").fetchall()
-        return [dict(r) for r in rows]
-
-def get_pomodoro_stats(range_type="week"):
-    _flush_pending_commits()
-    with get_conn() as conn:
-        if range_type == "week":
-            rows = conn.execute("""
-                SELECT date(start_time) as d, COUNT(*) as cnt, SUM(duration_min) as total_min
-                FROM pomodoro_sessions WHERE status='completed' AND start_time >= date('now','-7 days','localtime')
-                GROUP BY date(start_time) ORDER BY d
-            """).fetchall()
-        else:
-            rows = conn.execute("""
-                SELECT date(start_time) as d, COUNT(*) as cnt, SUM(duration_min) as total_min
-                FROM pomodoro_sessions WHERE status='completed' AND start_time >= date('now','-30 days','localtime')
-                GROUP BY date(start_time) ORDER BY d
-            """).fetchall()
-        return [dict(r) for r in rows]
-
-def get_pomodoro_streak():
-    _flush_pending_commits()
-    with get_conn() as conn:
-        rows = conn.execute("""
-            SELECT DISTINCT date(start_time) as d FROM pomodoro_sessions
-            WHERE status='completed' ORDER BY d DESC
-        """).fetchall()
-        if not rows:
-            return 0
-        dates = [r["d"] for r in rows]
-        today = date.today().isoformat()
-        yesterday = (date.today() - timedelta(days=1)).isoformat()
-        # 如果今天没完成，从昨天开始数
-        check_date = today if today in dates else yesterday
-        if check_date not in dates:
-            return 0
-        streak = 0
-        while check_date in dates:
-            streak += 1
-            check_date = (datetime.strptime(check_date, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
-        return streak
-
-def get_pomodoro_today_count():
-    _flush_pending_commits()
-    with get_conn() as conn:
-        today = date.today().isoformat()
-        # 跨午夜修复：番茄钟可能从昨晚开始到今早结束，仅按 start_time 过滤会漏掉这些
-        row = conn.execute(
-            "SELECT COUNT(*) as cnt, COALESCE(SUM(duration_min),0) as total_min "
-            "FROM pomodoro_sessions "
-            "WHERE status='completed' AND (date(start_time)=? OR date(end_time)=?)",
-            (today, today)
-        ).fetchone()
-        return {"count": row["cnt"], "total_min": row["total_min"]}
-
-
-def get_pomodoro_quality_score(date_str=None):
-    """专注质量评分：破解番茄TODO"为凑时长而专注"陷阱
-
-    质量分 = 时长基准分 × 纯度系数 × 完成度系数
-    - 时长基准分: min(total_min/120, 1) * 60  (120分钟满分60)
-    - 纯度系数: 1 - interrupted_count/total_sessions * 0.5  (分心最多扣50%)
-    - 完成度系数: completed_sessions/total_sessions
-    """
-    _flush_pending_commits()
-    with get_conn() as conn:
-        if date_str is None:
-            date_str = date.today().isoformat()
-        row = conn.execute(
-            "SELECT COUNT(*) as total, "
-            "SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) as completed, "
-            "COALESCE(SUM(CASE WHEN status='completed' THEN duration_min ELSE 0 END), 0) as total_min, "
-            "COALESCE(SUM(interrupted_count), 0) as total_interrupted "
-            "FROM pomodoro_sessions "
-            "WHERE date(start_time)=? OR date(end_time)=?",
-            (date_str, date_str)
-        ).fetchone()
-        total = row["total"] or 0
-        completed = row["completed"] or 0
-        total_min = row["total_min"] or 0
-        total_interrupted = row["total_interrupted"] or 0
-
-        if total == 0:
-            return {"score": 0, "grade": "—", "total_min": 0, "completed": 0,
-                    "total": 0, "purity": 0, "completion": 0, "distraction_count": 0}
-
-        # 时长基准分（120分钟满分60分）
-        time_score = min(total_min / 120, 1) * 60
-        # 纯度系数：每个分心番茄扣分，最低0.5
-        avg_interrupted = total_interrupted / total
-        purity = max(1 - avg_interrupted * 0.15, 0.5)
-        # 完成度系数
-        completion = completed / total
-
-        score = round(time_score * purity * completion, 1)
-        grade = "S" if score >= 80 else "A" if score >= 60 else "B" if score >= 40 else "C" if score >= 20 else "D"
-
-        return {
-            "score": score, "grade": grade, "total_min": total_min,
-            "completed": completed, "total": total,
-            "purity": round(purity * 100), "completion": round(completion * 100),
-            "distraction_count": total_interrupted,
-        }
-
-
 # ── 待办清单 ──
 _ALLOWED_TODO_FIELDS = {"title", "category", "mode", "target_min", "repeat_type", "repeat_days",
                         "due_date", "priority", "status", "completed_at", "task_level",
                         "parent_id", "assigned_date", "week_start", "month_key", "color",
-                        "progress_min", "pomodoro_count", "estimated_pomodoros", "pomodoro_size",
+                        "progress_min",
                         "goal_id", "plan_start_min", "sort_order"}
-
-# 番茄钟允许更新的字段白名单（防 SQL 注入：列名不能参数化，必须白名单校验）
-_ALLOWED_POMODORO_FIELDS = {"status", "end_time", "duration_min", "interrupted_count", "task", "category",
-                            "todo_id", "pomodoro_index", "total_pomodoros"}
 
 def insert_todo(title, category="开发", mode="timer", target_min=25, repeat_type="none", repeat_days="", due_date=None, priority=2,
                 task_level="day", parent_id=None, assigned_date=None, week_start=None, month_key=None, color=None,
-                estimated_pomodoros=1, pomodoro_size="big", goal_id=None):
+                goal_id=None):
     _flush_pending_commits()
     with get_conn() as conn:
         max_order = conn.execute("SELECT COALESCE(MAX(sort_order),0) FROM todos").fetchone()[0]
         cursor = conn.execute(
             "INSERT INTO todos (title, category, mode, target_min, repeat_type, repeat_days, due_date, priority, sort_order, "
-            "task_level, parent_id, assigned_date, week_start, month_key, color, estimated_pomodoros, pomodoro_size, goal_id) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "task_level, parent_id, assigned_date, week_start, month_key, color, goal_id) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (title, category, mode, target_min, repeat_type, repeat_days, due_date, priority, max_order+1,
-             task_level, parent_id, assigned_date, week_start, month_key, color, estimated_pomodoros, pomodoro_size, goal_id)
+             task_level, parent_id, assigned_date, week_start, month_key, color, goal_id)
         )
         conn.commit()
         return cursor.lastrowid
@@ -1018,7 +877,7 @@ def update_todo_progress(todo_id, minutes):
             return False
         # 直接原子加，避免读取后再写入造成竞态
         conn.execute(
-            "UPDATE todos SET progress_min = progress_min + ?, pomodoro_count = pomodoro_count + 1, "
+            "UPDATE todos SET progress_min = progress_min + ?, "
             "updated_at=datetime('now','localtime') WHERE id=?",
             (minutes, todo_id)
         )
@@ -1232,13 +1091,6 @@ def check_and_unlock_achievements():
     """检查并解锁成就（P6-4：补全5个缺失成就+3个隐藏彩蛋）"""
     from datetime import date as _date
     unlocked = []
-    # 获取番茄钟统计
-    today = get_pomodoro_today_count()
-    streak = get_pomodoro_streak()
-    stats = get_pomodoro_stats("month")
-    total_count = sum(s["cnt"] for s in stats) if stats else 0
-    total_min = sum(s["total_min"] for s in stats) if stats else 0
-
     # ── 查询今日活动数据（用于成就判定）──
     today_str = _date.today().isoformat()
     today_acts = []
@@ -1282,14 +1134,6 @@ def check_and_unlock_achievements():
     except Exception:
         pass
 
-    # 番茄钟效率
-    pomo_efficiency = 0
-    try:
-        if today.get("total", 0) > 0:
-            pomo_efficiency = today["count"] / today["total"]
-    except Exception:
-        pass
-
     # 最早/最晚活动时间的小时数
     earliest_hour = int(earliest_ts[11:13]) if earliest_ts and len(earliest_ts) >= 13 else 99
     latest_hour = int(latest_ts[11:13]) if latest_ts and len(latest_ts) >= 13 else -1
@@ -1325,19 +1169,12 @@ def check_and_unlock_achievements():
         pass
 
     checks = [
-        # ── 番茄钟系列（原有5个）──
-        ("first_pomodoro", "初心者", "完成第一个番茄钟", "🌱", False, today["count"] >= 1),
-        ("pomodoro_100", "百斩", "累计完成100个番茄钟", "💯", False, total_count >= 100),
-        ("pomodoro_1000", "千时", "累计专注1000小时", "⏰", False, total_min >= 60000),
-        ("streak_7", "连续7天", "连续7天完成专注", "🔥", False, streak >= 7),
-        ("streak_30", "坚持不懈", "连续30天完成专注", "💎", False, streak >= 30),
         # ── 补全5个缺失成就 ──
         ("deep_master", "深度大师", "单日深度工作≥4小时", "🧠", False, deep_min >= 240),
         ("early_bird", "早起鸟", "6:00前开始专注", "🐦", False, earliest_hour < 6),
         ("night_owl", "夜猫子", "23:00后仍在专注", "🦉", False, latest_hour >= 23),
         ("full_clear", "全勤奖", "一天完成所有待办", "✨", False,
          today_total_todos > 0 and today_completed_todos == today_total_todos),
-        ("efficiency_king", "效率之王", "日专注效率≥80%", "👑", False, pomo_efficiency >= 0.8),
         # ── 隐藏彩蛋成就（hidden=True）──
         ("polymath", "多面手", "一天内涉及8个以上分类", "🎭", True, len(today_cats) >= 8),
         ("zen_master", "禅定", "连续4小时不切换分类", "🧘", True, max_same_cat_streak_min >= 240),
@@ -1826,35 +1663,18 @@ def get_week_plan_stats(week_start: str) -> dict:
     start_date = datetime.strptime(week_start, '%Y-%m-%d').date()
     dates = [(start_date + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(7)]
     with get_conn() as conn:
-        # 每日专注分钟
+        # 每日专注分钟（基于已完成 day 级待办的 progress_min）
         daily_focus = []
         for d in dates:
             row = conn.execute(
-                "SELECT COALESCE(SUM(duration_min),0) as total FROM pomodoro_sessions WHERE date(start_time)=? AND status='completed'",
+                "SELECT COALESCE(SUM(progress_min),0) as total FROM todos "
+                "WHERE task_level='day' AND assigned_date=? AND status='completed'",
                 (d,)
             ).fetchone()
             daily_focus.append({'date': d, 'focus_min': row['total'] or 0})
-        # 本周总专注
-        total_row = conn.execute(
-            "SELECT COALESCE(SUM(duration_min),0) as total FROM pomodoro_sessions "
-            "WHERE date(start_time)>=? AND date(start_time)<=? AND status='completed'",
-            (dates[0], dates[6])
-        ).fetchone()
-        total_focus = total_row['total'] or 0
-        # 本周深度工作（≥25min 完整番茄）
-        deep_row = conn.execute(
-            "SELECT COUNT(*) as cnt, COALESCE(SUM(duration_min),0) as total FROM pomodoro_sessions "
-            "WHERE date(start_time)>=? AND date(start_time)<=? AND status='completed' AND duration_min>=25 AND interrupted_count=0",
-            (dates[0], dates[6])
-        ).fetchone()
-        deep_focus = deep_row['total'] or 0
-        # 中断次数
-        interrupt_row = conn.execute(
-            "SELECT COALESCE(SUM(interrupted_count),0) as total FROM pomodoro_sessions "
-            "WHERE date(start_time)>=? AND date(start_time)<=?",
-            (dates[0], dates[6])
-        ).fetchone()
-        interrupts = interrupt_row['total'] or 0
+        total_focus = sum(f['focus_min'] for f in daily_focus)
+        deep_focus = total_focus
+        interrupts = 0
         # 完成率（本周日任务）
         completed_row = conn.execute(
             "SELECT COUNT(*) as total, SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) as done FROM todos "
@@ -1863,13 +1683,14 @@ def get_week_plan_stats(week_start: str) -> dict:
         ).fetchone()
         total_tasks = completed_row['total'] or 0
         completed_tasks = completed_row['done'] or 0
-        # 连续天数（从今日向前数）
+        # 连续天数（从今日向前数，连续有已完成 day 级待办的天数）
         streak = 0
         today = date.today()
         for i in range(365):
             d = (today - timedelta(days=i)).strftime('%Y-%m-%d')
             row = conn.execute(
-                "SELECT COUNT(*) as cnt FROM pomodoro_sessions WHERE date(start_time)=? AND status='completed'",
+                "SELECT COUNT(*) as cnt FROM todos "
+                "WHERE task_level='day' AND assigned_date=? AND status='completed'",
                 (d,)
             ).fetchone()
             if row['cnt'] > 0:
@@ -1897,18 +1718,8 @@ def get_month_plan_stats(month_key: str) -> dict:
     _flush_pending_commits()
     with get_conn() as conn:
         total_row = conn.execute(
-            "SELECT COALESCE(SUM(duration_min),0) as total FROM pomodoro_sessions "
-            "WHERE strftime('%Y-%m', start_time)=? AND status='completed'",
-            (month_key,)
-        ).fetchone()
-        deep_row = conn.execute(
-            "SELECT COALESCE(SUM(duration_min),0) as total FROM pomodoro_sessions "
-            "WHERE strftime('%Y-%m', start_time)=? AND status='completed' AND duration_min>=25 AND interrupted_count=0",
-            (month_key,)
-        ).fetchone()
-        interrupt_row = conn.execute(
-            "SELECT COALESCE(SUM(interrupted_count),0) as total FROM pomodoro_sessions "
-            "WHERE strftime('%Y-%m', start_time)=?",
+            "SELECT COALESCE(SUM(progress_min),0) as total FROM todos "
+            "WHERE task_level='day' AND strftime('%Y-%m', assigned_date)=? AND status='completed'",
             (month_key,)
         ).fetchone()
         completed_row = conn.execute(
@@ -1921,8 +1732,8 @@ def get_month_plan_stats(month_key: str) -> dict:
         return {
             'month_key': month_key,
             'total_focus_min': total_row['total'] or 0,
-            'deep_focus_min': deep_row['total'] or 0,
-            'interrupt_count': interrupt_row['total'] or 0,
+            'deep_focus_min': total_row['total'] or 0,
+            'interrupt_count': 0,
             'total_tasks': total_tasks,
             'completed_tasks': completed_tasks,
             'completion_rate': int(completed_tasks / total_tasks * 100) if total_tasks > 0 else 0,

@@ -5,7 +5,6 @@ import {
   generateMonthlyReport,
   getDailyReportContent,
   getTodayStats,
-  getPomodoroSummary,
   getDailyCredibility,
   getCustomTemplates,
   saveCustomTemplate,
@@ -15,7 +14,6 @@ import {
   scoreReportQuality,
   exportReportAsObsidian,
   type TodayStats,
-  type PomodoroSummary,
   type DailyCredibility,
   type CustomTemplate,
   type ReportQualityResult,
@@ -101,17 +99,7 @@ export default function Report() {
   const content = generating ? '' : (generatedContent || initialData?.content || '')
   const stats = initialData?.stats || null
 
-  // 番茄统计与数据可信度（fire-and-forget，仅日报时展示）
-  const { data: pomodoroStats } = useAsyncData<PomodoroSummary | null>(
-    async () => {
-      try {
-        return await getPomodoroSummary()
-      } catch {
-        return null
-      }
-    },
-    [],
-  )
+  // 数据可信度（fire-and-forget，仅日报时展示）
   const { data: credibility } = useAsyncData<DailyCredibility | null>(
     async () => {
       try {
@@ -517,31 +505,6 @@ export default function Report() {
               className="h-full transition-all"
               style={{ width: `${Math.min(100, weeklyGoal.completion_rate)}%`, background: 'var(--cd-green)' }}
             />
-          </div>
-        </div>
-      )}
-
-      {/* ─── 番茄统计卡片（仅日报时展示） ────────────── */}
-      {reportType === 'daily' && pomodoroStats && pomodoroStats.total > 0 && (
-        <div className="card p-4">
-          <h3 className="text-sm font-medium text-cd-text mb-3">🍅 番茄统计</h3>
-          <div className="grid grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-cd-green">{pomodoroStats.completed}</div>
-              <div className="text-xs text-cd-text-tertiary">完成番茄</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-cd-blue">{pomodoroStats.total_min}</div>
-              <div className="text-xs text-cd-text-tertiary">专注分钟</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-cd-orange">{pomodoroStats.distractions}</div>
-              <div className="text-xs text-cd-text-tertiary">分心次数</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-cd-purple">{pomodoroStats.total}</div>
-              <div className="text-xs text-cd-text-tertiary">总番茄数</div>
-            </div>
           </div>
         </div>
       )}

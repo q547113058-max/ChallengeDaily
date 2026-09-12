@@ -1188,7 +1188,6 @@ function DataImportSection({ toast, highlighted }: { toast: ReturnType<typeof us
   }
 
   const SOURCES = [
-    { value: 'fanqie_todo', label: '番茄TODO', desc: '任务/番茄数据' },
     { value: 'xiaohei_report', label: '小黑日报', desc: '历史日报' },
     { value: 'goalday', label: 'GoalDay', desc: '目标/日记' },
     { value: 'generic_csv', label: '通用CSV', desc: '自定义格式' },
@@ -1201,7 +1200,7 @@ function DataImportSection({ toast, highlighted }: { toast: ReturnType<typeof us
         <h2 className="text-sm font-semibold text-cd-text">数据迁移导入</h2>
       </div>
       <p className="text-xs text-cd-text-tertiary">
-        从番茄TODO/小黑日报/GoalDay 等竞品导入数据，无缝迁移至 ChallengeDaily
+        从小黑日报/GoalDay 等竞品导入数据，无缝迁移至 ChallengeDaily
       </p>
 
       {/* 数据源选择 */}
@@ -1241,7 +1240,7 @@ function DataImportSection({ toast, highlighted }: { toast: ReturnType<typeof us
         value={rawText}
         onChange={e => { setRawText(e.target.value); setPreview(null); setResult(null) }}
         rows={5}
-        placeholder={`粘贴 ${format.toUpperCase()} 数据，或点击"上传文件"导入...\n\n示例 CSV:\ntitle,target_min,estimated_pomodoros,category\n完成项目A,25,2,开发\n阅读技术文档,25,1,学习`}
+        placeholder={`粘贴 ${format.toUpperCase()} 数据，或点击"上传文件"导入...\n\n示例 CSV:\ntitle,target_min,category\n完成项目A,25,开发\n阅读技术文档,25,学习`}
         className="w-full px-3 py-2 rounded-lg bg-cd-bg-input border border-cd-border text-xs font-mono text-cd-text focus:border-cd-accent outline-none resize-y"
       />
 

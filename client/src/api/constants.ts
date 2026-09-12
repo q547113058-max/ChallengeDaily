@@ -1,4 +1,4 @@
-// ── 全局常量：分类配色、分类列表、番茄钟尺寸 ──
+// ── 全局常量：分类配色、分类列表 ──
 
 /** 分类配色映射 */
 export const CATEGORY_COLORS: Record<string, string> = {
@@ -22,16 +22,3 @@ export const CATEGORIES = [
   '开发', '会议', '沟通', '文档', '测试', '设计',
   '运维', '数据分析', '学习', '管理', '产品', '生活',
 ]
-
-/** 番茄钟大小配置 */
-export interface PomodoroSizeConfig {
-  work: number       // 工作分钟
-  short_break: number  // 短休息分钟
-  long_break: number   // 长休息分钟
-}
-
-export const POMODORO_SIZES: Record<string, PomodoroSizeConfig> = {
-  big:   { work: 25, short_break: 5, long_break: 15 },
-  small: { work: 20, short_break: 10, long_break: 15 },
-}
-export const LONG_BREAK_INTERVAL = 4

@@ -1,4 +1,4 @@
-"""周计划 API（月/周/日三级层级 + 拖拽分配 + 番茄数据条）"""
+"""周计划 API（月/周/日三级层级 + 拖拽分配 + 数据条）"""
 from flask import Blueprint, request, jsonify
 from datetime import date, datetime, timedelta
 import logging

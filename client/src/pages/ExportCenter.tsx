@@ -201,7 +201,7 @@ export default function ExportCenter() {
         <ExportCard
           icon={BarChart3}
           title="周报告导出"
-          description="本周任务完成情况 + 番茄统计 + 活动汇总，一键回顾这一周"
+          description="本周任务完成情况 + 活动汇总，一键回顾这一周"
           accentColor="#10b981"
         >
           <div className="space-y-3">
@@ -318,12 +318,12 @@ export default function ExportCenter() {
         <ExportCard
           icon={Database}
           title="全部数据导出"
-          description="活动记录 + 待办 + 番茄钟会话 + 日记，完整备份不丢数据"
+          description="活动记录 + 待办 + 日记，完整备份不丢数据"
           accentColor="#f59e0b"
         >
           <div className="space-y-3">
             <div className="text-xs text-cd-text-tertiary bg-cd-bg rounded-lg px-3 py-2.5 border border-cd-border">
-              📦 包含：activities + todos + pomodoro_sessions + diaries
+              📦 包含：activities + todos + diaries
               <br />
               ⏱️ 活动记录导出最近 90 天，其他全量
             </div>
@@ -576,7 +576,7 @@ function WipeSection() {
           <Trash2 size={18} className="text-red-400" /> 数据自毁
         </h2>
         <p className="text-xs text-cd-text-tertiary mb-4">
-          永久删除所有用户数据，包括活动记录、待办、番茄钟、日记、成就、截图、报告等。此操作不可恢复。
+          永久删除所有用户数据，包括活动记录、待办、日记、成就、截图、报告等。此操作不可恢复。
         </p>
         <div className="flex items-start gap-2 p-3 bg-red-500/5 rounded-lg border border-red-500/10 mb-3">
           <AlertTriangle size={14} className="text-red-400 mt-0.5 shrink-0" />

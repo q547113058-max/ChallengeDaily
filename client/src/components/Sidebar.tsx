@@ -76,7 +76,7 @@ const NAV_GROUPS: { label: string; items: NavParent[] }[] = [
     ],
   },
   {
-    // 执行组：今日做事（参考番茄土豆 待办+番茄强关联）
+    // 执行组：今日做事
     label: '执行',
     items: [
       {
@@ -94,7 +94,7 @@ const NAV_GROUPS: { label: string; items: NavParent[] }[] = [
     ],
   },
   {
-    // 统计组：数据洞察与日报（参考小黑日报助手自动生成 + 番茄土豆数据分析）
+    // 统计组：数据洞察与日报（参考小黑日报助手自动生成）
     label: '统计',
     items: [
       {

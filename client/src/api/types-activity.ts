@@ -124,15 +124,6 @@ export interface ActivitiesResponse {
   pagination?: ActivityPage['pagination']
 }
 
-/** 番茄统计汇总（供日报番茄统计卡片渲染） */
-export interface PomodoroSummary {
-  date: string
-  total: number
-  completed: number
-  total_min: number
-  distractions: number
-}
-
 /** 数据可信度（供日报可信度卡片渲染） */
 export interface DailyCredibility {
   date: string

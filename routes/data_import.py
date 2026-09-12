@@ -1,5 +1,5 @@
 """数据迁移导入 API
-支持从竞品（番茄TODO/小黑日报/GoalDay/通用CSV）导入数据，降低用户切换成本
+支持从竞品（小黑日报/GoalDay/通用CSV）导入数据，降低用户切换成本
 """
 import json
 import logging
@@ -115,10 +115,9 @@ def _detect_data_type(rows, source):
     first = rows[0]
     keys = set(k.lower() for k in first.keys()) if isinstance(first, dict) else set()
 
-    # 番茄TODO 任务导出通常含 title/task/name + 估计番茄数
-    if source == 'fanqie_todo' or {'title', 'task', 'name'} & keys:
-        if {'target_min', 'duration', 'pomodoro', '番茄'} & keys:
-            return 'todos'
+    # 待办任务导出通常含 title/task/name + 时长字段
+    if source == 'fanqie_todo' or ({'title', 'task', 'name'} & keys and {'target_min', 'duration', '时长'} & keys):
+        return 'todos'
     # 小黑日报导出含 content/report
     if source == 'xiaohei_report' or {'content', 'report', '日报'} & keys:
         return 'diaries'
@@ -146,9 +145,8 @@ def _import_todos(rows, source):
             if not title:
                 skipped += 1
                 continue
-            # 番茄TODO 字段映射
-            target_min = _parse_int(row.get('target_min') or row.get('duration') or row.get('时长') or row.get('番茄时长') or 25)
-            estimated = _parse_int(row.get('estimated_pomodoros') or row.get('番茄数') or row.get('pomodoros') or 1)
+            # 待办字段映射
+            target_min = _parse_int(row.get('target_min') or row.get('duration') or row.get('时长') or 25)
             category = row.get('category') or row.get('分类') or '导入'
             due_date = row.get('due_date') or row.get('截止日期') or None
             priority = _parse_int(row.get('priority') or row.get('优先级') or 2)
@@ -159,7 +157,6 @@ def _import_todos(rows, source):
                 target_min=target_min,
                 due_date=due_date,
                 priority=priority,
-                estimated_pomodoros=estimated,
             )
             imported += 1
         except Exception as e:

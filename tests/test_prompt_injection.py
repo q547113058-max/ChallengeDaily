@@ -70,5 +70,4 @@ def test_benign_input_passes():
     """正常输入不触发检测"""
     assert detect_prompt_injection("正在编写代码，修复登录模块的 bug") is False
     assert detect_prompt_injection("Working on the login feature for the backend") is False
-    assert detect_prompt_injection("今天完成了 3 个番茄钟，主要在写文档") is False
     assert detect_prompt_injection("") is False

@@ -431,7 +431,7 @@ function stopBackend() {
 }
 
 // ─── P20-1: 统一 CSP 工具函数 ──────────────────────────────────────
-// 为子窗口（宠物/番茄钟悬浮窗）的 session 应用基础 CSP，避免主窗口已加固而子窗口裸奔的安全漏洞
+// 为子窗口（宠物/悬浮窗）的 session 应用基础 CSP，避免主窗口已加固而子窗口裸奔的安全漏洞
 // 主窗口仍使用其更严格的 onHeadersReceived CSP（含 connect-src 白名单），此函数仅作为子窗口的下限保护
 function applyCSPToSession(targetSession) {
   if (!targetSession) return

@@ -147,10 +147,6 @@ export default function TaskDetailModal({ todo, onClose, onUpdate }: Props) {
             <span className="text-cd-text tabular-nums">{todo.progress_min}/{todo.target_min} 分钟</span>
           </div>
           <div className="flex justify-between text-xs">
-            <span className="text-cd-text-tertiary">番茄钟</span>
-            <span className="text-purple-400 tabular-nums">🍅 × {todo.pomodoro_count}</span>
-          </div>
-          <div className="flex justify-between text-xs">
             <span className="text-cd-text-tertiary">优先级</span>
             <span style={{ color: PRIORITY_COLORS[priority - 1] }}>{PRIORITY_LABELS[priority - 1]}</span>
           </div>

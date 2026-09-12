@@ -172,11 +172,6 @@ export default function DailyCards() {
             {card!.activity_first_ts && card!.activity_last_ts && (
               <div className="mt-4 pt-3 border-t border-white/5 text-xs text-cd-text-tertiary">
                 活动记录：{card!.activity_first_ts.substring(11, 16)} — {card!.activity_last_ts.substring(11, 16)}
-                {card!.pomodoro_quality && (
-                  <span className="ml-3">
-                    专注质量：{card!.pomodoro_quality.grade}（{card!.pomodoro_quality.score}分）
-                  </span>
-                )}
               </div>
             )}
           </div>
@@ -195,24 +190,6 @@ export default function DailyCards() {
                     <div key={t.id} className="flex items-center gap-2 text-xs">
                       <span className="px-1.5 py-0.5 rounded text-[10px] bg-cd-bg-input text-cd-text-secondary shrink-0">{t.category}</span>
                       <span className="text-cd-text flex-1 truncate">{t.title}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* 专注会话 */}
-            {card!.pomodoro_sessions.length > 0 && (
-              <div className="bg-cd-bg-card rounded-xl border border-white/5 p-4">
-                <div className="text-sm font-semibold text-cd-text mb-3 flex items-center gap-1.5">
-                  <Timer size={14} className="text-cd-accent" /> 专注会话
-                  <span className="text-xs text-cd-text-tertiary font-normal">({card!.pomodoro_count}次 / {card!.pomodoro_total_min}min)</span>
-                </div>
-                <div className="space-y-1.5">
-                  {card!.pomodoro_sessions.map(ps => (
-                    <div key={ps.id} className="flex items-center gap-2 text-xs">
-                      <span className="text-cd-text flex-1 truncate">{ps.task || '未命名'}</span>
-                      <span className="text-cd-text-tertiary">{ps.duration_min}min</span>
                     </div>
                   ))}
                 </div>

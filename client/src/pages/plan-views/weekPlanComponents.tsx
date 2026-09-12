@@ -79,10 +79,6 @@ export function TaskCard({ todo, compact, onClick, onDragStart, onDragEnd, expan
       {expanded && (
         <div className="mt-1.5 pt-1.5 border-t border-cd-border flex flex-col gap-0.5" style={{ fontSize: 8 }}>
           <div className="flex justify-between text-cd-text-tertiary">
-            <span>预估番茄</span>
-            <span className="tabular-nums">{todo.estimated_pomodoros || 0} 个（{todo.pomodoro_size === 'small' ? '小' : '大'}）</span>
-          </div>
-          <div className="flex justify-between text-cd-text-tertiary">
             <span>已完成</span>
             <span className="tabular-nums">{todo.progress_min}m / {todo.target_min}m</span>
           </div>

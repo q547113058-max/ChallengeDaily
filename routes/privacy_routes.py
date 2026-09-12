@@ -11,7 +11,7 @@ privacy_bp = Blueprint('privacy', __name__, url_prefix='/api/privacy')
 _ALLOWED_TABLES = frozenset([
     'activities', 'app_usage', 'screenshots', 'reports',
     'todos', 'habits', 'habit_logs', 'diaries', 'week_plans',
-    'countdowns', 'pomodoro_sessions', 'notifications',
+    'countdowns', 'notifications',
     'app_tags', 'deep_insight_cache', 'ai_chat_history'
 ])
 
@@ -28,7 +28,7 @@ def delete_all_user_data():
         tables_to_clear = [
             'activities', 'app_usage', 'screenshots', 'reports',
             'todos', 'habits', 'habit_logs', 'diaries', 'week_plans',
-            'countdowns', 'pomodoro_sessions', 'notifications',
+            'countdowns', 'notifications',
             'app_tags', 'deep_insight_cache', 'ai_chat_history'
         ]
         with db.get_conn() as conn:

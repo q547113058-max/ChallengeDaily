@@ -61,8 +61,6 @@ def create_todo():
             assigned_date=data.get('assigned_date'),
             week_start=data.get('week_start'),
             month_key=data.get('month_key'),
-            estimated_pomodoros=_safe_int(data.get('estimated_pomodoros', 1), 1),
-            pomodoro_size=data.get('pomodoro_size', 'big'),
             goal_id=data.get('goal_id'),
         )
     except Exception as e:

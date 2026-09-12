@@ -78,16 +78,11 @@ export default function Todos() {
   }
 
   const handleDelete = async (todo: TodoV2) => {
-    const pomCount = todo.pomodoro_count || 0
     const hasProgress = (todo.progress_min || 0) > 0
     const hasChildren = todos.some(t => t.parent_id === todo.id)
     let msg = '确定删除该待办？'
     if (hasChildren) {
       msg = `该待办包含子任务，删除后子任务的关联将被清除（子任务本身保留）。确定删除？`
-    } else if (pomCount > 0 && hasProgress) {
-      msg = `该待办已有 ${pomCount} 个番茄记录（${todo.progress_min}分钟进度），删除后关联数据将一并清除。确定删除？`
-    } else if (pomCount > 0) {
-      msg = `该待办已有 ${pomCount} 个番茄记录，删除后关联数据将一并清除。确定删除？`
     } else if (hasProgress) {
       msg = `该待办已有 ${todo.progress_min}分钟进度记录，删除后无法恢复。确定删除？`
     }
@@ -134,8 +129,6 @@ export default function Todos() {
   const renderTodoCard = (todo: TodoV2, isChild = false) => {
     const Icon = MODE_ICONS[todo.mode] || Clock
     const progress = todo.target_min > 0 ? Math.min(100, (todo.progress_min / todo.target_min) * 100) : 0
-    const estPom = todo.estimated_pomodoros || Math.ceil(todo.target_min / 25) || 1
-    const completedPom = todo.pomodoro_count || 0
     const catColor = getCategoryColor(todo)
     const isCompleted = todo.status === 'completed'
     const children = childrenMap.get(todo.id) || []
@@ -206,19 +199,10 @@ export default function Todos() {
           </button>
         </div>
 
-        {/* 卡片主体：进度环 + 番茄/时长/状态 */}
+        {/* 卡片主体：进度环 + 时长/状态 */}
         <div className="flex items-center gap-3 px-3.5 pb-2">
           <ProgressRing progress={progress} size={44} />
           <div className="flex-1 min-w-0 space-y-1">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-xs leading-none flex items-center flex-wrap gap-0.5">
-                {Array.from({ length: Math.min(estPom, 10) }, (_, i) => (
-                  <span key={i} className={i < completedPom ? '' : 'opacity-25'}>🍅</span>
-                ))}
-                {estPom > 10 && <span className="text-[10px] text-cd-text-tertiary">+{estPom - 10}</span>}
-              </span>
-              <span className="text-[10px] text-cd-text-secondary tabular-nums">{completedPom}/{estPom}</span>
-            </div>
             <div className="flex items-center gap-1.5 text-[11px] text-cd-text-secondary tabular-nums">
               <Clock size={11} />
               <span>{todo.progress_min}/{todo.target_min} min</span>
@@ -247,9 +231,6 @@ export default function Todos() {
             >
               {todo.category}
             </span>
-            {todo.pomodoro_size === 'small' && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400">小番茄</span>
-            )}
             {todo.assigned_date && (
               <span className="text-[10px] text-cd-text-tertiary flex items-center gap-0.5">
                 <Flame size={10} /> {todo.assigned_date}

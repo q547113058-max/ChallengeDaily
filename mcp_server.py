@@ -277,8 +277,6 @@ def tool_create_todo(
     week_start: str | None = None,
     month_key: str | None = None,
     parent_id: int | None = None,
-    estimated_pomodoros: int = 1,
-    pomodoro_size: str = "big",
     goal_id: int | None = None,
     mode: str = "timer",
     repeat_type: str = "none",
@@ -297,8 +295,6 @@ def tool_create_todo(
         week_start: 所属周 YYYY-MM-DD（周一）
         month_key: 所属月 YYYY-MM
         parent_id: 父任务 id
-        estimated_pomodoros: 预计番茄数
-        pomodoro_size: big/small
         goal_id: 关联目标 id
         mode: timer/manual
         repeat_type: none/daily/weekly/monthly
@@ -315,8 +311,6 @@ def tool_create_todo(
         "week_start": week_start,
         "month_key": month_key,
         "parent_id": parent_id,
-        "estimated_pomodoros": estimated_pomodoros,
-        "pomodoro_size": pomodoro_size,
         "goal_id": goal_id,
         "mode": mode,
         "repeat_type": repeat_type,
@@ -501,7 +495,7 @@ def tool_list_goals(status: str | None = None, timeframe: str | None = None) -> 
 # 仅允许 SELECT，且表名白名单
 _ALLOWED_TABLES = {
     "activities", "todos", "diaries", "habits", "habit_logs",
-    "pomodoro_sessions", "goals", "week_plan_meta", "month_tasks",
+    "goals", "week_plan_meta", "month_tasks",
     "settings", "app_records", "app_tags", "countdowns",
     "daily_cards", "achievements", "growth_records",
 }

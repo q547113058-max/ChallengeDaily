@@ -1,5 +1,5 @@
 import { Plus, Target, Flame, ChevronLeft, ChevronRight } from 'lucide-react'
-import { CATEGORY_COLORS, POMODORO_SIZES, type TodoV2, type WeekPlanData } from '../../api/client'
+import { CATEGORY_COLORS, type TodoV2, type WeekPlanData } from '../../api/client'
 import GanttBar from '../../components/GanttBar'
 import TimeAxis from '../../components/TimeAxis'
 import { PRIORITY_COLORS, WEEKDAY_LABELS, fmtDate, fmtHM, dayMin } from './weekPlanUtils'
@@ -45,24 +45,15 @@ export default function DayView({
   const GRID_HEIGHT = TOTAL_MIN * PX_PER_MIN
   const LEFT_LABEL_W = 48   // 左侧时间标签宽度
 
-  // 自动排列算法：有 plan_start_min 的用存储值，没有的从 9:00 顺序累加（含番茄休息）
+  // 自动排列算法：有 plan_start_min 的用存储值，没有的从 9:00 顺序累加
   let autoAcc = 9 * 60
-  const BREAK_SHORT = 5   // 番茄间短休息
-  const BREAK_LONG = 15   // 每4番茄长休息
-  let pomodoroSinceBreak = 0
   const ganttItems = timeTasks.map(t => {
-    const work = POMODORO_SIZES[t.pomodoro_size]?.work || 25
-    const dur = (t.estimated_pomodoros || 1) * work
+    const dur = t.target_min || 25
     let start: number
     if (t.plan_start_min != null && t.plan_start_min >= DAY_START && t.plan_start_min < DAY_END) {
       start = t.plan_start_min
     } else {
-      // 自动排列：加入休息间隔
-      if (pomodoroSinceBreak > 0) {
-        autoAcc += (pomodoroSinceBreak % 4 === 0) ? BREAK_LONG : BREAK_SHORT
-      }
       start = autoAcc
-      pomodoroSinceBreak += (t.estimated_pomodoros || 1)
     }
     autoAcc = start + dur
     const progress = t.target_min > 0 ? t.progress_min / t.target_min : 0

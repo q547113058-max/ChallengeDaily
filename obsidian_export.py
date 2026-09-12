@@ -54,10 +54,6 @@ def _extract_summary_metrics(content: str) -> dict:
     m = re.search(r"(\d+)\s*个工作类别", content)
     if m:
         metrics["category_count"] = int(m.group(1))
-    # 番茄完成数
-    m = re.search(r"完成番茄钟[：:]\s*(\d+)\s*个", content)
-    if m:
-        metrics["pomodoro_count"] = int(m.group(1))
     return metrics
 
 
@@ -121,8 +117,6 @@ def export_report_as_obsidian_dataview(content: str, target_date: str) -> str:
             dv_lines = []
             dv_lines.append(f"focus_min:: {metrics.get('focus_min', 0)}")
             dv_lines.append(f"category_count:: {metrics.get('category_count', len(cats))}")
-            if "pomodoro_count" in metrics:
-                dv_lines.append(f"pomodoro_count:: {metrics['pomodoro_count']}")
             dv_lines.append(f"weekday:: {datetime.strptime(target_date, '%Y-%m-%d').strftime('%A')}")
             dv_lines.append(f"week:: {datetime.strptime(target_date, '%Y-%m-%d').isocalendar()[1]}")
             base = base[:fm_end] + "\n".join(dv_lines) + "\n" + base[fm_end:]
@@ -131,7 +125,7 @@ def export_report_as_obsidian_dataview(content: str, target_date: str) -> str:
         dv_query = (
             "\n## Dataview 查询\n\n"
             "```dataview\n"
-            "TABLE date, focus_min, category_count, pomodoro_count\n"
+            "TABLE date, focus_min, category_count\n"
             "FROM #日报\n"
             "WHERE type = \"daily-report\"\n"
             "SORT date DESC\n"

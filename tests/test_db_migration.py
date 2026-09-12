@@ -47,7 +47,6 @@ def test_init_db_creates_tables(temp_db):
         "daily_profiles",
         "user_profile",
         "user_corrections",
-        "pomodoro_sessions",
         "todos",
         "diaries",
         "achievements",

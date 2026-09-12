@@ -419,10 +419,6 @@ export interface DailyCardData {
   todos_count: number
   habits_logged: { habit_id: number; name: string; count: number; color: string; category: string }[]
   habits_count: number
-  pomodoro_sessions: { id: number; task: string; category: string; duration_min: number; status: string; start_time: string; end_time: string }[]
-  pomodoro_count: number
-  pomodoro_total_min: number
-  pomodoro_quality: any
   activity_categories: Record<string, number>
   activity_total_min: number
   activity_first_ts: string | null

@@ -1,5 +1,5 @@
 import { Search, Plus, Target } from 'lucide-react'
-import { CATEGORY_COLORS, POMODORO_SIZES, type TodoV2, type WeekPlanData } from '../../api/client'
+import { CATEGORY_COLORS, type TodoV2, type WeekPlanData } from '../../api/client'
 import { TaskCard } from './weekPlanComponents'
 import {
   DAILY_LIMIT, PRIORITY_COLORS, WEEKDAY_LABELS,
@@ -165,7 +165,7 @@ export default function WeekView({
             const catColor = CATEGORY_COLORS[t.category] || '#9999B0'
             const isDone = t.status === 'completed'
             const progress = t.target_min > 0 ? Math.min(1, t.progress_min / t.target_min) : 0
-            const dur = t.target_min || (t.estimated_pomodoros || 1) * (POMODORO_SIZES[t.pomodoro_size]?.work || 25)
+            const dur = t.target_min || 25
             const isHabit = t.mode === 'habit'
             const pc = PRIORITY_COLORS[(t.priority || 3) - 1]
             const dateIdx = dates.indexOf(date)

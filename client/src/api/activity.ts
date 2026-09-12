@@ -1,6 +1,6 @@
 // ── 活动采集、状态、设置、健康检查 ──
 import { request, getApiToken, getBaseUrl, _triggerDownload } from './core'
-import type { CollectorStatus, TodayStats, Activity, ActivityPage, ActivitiesResponse, AppUsage, AppCategoryRule, BackendSettings, PomodoroSummary, DailyCredibility, ReportContent } from './types-activity'
+import type { CollectorStatus, TodayStats, Activity, ActivityPage, ActivitiesResponse, AppUsage, AppCategoryRule, BackendSettings, DailyCredibility, ReportContent } from './types-activity'
 
 /** 获取采集器状态 */
 export async function getStatus(): Promise<CollectorStatus> {
@@ -287,11 +287,6 @@ export async function getAppIconUrl(appName: string): Promise<string> {
 }
 
 // ── 日报简要统计 ──
-
-export async function getPomodoroSummary(date?: string): Promise<PomodoroSummary> {
-  const params = date ? `?date=${date}` : ''
-  return await request(`/api/report/pomodoro-summary${params}`) as PomodoroSummary
-}
 
 export async function getDailyCredibility(): Promise<DailyCredibility> {
   return await request('/api/credibility/daily-report') as DailyCredibility

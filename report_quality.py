@@ -56,7 +56,7 @@ def _completeness_suggestion(hit: Dict[str, bool]) -> str:
 NUMBER_PATTERN = re.compile(r'\d+\.?\d*')
 TIME_PATTERN = re.compile(r'\d+\.?\d*\s*(小时|分钟|分|时|h|m|hour|min)')
 PERCENT_PATTERN = re.compile(r'\d+\.?\d*\s*%|百分之\d+')
-COUNT_PATTERN = re.compile(r'\d+\s*(个|次|项|条|篇|个番茄|pomodoro|commit|PR|bug|task)')
+COUNT_PATTERN = re.compile(r'\d+\s*(个|次|项|条|篇|commit|PR|bug|task)')
 
 
 def _score_data_backed(text: str) -> Dict[str, Any]:

@@ -5,17 +5,16 @@
 export { request, getBaseUrl, getApiToken, ensureBaseUrl, getBackendState, onBackendStateChange, _triggerDownload } from './core'
 
 // ── 常量 ──
-export { CATEGORY_COLORS, CATEGORIES, POMODORO_SIZES, LONG_BREAK_INTERVAL } from './constants'
-export type { PomodoroSizeConfig } from './constants'
+export { CATEGORY_COLORS, CATEGORIES } from './constants'
 
 // ── 工具函数 ──
 export { formatLocalDate, getTodayStr, formatLocalTimestamp, getWeekStart, getWeekDates, getMonthKey } from './utils'
 
 // ── 活动类型 ──
-export type { CollectorStatus, TodayStats, VisibleWindow, Activity, ReportContent, AppUsageContent, AppUsage, AppCategoryRule, BackendSettings, ActivityPage, ActivitiesResponse, PomodoroSummary, DailyCredibility } from './types-activity'
+export type { CollectorStatus, TodayStats, VisibleWindow, Activity, ReportContent, AppUsageContent, AppUsage, AppCategoryRule, BackendSettings, ActivityPage, ActivitiesResponse, DailyCredibility } from './types-activity'
 
 // ── 活动 API ──
-export { getStatus, getTodayStats, getDateStats, getActivities, getAppUsage, captureNow, healthCheck, startupHealthCheck, getSettings, updateSettings, pauseCollector, resumeCollector, getReportByDate, testAiConnection, downloadExportActivities, downloadExportAppUsage, downloadExportReports, downloadExportActivitiesDetail, updateActivity, deleteActivity, undoDeleteActivity, createActivity, searchActivities, getBackupInfo, restoreBackup, getNotifications, getAppRules, getKnownApps, updateAppRule, deleteAppRule, getAppIconUrl, getPomodoroSummary, getDailyCredibility } from './activity'
+export { getStatus, getTodayStats, getDateStats, getActivities, getAppUsage, captureNow, healthCheck, startupHealthCheck, getSettings, updateSettings, pauseCollector, resumeCollector, getReportByDate, testAiConnection, downloadExportActivities, downloadExportAppUsage, downloadExportReports, downloadExportActivitiesDetail, updateActivity, deleteActivity, undoDeleteActivity, createActivity, searchActivities, getBackupInfo, restoreBackup, getNotifications, getAppRules, getKnownApps, updateAppRule, deleteAppRule, getAppIconUrl, getDailyCredibility } from './activity'
 
 // ── 报告 API ──
 export { generateDailyReport, generateWeeklyReport, generateMonthlyReport, getCustomTemplates, saveCustomTemplate, deleteCustomTemplate, getDailyReportContent, getReportChannels, saveReportChannels, testReportChannel, submitReportToChannels, scoreReportQuality, searchReports, getDeepInsights, exportReportAsObsidian } from './report'

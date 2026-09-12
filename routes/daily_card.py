@@ -8,8 +8,7 @@ import logging
 
 import config
 from db import (
-    get_conn, get_pomodoro_sessions, get_pomodoro_today_count,
-    get_pomodoro_quality_score, get_daily_summary,
+    get_conn, get_daily_summary,
 )
 from routes.deps import check_token, validate_date
 
@@ -27,7 +26,6 @@ def get_daily_card():
     返回聚合了 5 大数据源的结构化卡片：
     - todos_completed: 当日完成的待办
     - habits_logged: 当日习惯打卡
-    - pomodoro: 番茄会话汇总
     - activities: 活动分类时长
     - achievements: 当日解锁成就
     - summary: 综合生产力评分
@@ -78,34 +76,7 @@ def get_daily_card():
                 "category": r["auto_category"],
             })
 
-    # ── 3. 番茄/专注会话 ──
-    # 复用现有函数：sessions 列表 + 今日计数 + 质量评分
-    sessions = get_pomodoro_sessions(target)
-    pomodoro_sessions = []
-    for s in sessions:
-        pomodoro_sessions.append({
-            "id": s["id"],
-            "task": s.get("task") or "",
-            "category": s.get("category") or "",
-            "duration_min": s.get("duration_min", 0),
-            "status": s.get("status", ""),
-            "start_time": s.get("start_time", ""),
-            "end_time": s.get("end_time", ""),
-        })
-
-    # 跨午夜修正：用 date(start_time)=? OR date(end_time)=? 避免漏掉昨夜开始的会话
-    pomodoro_summary = {"count": 0, "total_min": 0}
-    pomodoro_quality = None
-    try:
-        pomodoro_summary = get_pomodoro_today_count()
-    except Exception as e:
-        logger.warning("get_pomodoro_today_count failed: %s", e)
-    try:
-        pomodoro_quality = get_pomodoro_quality_score(target)
-    except Exception as e:
-        logger.warning("get_pomodoro_quality_score failed: %s", e)
-
-    # ── 4. 活动分类时长 ──
+    # ── 3. 活动分类时长 ──
     # activities 是快照表，时长 = COUNT × SCREENSHOT_INTERVAL_SEC / 60
     categories = {}
     total_activity_min = 0.0
@@ -126,7 +97,7 @@ def get_daily_card():
     first_ts = daily_sum.get("first_ts")
     last_ts = daily_sum.get("last_ts")
 
-    # ── 5. 成就解锁 ──
+    # ── 4. 成就解锁 ──
     # unlocked_at 格式 'YYYY-MM-DD HH:MM:SS'，用 date() 截取
     achievements_unlocked = []
     with get_conn() as conn:
@@ -145,12 +116,12 @@ def get_daily_card():
                 "unlocked_at": r["unlocked_at"],
             })
 
-    # ── 6. 综合生产力评分 ──
-    # 评分维度：任务完成 + 专注时长 + 活动覆盖 + 打卡坚持
+    # ── 5. 综合生产力评分 ──
+    # 评分维度：任务完成 + 活动覆盖 + 打卡坚持
     todos_count = len(todos_completed)
     habits_count = len(habits_logged)
-    focus_min = pomodoro_summary.get("total_min", 0)
-    focus_count = pomodoro_summary.get("count", 0)
+    focus_min = 0
+    focus_count = 0
 
     # 简单加权评分（满分 100）
     # - 任务完成 30 分（每个 6 分，上限 30）
@@ -178,10 +149,6 @@ def get_daily_card():
         "todos_count": todos_count,
         "habits_logged": habits_logged,
         "habits_count": habits_count,
-        "pomodoro_sessions": pomodoro_sessions,
-        "pomodoro_count": focus_count,
-        "pomodoro_total_min": focus_min,
-        "pomodoro_quality": pomodoro_quality,
         "activity_categories": categories,
         "activity_total_min": round(total_activity_min, 1),
         "activity_first_ts": first_ts,
@@ -235,18 +202,6 @@ def get_daily_card_text():
         lines.append("### ✅ 已完成待办")
         for t in todos:
             lines.append(f"- [{t['category']}] {t['title']}")
-
-    # 专注
-    pomo = data.get("pomodoro_sessions", [])
-    if pomo:
-        lines.append("")
-        lines.append(f"### 🍅 专注会话（{data.get('pomodoro_count', 0)} 次 / {data.get('pomodoro_total_min', 0)}min）")
-        for s in pomo[:5]:
-            task = s.get("task") or "未命名"
-            dur = s.get("duration_min", 0)
-            lines.append(f"- {task} · {dur}min")
-        if len(pomo) > 5:
-            lines.append(f"- ...及其他 {len(pomo) - 5} 次")
 
     # 活动
     cats = data.get("activity_categories", {})
