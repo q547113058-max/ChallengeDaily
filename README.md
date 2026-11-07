@@ -12,6 +12,9 @@
 
 <p align="center"><b>AI 替你记录每一天。你只管活。</b></p>
 
+> 📌 **接手 / 启动看这里**：[HANDOFF.md](HANDOFF.md) —— 本机实测路径、三种启动方式、环境坑与验证清单。
+> 本仓库为私有 fork [`q547113058-max/ChallengeDaily`](https://github.com/q547113058-max/ChallengeDaily)（分支 `master`）；上游为 `EXtreameChallenge/ChallengeDaily`（MIT）。文档最后一次核对：2026-11-07。
+
 ---
 
 > 🥟 你打开微信想回一条消息。45 分钟后你在看怎么做锅包肉。你连锅包肉都没吃过。
@@ -75,13 +78,9 @@
 
 **ChallengeDaily 不是只告诉你「你废了」，它给你工具让你不再废。**
 
-### 🍅 番茄钟 —— 让你没法不努力
+### 🍅 番茄钟 —— 已移除（2026-09-12）
 
-你最大的敌人不是懒惰，是**切换**。
-
-`VSCode → 微信 → 浏览器 → VSCode → GitHub → 微信`，一天切 200 次，每次认知成本 3~5 分钟——你三分之一的时间不是在工作，是在**找回工作状态**。
-
-> 🎯 番茄钟把 25 分钟锁死在一个任务上。到了弹窗提醒休息。白噪音辅助。**专注模式直接屏蔽 B 站和抖音。**
+番茄钟模块已在 commit `20403f6` 全量移除（39 文件，+139/−953），**当前版本不再提供计时、白噪音、专注屏蔽**。保留本节标题仅为说明历史，下方其余能力仍在：待办与周计划、习惯打卡与成就、AI 日报 / 周报、AI 对话、桌面宠物、日记、深度洞察、Webhook。功能现状以 `HANDOFF.md` 为准。
 
 ### ✅ 待办 + 周计划 —— 让你知道然后干什么
 
@@ -118,7 +117,7 @@ ChallengeDaily 这边：
 📚 学习      1.5h  ██████░░░░░░░░░░░░░░░░
 ☕ 摸鱼      0.8h  ███░░░░░░░░░░░░░░░░░░░
 ━━━━━━━━━━━━━━━━━━━━━━
-✅ 有效时间 6.5h  🔥 8 个番茄  📈 比昨天 +12%
+✅ 有效时间 6.5h  📝 已写日记  📈 比昨天 +12%
 ```
 
 把同样数据喂给内置 AI 对话：
@@ -142,7 +141,7 @@ ChallengeDaily 这边：
 
 | 🚫 不做 | ✅ 做 |
 |---------|-----|
-| 截图不存储，分析完立即删除 | 微信 / 飞书 / 密码管理器 / 银行页面自动跳过 |
+| 截图仅留本地、默认保留 7 天后轮换删除（`RETENTION_DAYS`） | 微信 / 飞书 / 密码管理器 / 银行页面自动跳过 |
 | API Key 不写 .env 明文 | Windows DPAPI 加密存储 |
 | 数据不传云端 | 100% 本地，断网正常跑 |
 | 不接 Key 也能用的功能不锁 | 内置 30+ 规则自动分类 |
@@ -180,39 +179,75 @@ ChallengeDaily 这边：
 
 ---
 
-## 🚀 跑起来
+## 🚀 跑起来（本机实测 2026-11-07）
+
+> 完整启动链路、历史坑位清单与验证命令见 **[HANDOFF.md](HANDOFF.md)**。下面只给最短路径。
+
+**项目根**：`E:\WorkBuddy\2026-09-05-19-07-53\ChallengeDaily-main\ChallengeDaily-main`
+
+### 首次安装（只需一次）
 
 ```bash
-git clone https://github.com/EXtreameChallenge/ChallengeDaily.git
-cd xiaohei-daily
-pip install -r requirements.txt
-cd client && npm install && npm run build && cd ..
-python main.py
+# 后端依赖，二选一（本机实测：venv 已装齐，系统 Python312 缺 mss）
+# A 推荐：装到系统 Python312 —— 装完后双击 start.vbs 就能一键自启后端
+"C:/Users/54711/AppData/Local/Programs/Python/Python312/python.exe" -m pip install -r requirements.txt waitress
+# B 不改系统环境：装到 WorkBuddy venv（Python 3.13.14）—— 走下面的两段式启动
+"C:/Users/54711/.workbuddy/binaries/python/envs/default/Scripts/python.exe" -m pip install -r requirements.txt waitress
+
+# 前端依赖与构建产物（Electron 跑 dist/index.html，不是 dev server）
+cd client && npm install && npx vite build && cd ..
 ```
 
-打开 `http://127.0.0.1:58888`，数据已经在采了。
+> ⚠️ 用 `npx vite build`，**不要 `npm run build`**（后者是 `vite build && electron-builder`，会触发打包）。
+> ⚠️ 本机系统 `Python312` 与 PATH 上的 `python` 都缺 `mss`，未做 A 步骤时 Electron 自启后端会报 `ModuleNotFoundError`。A 步骤**尚未执行**，需你确认后自行跑；它只改系统 Python，不动仓库。`waitress` 不在 `requirements.txt`，但是 Electron 探测解释器的必要条件。
 
-> 📦 打包版去 [Releases](https://github.com/EXtreameChallenge/ChallengeDaily/releases) 下载 `Setup.exe` | 需 Python 3.10+
->
-> 🧠 不配 Key 也能用。接智谱 / DeepSeek / Qwen / Kimi 的 Key 开启 AI 视觉识别。
+### 三种启动方式
+
+| 模式 | 操作 | 用途 |
+|---|---|---|
+| 日常（推荐） | 装齐系统 Python 依赖后**双击 `start.vbs`**（或 `start.bat`） | 完整桌面应用；Electron 自动 spawn 后端并设好 `CHALLENGE_DAILY_DATA_DIR` |
+| 两段式 | 先 venv 起后端 → 等 `/api/health` 200 → 再起 Electron（`ELECTRON_IS_DEV=0`，cwd=`client`） | 不改系统环境；Electron 检测有效 token 后 `skip spawning` 复用后端 |
+| 纯后端 | `python -u main.py` | 只调 API，无窗口 |
+
+```powershell
+# 两段式（普通 PowerShell 控制台；完整命令与说明见 HANDOFF.md §4.2）
+$root = 'E:\WorkBuddy\2026-09-05-19-07-53\ChallengeDaily-main\ChallengeDaily-main'
+$py   = 'C:\Users\54711\.workbuddy\binaries\python\envs\default\Scripts\python.exe'
+$env:CHALLENGE_DAILY_DATA_DIR = 'C:\Users\54711\AppData\Roaming\challenge-daily\backend-data'
+$env:PORT = '58888'
+Start-Process -FilePath $py -ArgumentList '-u','main.py' -WorkingDirectory $root -WindowStyle Hidden
+for ($i=0; $i -lt 30; $i++) { try { (Invoke-WebRequest 'http://127.0.0.1:58888/api/health' -UseBasicParsing).StatusCode; break } catch { Start-Sleep -Seconds 1 } }
+$env:ELECTRON_IS_DEV = '0'
+Start-Process -FilePath "$root\client\node_modules\electron\dist\electron.exe" -ArgumentList '.' -WorkingDirectory "$root\client"
+```
+
+> 在 WorkBuddy 终端里须先 `unset ELECTRON_RUN_AS_NODE PYTHONPATH` 并设 `CODEBUDDY_SAFE_DELETE_ENABLED=0`；且工具进程的常驻子进程会被沙箱回收，**要长期运行请从 Explorer 双击启动**。
+
+窗口出现即开始采集（默认每 60 秒，自适应 30–120 秒）。后端 `http://127.0.0.1:58888`：`/api/health` 无需 token，其余 `/api/*` 需 `X-API-Token`（值在 `<DATA_DIR>\.api_token`）。数据写 `%APPDATA%\challenge-daily\backend-data\xiaohei.db`。
+
+> 🧠 不配 Key 也能用（30+ 规则本地分类）。接智谱 / DeepSeek / Qwen / Kimi 的 OpenAI 兼容 Key 开启 AI 视觉识别，Key 由 Windows DPAPI 加密存本地。
+> 📦 发布流程见 `RELEASE.md`（该文档写的是上游 `main` 分支 + Actions 自动打包；本仓库为 `master` 分支且 `.github/` 未推送，勿照搬）。
 
 ---
 
 ## 🧰 技术栈
 
 ```
-⚡ Electron 31  ·  ⚛️ React 18 + TS  ·  🐍 Python 3.11  ·  🌶️ Flask 3
-🗄️ SQLite WAL (23 表)  ·  🖼️ GLM-4V-Flash  ·  🔐 Windows DPAPI
+⚡ Electron 31  ·  ⚛️ React 18 + TS (Vite)  ·  🐍 Python 3.10+（本机 3.13.14）  ·  🌶️ Flask 3
+🗄️ SQLite WAL  ·  🖼️ glm-4.1v-thinking-flash（429 降级 glm-4v-flash）  ·  📝 glm-4-flash  ·  🔐 Windows DPAPI
 ```
 
 ✅ 已通过 3 轮深度审计 + 30+ 项 Loop Engineering 修复，核心链路在本地环境连续验证通过。
+📌 当前版本 `3.4.1`；2026-11-07 核对：基线 `20403f6`、分支 `master`、前端 `dist` 已构建、端口 58888 未运行、运行时库在 `%APPDATA%\challenge-daily\backend-data`。
 
 ---
 
 | 平台 | 仓库 |
 |------|------|
-| 🐙 GitHub | [EXtreameChallenge/ChallengeDaily](https://github.com/EXtreameChallenge/ChallengeDaily) |
+| 🐙 **本仓库（私有）** | [q547113058-max/ChallengeDaily](https://github.com/q547113058-max/ChallengeDaily)（分支 `master`） |
+| 🐙 上游（MIT） | [EXtreameChallenge/ChallengeDaily](https://github.com/EXtreameChallenge/ChallengeDaily) |
 | 🏮 Gitee | [EXtreameChallenge/ChallengeDaily](https://gitee.com/EXtreameChallenge/ChallengeDaily) |
 | 🦊 GitCode | [EXtreameChallenge/ChallengeDaily](https://gitcode.com/EXtreameChallenge/ChallengeDaily) |
 
 📌 灵感：[samlaying/xiaohei-daily](https://github.com/samlaying/xiaohei-daily)（仅 macOS） ·  MIT License
+📄 交接文档：[HANDOFF.md](HANDOFF.md) · 审查报告：[REVIEW_2026-09-10.md](REVIEW_2026-09-10.md)
