@@ -190,7 +190,7 @@ Stop-Process -Id <PID> -Force
 | 5 | `npm run dev` 卡死 | vite dev 绑 IPv6 `[::1]:5173`，`wait-on` 拿不到 | 放弃 A 模式，改 `npx vite build` + Electron 生产模式 |
 | 6 | `electron.exe` 不存在 | npm postinstall 静默失败 | `ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/ node node_modules/electron/install.js` |
 | 7 | 新后端绑不上端口 / curl 命中旧实例返 401 | 旧 `main.py` 残留 LISTENING 58888 | 先查 `Get-NetTCPConnection -LocalPort 58888` 并杀净再起；正常是 2 层父子进程 |
-| 8 | GitHub Actions 没随仓库推送 | `.gitignore` 排除了 `.github/`（token 无 workflow scope） | 需要 CI 时单独放行该目录并换有 workflow scope 的 token |
+| 8 | 打 tag 后没有自动打包 / Release | 本地**根本没有** `.github/` 目录，且 `.gitignore` 显式排除它（token 无 workflow scope）；远端 workflows 404、tags/Releases 均为 0；`build.publish=null`、主进程无 `autoUpdater` | 当前无自动发布链路，按 `RELEASE.md` §5 的 5 步待办恢复（未执行） |
 
 ---
 
@@ -200,7 +200,7 @@ Stop-Process -Id <PID> -Force
 - 认证：**Windows Credential Manager 的 `git:https://github.com` 条目**（username `q547113058-max`，token scope 含 `repo`）。`gh` CLI 不在 PATH；SSH key 未被账号认可 —— 不要再试 SSH/gh。
 - 非交互环境加 `GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=Never` 防挂起。
 - 推送前红线：`data/`、`*.db`、`.env`、`*.log`、`screenshots/`、`vault.dat` 一律不入库；提交前 `git status` 与 `git grep -i "api_key\|token\|password"` 过一遍。
-- 文档现状：`RELEASE.md` 写的是 `cd xiaohei-daily` / `git push origin main` / Actions 自动打包，与**本仓库实际（`master` 分支、无 workflow）不符**，尚未修订；本文件与 `README.md` 为准确口径。
+- 文档口径（2026-11-07 已统一）：`README.md` = 功能与启动，`HANDOFF.md` = 交接排障，`RELEASE.md` = 版本管理与发布现状（已按实际重写：本仓库 `master` 分支、无 workflow / tag / Release / 自动更新，`publish: null`，打包清单有 6 条缺失资源）。
 
 ---
 
@@ -212,6 +212,8 @@ Stop-Process -Id <PID> -Force
 4. 历史上 Overview 的腾讯地图 IP 定位被 CSP 拦（`apis.map.qq.com` 不在 connect-src），非致命降级。
 5. `项目\data\`（1.6 MB 旧库）与运行时库（13.5 MB）并存，隔离测试须显式 `CHALLENGE_DAILY_DATA_DIR=<临时目录>`，否则污染项目库。
 6. 系统 Python312 仍未装后端依赖（§4.1 的可选修复未执行）。
+7. `client/package.json` 的 `build.extraResources` 有 6 条指向已剪枝删除的文件，`npm run build` 打包会缺资源（静态检查，未实跑、未修，见 `RELEASE.md` §4）。
+8. 自动发布链路不存在：无 `.github/` / tag / Release，`publish: null`，主进程无 `autoUpdater`（见 `RELEASE.md` §5）。
 
 ---
 

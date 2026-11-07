@@ -226,7 +226,7 @@ Start-Process -FilePath "$root\client\node_modules\electron\dist\electron.exe" -
 窗口出现即开始采集（默认每 60 秒，自适应 30–120 秒）。后端 `http://127.0.0.1:58888`：`/api/health` 无需 token，其余 `/api/*` 需 `X-API-Token`（值在 `<DATA_DIR>\.api_token`）。数据写 `%APPDATA%\challenge-daily\backend-data\xiaohei.db`。
 
 > 🧠 不配 Key 也能用（30+ 规则本地分类）。接智谱 / DeepSeek / Qwen / Kimi 的 OpenAI 兼容 Key 开启 AI 视觉识别，Key 由 Windows DPAPI 加密存本地。
-> 📦 发布流程见 `RELEASE.md`（该文档写的是上游 `main` 分支 + Actions 自动打包；本仓库为 `master` 分支且 `.github/` 未推送，勿照搬）。
+> 📦 版本管理与发布见 [`RELEASE.md`](RELEASE.md)（已按本仓库实际重写：当前**无** Actions 自动打包 / Release / 客户端自动更新，只有源码提交与手动版本号管理）。
 
 ---
 
@@ -238,7 +238,7 @@ Start-Process -FilePath "$root\client\node_modules\electron\dist\electron.exe" -
 ```
 
 ✅ 已通过 3 轮深度审计 + 30+ 项 Loop Engineering 修复，核心链路在本地环境连续验证通过。
-📌 当前版本 `3.4.1`；2026-11-07 核对：基线 `20403f6`、分支 `master`、前端 `dist` 已构建、端口 58888 未运行、运行时库在 `%APPDATA%\challenge-daily\backend-data`。
+📌 当前版本 `3.4.1`；2026-11-07 核对：代码基线 `20403f6`（其后为文档提交）、分支 `master`、前端 `dist` 已构建、端口 58888 未运行、运行时库在 `%APPDATA%\challenge-daily\backend-data`。
 
 ---
 
