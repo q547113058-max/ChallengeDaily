@@ -149,6 +149,16 @@ ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-
 
 > ⚠️ 私有仓库 + 自动更新涉及 token 分发，**绝不要把 PAT 打进客户端或提交进仓库**。本实现依赖仓库公开，客户端不含任何凭据。
 
+### 首次发版实测记录（2026-11-10）
+
+- 仓库转 **public**；Actions 默认工作流权限设为 **write**。
+- 提交 `96bbd84`（本地），经 GitHub Git Data API 增量推送为远端 `24c8abf`（因 `git push` 在本会话被 `getaddrinfo() thread failed to start` 拦，改用 API 重建 commit）。**两棵 tree 均为 `0ed6db0`、229 个 blob 完全一致**，仅 commit sha 因作者时间戳精度不同而异；本地工作区因此显示与远端 sha 不一致，但内容无差异，下次提交前建议先 `git fetch`/对齐。
+- tag `v3.4.2` → workflow run `42807013271` → **conclusion: success**（约 3 分钟）。
+- Release `v3.4.2`（非草稿）含 4 个资产：`Setup.exe` / `Portable.exe` / `.blockmap` / `latest.yml`。
+- 公开 feed `https://github.com/q547113058-max/ChallengeDaily/releases/latest/download/latest.yml` 匿名 **HTTP 200**，内容含 version 3.4.2、sha512、size、releaseDate。
+
+> 后续发版若 `git push` 恢复可用，直接用 §6 第 5 步的常规 `git push origin master --tags` 即可；API 推送脚本为一次性临时方案，未入库。
+
 ---
 
 ## 7. 已知限制 / 遗留
