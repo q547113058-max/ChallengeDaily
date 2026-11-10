@@ -13,6 +13,9 @@ logger = logging.getLogger(__name__)
 
 bp = Blueprint('data_import', __name__, url_prefix='/api/data-import')
 
+# 可导入的目标表白名单（倒数日已下线，不再作为导入目标）
+_VALID_TARGET_TABLES = ('todos', 'habits', 'diaries', 'goals')
+
 
 def _parse_csv(text: str):
     """解析 CSV 文本，返回 dict 列表"""
@@ -64,7 +67,7 @@ def execute_import():
     source = data.get('source', '')
     format_type = data.get('format', 'json')
     raw_text = data.get('data', '')
-    target_table = data.get('target_table', '')  # todos / habits / countdowns / diaries / goals
+    target_table = data.get('target_table', '')  # todos / habits / diaries / goals
     dry_run = data.get('dry_run', False)
 
     if not raw_text:
@@ -83,6 +86,10 @@ def execute_import():
     if not target_table:
         target_table = _detect_data_type(rows, source)
 
+    # 目标表白名单：dry-run 与正式执行走同一套校验，避免预览报"成功"、执行才 400
+    if target_table not in _VALID_TARGET_TABLES:
+        return jsonify({"error": f"未知目标表: {target_table}"}), 400
+
     results = {"total": len(rows), "imported": 0, "skipped": 0, "errors": []}
 
     if dry_run:
@@ -93,14 +100,10 @@ def execute_import():
             results.update(_import_todos(rows, source))
         elif target_table == 'habits':
             results.update(_import_habits(rows, source))
-        elif target_table == 'countdowns':
-            results.update(_import_countdowns(rows, source))
         elif target_table == 'diaries':
             results.update(_import_diaries(rows, source))
         elif target_table == 'goals':
             results.update(_import_goals(rows, source))
-        else:
-            return jsonify({"error": f"未知目标表: {target_table}"}), 400
     except Exception as e:
         logger.exception("导入失败")
         return jsonify({"error": f"导入失败: {str(e)}"}), 500
@@ -127,9 +130,6 @@ def _detect_data_type(rows, source):
     # 习惯
     if {'habit', '习惯', 'target_count'} & keys:
         return 'habits'
-    # 倒数日
-    if {'countdown', '倒数', 'target_date'} & keys:
-        return 'countdowns'
     # 默认按 source
     return {'fanqie_todo': 'todos', 'xiaohei_report': 'diaries', 'goalday': 'goals'}.get(source, 'todos')
 
@@ -179,27 +179,6 @@ def _import_habits(rows, source):
             target_count = _parse_int(row.get('target_count') or 1)
             color = row.get('color') or '#7B68EE'
             db.insert_habit(name=name, target_count=target_count, color=color)
-            imported += 1
-        except Exception as e:
-            errors.append(f"第{i+1}行: {str(e)}")
-            skipped += 1
-    return {"imported": imported, "skipped": skipped, "errors": errors}
-
-
-def _import_countdowns(rows, source):
-    """导入倒数日"""
-    imported = 0
-    skipped = 0
-    errors = []
-    for i, row in enumerate(rows):
-        try:
-            title = (row.get('title') or row.get('name') or row.get('事件') or '').strip()
-            target_date = row.get('target_date') or row.get('date') or row.get('日期') or ''
-            if not title or not target_date:
-                skipped += 1
-                continue
-            color = row.get('color') or '#7B68EE'
-            db.insert_countdown(title=title, target_date=target_date, color=color)
             imported += 1
         except Exception as e:
             errors.append(f"第{i+1}行: {str(e)}")

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense, type ReactNode } from 'react'
-import { HashRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import Sidebar from './components/Sidebar'
 import TitleBar from './components/TitleBar'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -7,33 +7,26 @@ import { ToastProvider } from './components/Toast'
 import { ThemeProvider } from './components/ThemeContext'
 import { BackendStatusBar } from './components/shared'
 import { getNotifications, startupHealthCheck } from './api/client'
+import { serverStorage, loadServerState, isServerStorageLoaded, initServerStorageLifecycle } from './api/clientState'
 import { useAppLock, LockScreen } from './components/AppLock'
 import { CommandPalette, useCommandPaletteShortcut } from './components/CommandPalette'
 import { ShortcutHelp, useShortcutHelpShortcut } from './components/ShortcutHelp'
 
 // 懒加载页面组件 — 减少首屏加载体积
+// 精简后只保留 4 个一级入口 + 设置里的两个分析页
 const Overview = lazy(() => import('./pages/Overview'))
 const Timeline = lazy(() => import('./pages/Timeline'))
-const Report = lazy(() => import('./pages/Report'))
-const Heatmap = lazy(() => import('./pages/Heatmap'))
-const CalendarView = lazy(() => import('./pages/CalendarView'))
-const AppRecords = lazy(() => import('./pages/AppRecords'))
-const HistoryReports = lazy(() => import('./pages/HistoryReports'))
+const ReportsHub = lazy(() => import('./pages/ReportsHub'))
 const Settings = lazy(() => import('./pages/Settings'))
 const AgentPage = lazy(() => import('./pages/Agent'))
-const AppTags = lazy(() => import('./pages/AppTags'))
 const Onboarding = lazy(() => import('./pages/Onboarding'))
 const Legal = lazy(() => import('./pages/Legal'))
 const DeepProfile = lazy(() => import('./pages/DeepProfile'))
 const Health = lazy(() => import('./pages/Health'))
 const Todos = lazy(() => import('./pages/Todos'))
-const Countdowns = lazy(() => import('./pages/Countdowns'))
 const Habits = lazy(() => import('./pages/Habits'))
-const WeekPlan = lazy(() => import('./pages/WeekPlan'))
-const Dashboard = lazy(() => import('./pages/Dashboard'))
-const ExportCenter = lazy(() => import('./pages/ExportCenter'))
-const Goals = lazy(() => import('./pages/Goals'))
-const DailyCards = lazy(() => import('./pages/DailyCards'))
+const PlanHub = lazy(() => import('./pages/PlanHub'))
+const AppRecords = lazy(() => import('./pages/AppRecords'))
 
 // 首次启动流程：法律协议 → 新手引导 → 主界面
 type FirstLaunchPhase = 'legal' | 'onboarding' | 'done'
@@ -41,6 +34,9 @@ type FirstLaunchPhase = 'legal' | 'onboarding' | 'done'
 export default function App() {
   const [backendReady, setBackendReady] = useState(false)
   const [checking, setChecking] = useState(true)
+  // 服务器状态（原 localStorage 数据）是否已加载：未加载前不渲染主体，
+  // 避免同步读取拿到空值导致主题/首启/应用锁状态错乱。
+  const [stateLoaded, setStateLoaded] = useState(() => isServerStorageLoaded())
   const [firstLaunchPhase, setFirstLaunchPhase] = useState<FirstLaunchPhase>('done')
   const { locked, unlock } = useAppLock()
   const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false)
@@ -100,10 +96,30 @@ export default function App() {
     }
   }, [])
 
+  // 后端就绪后，把服务器上的客户端状态一次性拉到内存缓存（含旧 localStorage 迁移）
   useEffect(() => {
-    if (backendReady) {
-      const legalDone = localStorage.getItem('cd_legal_accepted')
-      const onboardingDone = localStorage.getItem('cd_onboarding_done')
+    if (!backendReady || stateLoaded) return
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const attempt = async () => {
+      try {
+        await loadServerState()
+        if (!cancelled) setStateLoaded(true)
+      } catch {
+        // 加载失败（如 token 尚未就绪）：1 秒后重试，最多约 30 秒
+        if (!cancelled) timer = setTimeout(attempt, 1000)
+      }
+    }
+    initServerStorageLifecycle()
+    void attempt()
+    return () => { cancelled = true; if (timer) clearTimeout(timer) }
+  }, [backendReady, stateLoaded])
+
+  // 状态加载完成后再判定首启流程（全部读服务器缓存，同步）
+  useEffect(() => {
+    if (backendReady && stateLoaded) {
+      const legalDone = serverStorage.getItem('cd_legal_accepted')
+      const onboardingDone = serverStorage.getItem('cd_onboarding_done')
       if (!legalDone) {
         setFirstLaunchPhase('legal')
       } else if (!onboardingDone) {
@@ -112,11 +128,11 @@ export default function App() {
         setFirstLaunchPhase('done')
       }
     }
-  }, [backendReady])
+  }, [backendReady, stateLoaded])
 
   const handleLegalAccepted = () => {
-    localStorage.setItem('cd_legal_accepted', '1')
-    const onboardingDone = localStorage.getItem('cd_onboarding_done')
+    serverStorage.setItem('cd_legal_accepted', '1')
+    const onboardingDone = serverStorage.getItem('cd_onboarding_done')
     if (!onboardingDone) {
       setFirstLaunchPhase('onboarding')
     } else {
@@ -125,7 +141,7 @@ export default function App() {
   }
 
   const handleOnboardingComplete = () => {
-    localStorage.setItem('cd_onboarding_done', '1')
+    serverStorage.setItem('cd_onboarding_done', '1')
     setFirstLaunchPhase('done')
   }
 
@@ -173,7 +189,7 @@ export default function App() {
             <TitleBar />
           <BackendStatusBar />
           <div className="flex flex-1 overflow-hidden">
-            {checking ? (
+            {checking || (backendReady && !stateLoaded) ? (
               <LoadingScreen />
             ) : !backendReady ? (
               <ErrorScreen />
@@ -195,25 +211,26 @@ export default function App() {
                       <Routes>
                         <Route path="/" element={<Overview />} />
                         <Route path="/timeline" element={<Timeline />} />
-                        <Route path="/report" element={<Report />} />
-                        <Route path="/week-plan" element={<WeekPlan />} />
+                        <Route path="/report" element={<ReportsHub tab="generate" />} />
+                        <Route path="/history" element={<ReportsHub tab="history" />} />
+                        <Route path="/export" element={<ReportsHub tab="export" />} />
+                        <Route path="/week-plan" element={<PlanHub tab="schedule" />} />
                         <Route path="/todos" element={<Todos />} />
-                        <Route path="/heatmap" element={<Heatmap />} />
-                        <Route path="/calendar" element={<CalendarView />} />
                         <Route path="/apps" element={<AppRecords />} />
-                        <Route path="/app-tags" element={<AppTags />} />
-                        <Route path="/history" element={<HistoryReports />} />
                         <Route path="/agent" element={<AgentPage />} />
                         <Route path="/settings" element={<Settings />} />
                         <Route path="/profile" element={<DeepProfile />} />
                         <Route path="/deep-insight" element={<DeepProfile />} />
-                        <Route path="/countdowns" element={<Countdowns />} />
-                        <Route path="/dashboard" element={<Dashboard />} />
-                        <Route path="/goals" element={<Goals />} />
-                        <Route path="/export" element={<ExportCenter />} />
+                        <Route path="/goals" element={<PlanHub tab="goals" />} />
                         <Route path="/habits" element={<Habits />} />
                         <Route path="/health" element={<Health />} />
-                        <Route path="/daily-cards" element={<DailyCards />} />
+                        {/* 精简后合并的入口：旧链接重定向，避免书签失效 */}
+                        <Route path="/dashboard" element={<Navigate to="/" replace />} />
+                        <Route path="/daily-cards" element={<Navigate to="/report" replace />} />
+                        <Route path="/countdowns" element={<Navigate to="/goals" replace />} />
+                        <Route path="/heatmap" element={<Navigate to="/timeline" replace />} />
+                        <Route path="/calendar" element={<Navigate to="/timeline" replace />} />
+                        <Route path="/app-tags" element={<Navigate to="/apps" replace />} />
                         <Route path="*" element={<NotFoundPage />} />
                       </Routes>
                     </Suspense>

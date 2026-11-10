@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { BarChart3, TrendingUp, Calendar, Database, Download, Loader2, CheckCircle, FileText, ListTree, Upload, AlertCircle, Trash2, AlertTriangle } from 'lucide-react'
-import { getApiToken, getBaseUrl, ensureBaseUrl, importTogglCsv, importRescueTimeCsv, wipeAllData, type WipeResult } from '../api/client'
+import { getApiToken, resolveApiUrl, ensureBaseUrl, importTogglCsv, importRescueTimeCsv, wipeAllData, type WipeResult } from '../api/client'
 import { useToast } from '../components/Toast'
 
 // ── 下载状态 ──
@@ -10,7 +10,7 @@ type DownloadState = 'idle' | 'loading' | 'success' | 'error'
 async function downloadExport(endpoint: string, params: Record<string, string>): Promise<void> {
   await ensureBaseUrl()
   const token = await getApiToken()
-  const url = new URL(getBaseUrl() + endpoint)
+  const url = new URL(resolveApiUrl(endpoint), window.location.href)
   for (const [k, v] of Object.entries(params)) {
     if (v) url.searchParams.set(k, v)
   }

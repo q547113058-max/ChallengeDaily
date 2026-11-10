@@ -10,11 +10,12 @@ import {
   type SystemSession,
 } from '../api/client'
 import { useAsyncData, ApiErrorDisplay, formatDuration } from '../components/shared'
+import { serverStorage } from '../api/clientState'
 
 export default function Health() {
   const [selectedDate, setSelectedDate] = useState(dayjs().format('YYYY-MM-DD'))
-  // 引导卡片可见性：首次进入显示，用户点击"知道了"后 localStorage 标记不再提示
-  const [guided, setGuided] = useState<boolean>(() => !localStorage.getItem('cd_calibration_guided'))
+  // 引导卡片可见性：首次进入显示，用户点击"知道了"后由服务器标记不再提示
+  const [guided, setGuided] = useState<boolean>(() => !serverStorage.getItem('cd_calibration_guided'))
 
   const { data, loading, error, refresh } = useAsyncData<{
     coverage: HealthCoverage
@@ -65,7 +66,7 @@ export default function Health() {
             帮助你判断日报数据的可信度。覆盖率 ≥ 80% 表示数据高度可信。
           </p>
           <button
-            onClick={() => { localStorage.setItem('cd_calibration_guided', '1'); setGuided(false) }}
+            onClick={() => { serverStorage.setItem('cd_calibration_guided', '1'); setGuided(false) }}
             className="mt-2 text-xs text-cd-blue hover:underline"
           >
             知道了，不再提示

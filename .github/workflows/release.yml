@@ -1,0 +1,82 @@
+name: Release
+
+# 打 `vX.Y.Z` tag 后自动构建 Windows 安装包并创建 GitHub Release。
+# electron-builder 的 --publish always 会读取 package.json 的 build.publish
+# （provider: github）把 Setup.exe / Portable.exe / latest.yml / *.blockmap 一并上传。
+#
+# 前置条件：
+#   1. 仓库需为 public（feed 选的是「当前仓库转公开」），否则客户端拉不到私有 Release 资产。
+#   2. 本地 `client/package.json` 的 version 必须与 tag 一致（脚本会校验）。
+#   3. Settings → Actions → General → Workflow permissions 需为 "Read and write permissions"。
+#   4. 不打 tag 时可用 workflow_dispatch 手动跑一次（不会创建 Release，仅上传 artifacts）。
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '仅构建并上传 artifacts，不创建 Release'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-win:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Type check
+        working-directory: client
+        run: npx tsc --noEmit
+
+      - name: Verify tag matches package.json version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        working-directory: client
+        run: |
+          $pkg = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $tag = "${{ github.ref_name }}".TrimStart('v')
+          if ($pkg -ne $tag) {
+            throw "Version mismatch: package.json=$pkg tag=$tag. 请先运行 npm run bump 或修改 tag。"
+          }
+          Write-Host "Version OK: $pkg"
+
+      - name: Build frontend + create installer, publish to GitHub Release
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+        working-directory: client
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run publish:win
+
+      - name: Build frontend + create installer (dry run, no publish)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        working-directory: client
+        run: npm run build
+
+      - name: Upload build artifacts (always, for inspection)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChallengeDaily-win-x64
+          path: |
+            client/dist-electron/*.exe
+            client/dist-electron/*.yml
+            client/dist-electron/*.blockmap
+          if-no-files-found: warn
+          retention-days: 14

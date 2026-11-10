@@ -1,4 +1,9 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode, type Dispatch, type SetStateAction } from 'react'
+import { serverStorage, onServerStorageReady } from '../api/clientState'
+
+// 所有外观偏好存到服务器：serverStorage 与 localStorage 同形，读写保持同步，
+// 因此现有 useState 惰性初始化与 DOM 同步逻辑完全不用改。
+const storage = serverStorage
 
 type Theme = 'light' | 'dark' | 'auto'
 type EffectiveTheme = 'light' | 'dark'
@@ -97,7 +102,7 @@ export function useTheme() {
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => {
-    const saved = localStorage.getItem('cd_theme')
+    const saved = storage.getItem('cd_theme')
     if (saved === 'dark' || saved === 'light' || saved === 'auto') return saved
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   })
@@ -115,46 +120,83 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   // 解析后的有效主题：auto → 根据系统偏好；light/dark → 原值
   const effectiveTheme: EffectiveTheme = theme === 'auto' ? (systemDark ? 'dark' : 'light') : theme
   const [accentIndex, setAccentIndex] = useState(() => {
-    const saved = localStorage.getItem('cd_accent')
+    const saved = storage.getItem('cd_accent')
     const n = parseInt(saved || '0', 10)
     return n >= 0 && n < ACCENT_PRESETS.length ? n : 0
   })
   const [fontIndex, setFontIndex] = useState(() => {
-    const saved = localStorage.getItem('cd_font')
+    const saved = storage.getItem('cd_font')
     const n = parseInt(saved || '0', 10)
     return n >= 0 && n < FONT_PRESETS.length ? n : 0
   })
   const [sidebarTranslucent, setSidebarTranslucent] = useState(() => {
-    return localStorage.getItem('cd_sidebar_translucent') === '1'
+    return storage.getItem('cd_sidebar_translucent') === '1'
   })
   const [radiusIndex, setRadiusIndex] = useState(() => {
-    const saved = localStorage.getItem('cd_radius')
+    const saved = storage.getItem('cd_radius')
     const n = parseInt(saved || '1', 10)
     return n >= 0 && n < RADIUS_PRESETS.length ? n : 1
   })
   const [shadowIndex, setShadowIndex] = useState(() => {
-    const saved = localStorage.getItem('cd_shadow')
+    const saved = storage.getItem('cd_shadow')
     const n = parseInt(saved || '1', 10)
     return n >= 0 && n < SHADOW_PRESETS.length ? n : 1
   })
   const [opacityIndex, setOpacityIndex] = useState(() => {
-    const saved = localStorage.getItem('cd_opacity')
+    const saved = storage.getItem('cd_opacity')
     const n = parseInt(saved || '0', 10)
     return n >= 0 && n < OPACITY_PRESETS.length ? n : 0
   })
   const [skinIndex, setSkinIndex] = useState(() => {
-    const saved = localStorage.getItem('cd_skin')
+    const saved = storage.getItem('cd_skin')
     const n = parseInt(saved || '0', 10)
     return n >= 0 && n < SKIN_PRESETS.length ? n : 0
   })
   // P17-2: 自定义主色 + 字号缩放
   const [customAccent, setCustomAccentState] = useState<string | null>(() => {
-    return localStorage.getItem('cd_custom_accent') || null
+    return storage.getItem('cd_custom_accent') || null
   })
   const [fontScale, setFontScaleState] = useState<number>(() => {
-    const saved = parseFloat(localStorage.getItem('cd_font_scale') || '1')
+    const saved = parseFloat(storage.getItem('cd_font_scale') || '1')
     return isNaN(saved) ? 1 : Math.max(0.85, Math.min(1.25, saved))
   })
+
+  // 多窗口同步：别的窗口/设备改了外观后，服务器轮询会把新状态合并进缓存，
+  // 这里收到通知后重新把缓存应用到各 state（setter 只在值变化时触发）。
+  useEffect(() => {
+    return onServerStorageReady(() => {
+      const s = storage
+      const t = s.getItem('cd_theme')
+      if (t === 'dark' || t === 'light' || t === 'auto') setTheme(prev => prev === t ? prev : t)
+      const idx = (key: string, def: number, max: number, setter: Dispatch<SetStateAction<number>>) => {
+        const raw = s.getItem(key)
+        const n = parseInt(raw || String(def), 10)
+        setter(prev => {
+          const v = n >= 0 && n < max ? n : def
+          return prev === v ? prev : v
+        })
+      }
+      idx('cd_accent', 0, ACCENT_PRESETS.length, setAccentIndex)
+      idx('cd_font', 0, FONT_PRESETS.length, setFontIndex)
+      idx('cd_radius', 1, RADIUS_PRESETS.length, setRadiusIndex)
+      idx('cd_shadow', 1, SHADOW_PRESETS.length, setShadowIndex)
+      idx('cd_opacity', 0, OPACITY_PRESETS.length, setOpacityIndex)
+      idx('cd_skin', 0, SKIN_PRESETS.length, setSkinIndex)
+      setSidebarTranslucent(prev => {
+        const v = s.getItem('cd_sidebar_translucent') === '1'
+        return prev === v ? prev : v
+      })
+      setCustomAccentState(prev => {
+        const v = s.getItem('cd_custom_accent') || null
+        return prev === v ? prev : v
+      })
+      setFontScaleState(prev => {
+        const n = parseFloat(s.getItem('cd_font_scale') || '1')
+        const v = isNaN(n) ? 1 : Math.max(0.85, Math.min(1.25, n))
+        return prev === v ? prev : v
+      })
+    })
+  }, [])
 
   // 同步主题和 CSS 变量
   useEffect(() => {
@@ -164,7 +206,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     } else {
       root.classList.remove('dark')
     }
-    localStorage.setItem('cd_theme', theme)
+    storage.setItem('cd_theme', theme)
   }, [theme, effectiveTheme])
 
   // 同步主题色
@@ -185,7 +227,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     // purple 同步用于某些装饰元素
     root.style.setProperty('--cd-purple', effectiveTheme === 'dark' ? accentDark : accentLight)
     root.style.setProperty('--cd-purple-light', effectiveTheme === 'dark' ? preset.darkBg : preset.lightBg)
-    localStorage.setItem('cd_accent', String(accentIndex))
+    storage.setItem('cd_accent', String(accentIndex))
   }, [accentIndex, effectiveTheme, customAccent])
 
   // P17-2: 同步字号缩放
@@ -193,14 +235,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const root = document.documentElement
     root.style.setProperty('--cd-font-scale', String(fontScale))
     root.style.fontSize = `${100 * fontScale}%`
-    localStorage.setItem('cd_font_scale', String(fontScale))
+    storage.setItem('cd_font_scale', String(fontScale))
   }, [fontScale])
 
   // P17-2: 自定义主色 setter（带持久化）
   const setCustomAccent = useCallback((c: string | null) => {
     setCustomAccentState(c)
-    if (c) localStorage.setItem('cd_custom_accent', c)
-    else localStorage.removeItem('cd_custom_accent')
+    if (c) storage.setItem('cd_custom_accent', c)
+    else storage.removeItem('cd_custom_accent')
   }, [])
   const setFontScale = useCallback((n: number) => {
     const clamped = Math.max(0.85, Math.min(1.25, n))
@@ -211,28 +253,28 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const root = document.documentElement
     root.style.setProperty('--cd-font', FONT_PRESETS[fontIndex].value)
-    localStorage.setItem('cd_font', String(fontIndex))
+    storage.setItem('cd_font', String(fontIndex))
   }, [fontIndex])
 
   // 同步圆角
   useEffect(() => {
     const root = document.documentElement
     root.style.setProperty('--cd-radius', RADIUS_PRESETS[radiusIndex].value)
-    localStorage.setItem('cd_radius', String(radiusIndex))
+    storage.setItem('cd_radius', String(radiusIndex))
   }, [radiusIndex])
 
   // 同步阴影
   useEffect(() => {
     const root = document.documentElement
     root.style.setProperty('--cd-shadow', SHADOW_PRESETS[shadowIndex].value)
-    localStorage.setItem('cd_shadow', String(shadowIndex))
+    storage.setItem('cd_shadow', String(shadowIndex))
   }, [shadowIndex])
 
   // 同步界面透明度
   useEffect(() => {
     const root = document.documentElement
     root.style.setProperty('--cd-opacity', String(OPACITY_PRESETS[opacityIndex].value))
-    localStorage.setItem('cd_opacity', String(opacityIndex))
+    storage.setItem('cd_opacity', String(opacityIndex))
   }, [opacityIndex])
 
   // 同步侧边栏毛玻璃
@@ -251,7 +293,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       root.style.removeProperty('--cd-sidebar-bg')
       root.style.removeProperty('--cd-sidebar-blur')
     }
-    localStorage.setItem('cd_sidebar_translucent', sidebarTranslucent ? '1' : '0')
+    storage.setItem('cd_sidebar_translucent', sidebarTranslucent ? '1' : '0')
   }, [sidebarTranslucent, effectiveTheme, opacityIndex, skinIndex])
 
   // 同步皮肤（经典 / 翰墨）
@@ -262,7 +304,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     } else {
       root.classList.remove('skin-hanmo')
     }
-    localStorage.setItem('cd_skin', String(skinIndex))
+    storage.setItem('cd_skin', String(skinIndex))
   }, [skinIndex])
 
   // P14-1：三态循环 light → dark → auto → light

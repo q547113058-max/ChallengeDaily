@@ -2,7 +2,10 @@
 // 所有现有 `from '../api/client'` 导入无需修改
 
 // ── 核心基础设施 ──
-export { request, getBaseUrl, getApiToken, ensureBaseUrl, getBackendState, onBackendStateChange, _triggerDownload } from './core'
+export { request, getBaseUrl, resolveApiUrl, getApiToken, getApiTokenSync, ensureBaseUrl, getBackendState, onBackendStateChange, _triggerDownload } from './core'
+
+// 服务器状态存储（替代 localStorage）：启动引导 + 同步缓存
+export { serverStorage, loadServerState, isServerStorageLoaded, onServerStorageReady, initServerStorageLifecycle, getServerStorageError } from './clientState'
 
 // ── 常量 ──
 export { CATEGORY_COLORS, CATEGORIES } from './constants'
@@ -34,5 +37,5 @@ export type { Todo, TaskLevel, TodoV2, MonthTask, MonthPlanData, WeekPlanData, W
 
 
 // ── 集成功能 ──
-export { getWebhooks, addWebhook, deleteWebhook, testWebhook, toggleWebhook, triggerAutoReport, getAutoReportConfig, updateAutoReportConfig, importTogglCsv, importRescueTimeCsv, wipeAllData, getSeason, getSeasonHistory, downloadBackup, getHealthCoverage, getHealthSystemEvents, getSamplingDeviation, getQuote, getCountdowns, createCountdown, deleteCountdown, getGoals, createGoal, updateGoal, deleteGoal, getMoodHeatmap, getGoalProgress, getGoalSummary, previewImport, executeImport, getHabits, createHabit, logHabit, deleteHabit, updateHabit, autoCheckHabits, getHabitRecommendations, getHabitStats, getDailyCard, getDailyCardText, getPreferences, updatePreferences, resetPreferences, getAuditLogs, getAuditStats, cleanupAuditLogs, listCalendarSubscriptions, addCalendarSubscription, updateCalendarSubscription, removeCalendarSubscription, refreshCalendarAll, getCalendarTodayEvents, getCalendarUpcomingEvents, getCalendarCurrentMeeting, listGitRepositories, addGitRepository, removeGitRepository, getGitCodeReport, getGitWeeklyReport } from './integration'
-export type { Webhook, AutoReportConfig, ImportResult, WipeResult, SeasonAchievement, SeasonData, SeasonHistoryItem, SystemSession, HealthCoverage, HealthSystemEvents, SamplingDeviation, Countdown, Goal, MoodEntry, ImportPreview, ImportResultV2, Habit, HabitLog, HabitSuggestion, HabitStats, DailyCardData, UserPreferences, AuditLog, AuditStats, CalendarSubscription, CalendarEvent, GitRepository, GitCodeReport } from './integration'
+export { getWebhooks, addWebhook, deleteWebhook, testWebhook, toggleWebhook, triggerAutoReport, getAutoReportConfig, updateAutoReportConfig, importTogglCsv, importRescueTimeCsv, wipeAllData, downloadBackup, getHealthCoverage, getHealthSystemEvents, getSamplingDeviation, getQuote, getGoals, createGoal, updateGoal, deleteGoal, getMoodHeatmap, getGoalProgress, getGoalSummary, previewImport, executeImport, getHabits, createHabit, logHabit, deleteHabit, updateHabit, autoCheckHabits, getHabitRecommendations, getHabitStats, getPreferences, updatePreferences, resetPreferences, getAuditLogs, getAuditStats, cleanupAuditLogs, listCalendarSubscriptions, addCalendarSubscription, updateCalendarSubscription, removeCalendarSubscription, refreshCalendarAll, getCalendarTodayEvents, getCalendarUpcomingEvents, getCalendarCurrentMeeting, listGitRepositories, addGitRepository, removeGitRepository, getGitCodeReport, getGitWeeklyReport } from './integration'
+export type { Webhook, AutoReportConfig, ImportResult, WipeResult, SystemSession, HealthCoverage, HealthSystemEvents, SamplingDeviation, Goal, MoodEntry, ImportPreview, ImportResultV2, Habit, HabitLog, HabitSuggestion, HabitStats, UserPreferences, AuditLog, AuditStats, CalendarSubscription, CalendarEvent, GitRepository, GitCodeReport } from './integration'

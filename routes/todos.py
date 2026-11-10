@@ -9,6 +9,10 @@ bp = Blueprint('todos', __name__, url_prefix='/api/todos')
 _VALID_TASK_LEVELS = ('month', 'week', 'day')
 _VALID_CATEGORIES = ('开发', '测试', '运维', '数据分析', '产品', '设计',
                      '管理', '文档', '会议', '沟通', '学习', '生活')
+# 待办支持的模式：计时型 / 目标型。
+# 「习惯型」已下线，习惯统一由 /api/habits 管理（历史数据仍保留 mode=habit 可读）。
+_VALID_MODES = ('timer', 'goal')
+_RETIRED_MODES = ('habit',)
 # target_min 合理区间：5-480 分钟
 _MIN_TARGET_MIN = 5
 _MAX_TARGET_MIN = 480
@@ -46,11 +50,17 @@ def create_todo():
     target_min = _safe_int(data.get('target_min', 25), 25)
     if target_min < _MIN_TARGET_MIN or target_min > _MAX_TARGET_MIN:
         return jsonify({"error": f"target_min 必须在 {_MIN_TARGET_MIN}-{_MAX_TARGET_MIN} 分钟之间"}), 400
+    # mode 枚举校验：习惯型已下线
+    mode = data.get('mode', 'timer')
+    if mode in _RETIRED_MODES:
+        return jsonify({"error": "习惯型待办已下线，请改用「习惯追踪」(/api/habits)"}), 410
+    if mode not in _VALID_MODES:
+        return jsonify({"error": f"mode 必须是 {','.join(_VALID_MODES)} 之一"}), 400
     try:
         todo_id = db.insert_todo(
             title=title,
             category=category,
-            mode=data.get('mode', 'timer'),
+            mode=mode,
             target_min=target_min,
             repeat_type=data.get('repeat_type', 'none'),
             repeat_days=data.get('repeat_days', ''),
@@ -72,6 +82,11 @@ def create_todo():
 @bp.route('/<int:todo_id>', methods=['PUT'])
 def update_todo_route(todo_id):
     data = request.get_json(force=True, silent=True) or {}
+    mode = data.get('mode')
+    if mode in _RETIRED_MODES:
+        return jsonify({"error": "习惯型待办已下线，请改用「习惯追踪」(/api/habits)"}), 410
+    if mode is not None and mode not in _VALID_MODES:
+        return jsonify({"error": f"mode 必须是 {','.join(_VALID_MODES)} 之一"}), 400
     # 如果标记为完成，记录完成时间
     if data.get('status') == 'completed' and 'completed_at' not in data:
         data['completed_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')

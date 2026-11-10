@@ -1,8 +1,12 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
+import { X, Tags } from 'lucide-react'
 import { getAppUsage, getTodayStats, getAppIconUrl, CATEGORY_COLORS, type AppUsage, type TodayStats } from '../api/client'
 import { CategoryFilter, formatDuration, useAsyncData, ApiErrorDisplay } from '../components/shared'
 import dayjs from 'dayjs'
+
+// 应用标签从独立页面收进「应用记录」的弹窗里
+const AppTags = lazy(() => import('./AppTags'))
 
 export default function AppRecords() {
   const [selectedDate, setSelectedDate] = useState(dayjs().format('YYYY-MM-DD'))
@@ -10,6 +14,8 @@ export default function AppRecords() {
   const [iconUrls, setIconUrls] = useState<Record<string, string>>({})
   // 展开的内容维度 app_name_raw
   const [expandedApp, setExpandedApp] = useState<string | null>(null)
+  // 应用标签弹窗
+  const [showTags, setShowTags] = useState(false)
 
   const { data, loading, error, refresh } = useAsyncData<{ apps: AppUsage[]; stats: TodayStats | null }>(
     async () => {
@@ -54,13 +60,48 @@ export default function AppRecords() {
     <div className="animate-fade-in space-y-5">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold text-cd-text">应用记录</h1>
-        <input
-          type="date"
-          value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
-          className="bg-cd-bg-secondary text-cd-text border border-cd-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-cd-green transition-colors"
-        />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowTags(true)}
+            className="flex items-center gap-1 rounded-lg border border-cd-border px-3 py-1.5 text-xs text-cd-text-secondary transition-colors hover:bg-cd-hover hover:text-cd-text"
+          >
+            <Tags size={13} />
+            应用标签
+          </button>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="bg-cd-bg-secondary text-cd-text border border-cd-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-cd-green transition-colors"
+          />
+        </div>
       </div>
+
+      {/* ─── 应用标签弹窗（原 /app-tags 独立页）────────── */}
+      {showTags && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6"
+          onClick={() => setShowTags(false)}
+        >
+          <div
+            className="max-h-[85vh] w-full max-w-4xl overflow-auto rounded-xl border border-cd-border bg-cd-bg p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-cd-text">应用标签与分类规则</h2>
+              <button
+                onClick={() => setShowTags(false)}
+                className="rounded-lg p-1 text-cd-text-secondary hover:bg-cd-hover hover:text-cd-text"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <Suspense fallback={<div className="py-8 text-sm text-cd-text-secondary">加载中…</div>}>
+              <AppTags />
+            </Suspense>
+          </div>
+        </div>
+      )}
 
       {/* ─── 分类筛选 ──────────────────────── */}
       <CategoryFilter selected={filterCategory} onChange={setFilterCategory} categories={activeCategories} />
@@ -135,13 +176,12 @@ export default function AppRecords() {
                             {app.window_count} 个内容
                           </span>
                         )}
-                        <Link
-                          to="/app-tags"
-                          onClick={(e) => e.stopPropagation()}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setShowTags(true) }}
                           className="opacity-0 group-hover:opacity-100 text-[10px] text-cd-green hover:underline transition-opacity"
                         >
                           编辑标签
-                        </Link>
+                        </button>
                       </div>
                       <div className="progress-bar">
                         <div

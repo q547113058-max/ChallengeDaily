@@ -151,7 +151,6 @@ def export_json():
             'diary': db.get_diary(target_date),
             'todos': db.get_todos(),
             'achievements': db.get_achievements(),
-            'countdowns': db.get_countdowns(),
         }
         return jsonify(data)
     except Exception as e:
@@ -825,6 +824,15 @@ def wipe_all_data():
         except Exception as e:
             logger.warning(f"删除截图目录失败: {e}")
         # 3. 删除报告文件
+        client_state_removed = 0
+        try:
+            from config import DATA_DIR as _DATA_DIR
+            state_path = _DATA_DIR / "client_state.json"
+            if state_path.exists():
+                state_path.unlink()
+                client_state_removed = 1
+        except Exception as e:
+            logger.warning(f"删除客户端状态文件失败: {e}")
         reports_removed = 0
         try:
             if REPORT_DIR.exists():
@@ -837,7 +845,7 @@ def wipe_all_data():
                             pass
         except Exception as e:
             logger.warning(f"删除报告目录失败: {e}")
-        logger.warning(f"用户触发了数据自毁：DB表={deleted_counts}, 截图={screenshots_removed}, 报告={reports_removed}")
+        logger.warning(f"用户触发了数据自毁：DB表={deleted_counts}, 截图={screenshots_removed}, 报告={reports_removed}, 客户端状态={client_state_removed}")
         return jsonify({
             "status": "ok",
             "message": "所有用户数据已永久删除",
@@ -845,6 +853,7 @@ def wipe_all_data():
                 "db_tables": deleted_counts,
                 "screenshots": screenshots_removed,
                 "reports": reports_removed,
+                "client_state": client_state_removed,
             },
         })
     except Exception as e:

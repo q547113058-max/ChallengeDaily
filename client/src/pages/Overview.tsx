@@ -42,12 +42,12 @@ function getDisplayAppName(appName: string): string {
   return appName.replace(/\.exe$/i, '')
 }
 
-/** 卡片标题栏：标题在左，"更多" 在右，hover 显示箭头 */
+/** 卡片标题栏：标题在左，"更多" 在右，hover 显示箭头（无 linkTo 时不显示"更多"） */
 function CardHeader({ title, subtitle, linkTo, onNavigate }: {
   title: string
   subtitle?: string
-  linkTo: string
-  onNavigate: (path: string) => void
+  linkTo?: string
+  onNavigate?: (path: string) => void
 }) {
   return (
     <div className="flex items-center justify-between mb-4">
@@ -55,13 +55,15 @@ function CardHeader({ title, subtitle, linkTo, onNavigate }: {
         {title}
         {subtitle && <span className="text-cd-text-tertiary font-normal ml-1.5">{subtitle}</span>}
       </h3>
-      <button
-        onClick={() => onNavigate(linkTo)}
-        className="flex items-center gap-1 text-xs text-cd-text-tertiary hover:text-cd-green transition-colors group"
-      >
-        更多
-        <ArrowRight size={12} className="opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
-      </button>
+      {linkTo && onNavigate && (
+        <button
+          onClick={() => onNavigate(linkTo)}
+          className="flex items-center gap-1 text-xs text-cd-text-tertiary hover:text-cd-green transition-colors group"
+        >
+          更多
+          <ArrowRight size={12} className="opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
+        </button>
+      )}
     </div>
   )
 }
@@ -307,10 +309,10 @@ export default function Overview() {
           </div>
         </div>
 
-        {/* 快捷入口：查看完整进度仪表盘 */}
+        {/* 快捷入口 */}
         <div className="flex items-center gap-3 mt-5">
-          <a href="#/dashboard" className="text-sm text-cd-green hover:underline flex items-center gap-1">
-            <TrendingUp size={14} /> 查看完整进度仪表盘
+          <a href="#/timeline" className="text-sm text-cd-green hover:underline flex items-center gap-1">
+            <TrendingUp size={14} /> 查看完整时间线
           </a>
           <span className="text-cd-text-tertiary">·</span>
           <a href="#/week-plan" className="text-sm text-cd-green hover:underline flex items-center gap-1">
@@ -366,7 +368,7 @@ export default function Overview() {
 
         {/* 右：3天热力图 */}
         <div className="flex flex-col">
-          <CardHeader title="近三天活动热力图" linkTo="/heatmap" onNavigate={navigate} />
+          <CardHeader title="近三天活动热力图" />
           <div className="flex-1 bg-cd-card border border-cd-border rounded-xl p-4 flex flex-col justify-center">
             <div className="grid grid-cols-12 gap-1 pl-[52px] mb-1.5">
               {Array.from({ length: 12 }, (_, b) => (
@@ -490,7 +492,7 @@ export default function Overview() {
 
         {/* 右：个人节奏 */}
         <div className="col-span-1 flex flex-col">
-          <CardHeader title="个人节奏" linkTo="/heatmap" onNavigate={navigate} />
+          <CardHeader title="个人节奏" />
           <div className="flex-1 bg-cd-card border border-cd-border rounded-xl p-5">
             {rhythmData.length > 0 ? (
               <div className="space-y-3">

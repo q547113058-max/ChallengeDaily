@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { getBaseUrl, getApiToken, ensureBaseUrl } from '../api/client'
+import { resolveApiUrl, getApiToken, ensureBaseUrl } from '../api/client'
 
 export interface SSEEvent {
   type: string
@@ -31,7 +31,7 @@ export function useEventStream() {
       timerRef.current = setTimeout(connect, 1000)
       return
     }
-    const url = `${getBaseUrl()}/api/events/stream?token=${encodeURIComponent(token)}`
+    const url = resolveApiUrl(`/api/events/stream?token=${encodeURIComponent(token)}`)
     const es = new EventSource(url)
     esRef.current = es
 

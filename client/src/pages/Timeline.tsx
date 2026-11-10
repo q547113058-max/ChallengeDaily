@@ -1,12 +1,15 @@
-import { useState, useEffect, memo, useMemo, useRef } from 'react'
+import { useState, useEffect, memo, useMemo, useRef, lazy, Suspense } from 'react'
 import { getActivities, searchActivities, deleteActivity, undoDeleteActivity, getAppIconUrl, CATEGORY_COLORS, CATEGORIES, type Activity, type VisibleWindow } from '../api/client'
 import { CategoryFilter, useAsyncData, ApiErrorDisplay, useNewIds, RefreshIndicator } from '../components/shared'
 import { useToast } from '../components/Toast'
 import { useEventStream } from '../hooks/useEventStream'
 import ActivityCreateModal from '../components/ActivityCreateModal'
 import ActivityEditModal from '../components/ActivityEditModal'
-import { Search, Pencil, X, Plus, Trash2, Loader2 } from 'lucide-react'
+import { Search, Pencil, X, Plus, Trash2, Loader2, CalendarDays, List } from 'lucide-react'
 import dayjs from 'dayjs'
+
+// 日历视图并入时间线，作为一个显示模式而不是独立页面
+const CalendarView = lazy(() => import('./CalendarView'))
 
 // 图标缓存 TTL（7 天）
 const ICON_CACHE_TTL = 7 * 24 * 60 * 60 * 1000
@@ -22,6 +25,11 @@ export default function Timeline() {
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null)
   // 手动补录
   const [showAdd, setShowAdd] = useState(false)
+  // 显示模式：时间线 / 日历（原 /calendar 独立页已并入）
+  // 支持 #/timeline?view=calendar 直接进入日历模式
+  const [view, setView] = useState<'list' | 'calendar'>(
+    typeof window !== 'undefined' && window.location.hash.includes('view=calendar') ? 'calendar' : 'list',
+  )
 
   const { data: activitiesData, loading, error, refresh: refreshList, refreshing } = useAsyncData(
     () => getActivities(selectedDate),
@@ -180,6 +188,41 @@ export default function Timeline() {
     setSearchQuery('')
   }
 
+  const viewToggle = (
+    <div className="flex items-center gap-0.5 rounded-lg border border-cd-border p-0.5">
+      <button
+        onClick={() => setView('list')}
+        className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors ${
+          view === 'list' ? 'bg-cd-selected text-cd-text' : 'text-cd-text-secondary hover:text-cd-text'
+        }`}
+      >
+        <List size={13} /> 时间线
+      </button>
+      <button
+        onClick={() => setView('calendar')}
+        className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors ${
+          view === 'calendar' ? 'bg-cd-selected text-cd-text' : 'text-cd-text-secondary hover:text-cd-text'
+        }`}
+      >
+        <CalendarDays size={13} /> 日历
+      </button>
+    </div>
+  )
+
+  if (view === 'calendar') {
+    return (
+      <div className="space-y-5 content-stable">
+        <div className="flex items-center justify-between">
+          <h1 className="text-lg font-semibold text-cd-text">工作时间线</h1>
+          {viewToggle}
+        </div>
+        <Suspense fallback={<div className="py-10 text-sm text-cd-text-secondary">加载中…</div>}>
+          <CalendarView />
+        </Suspense>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-5 content-stable">
       {/* ─── 头部 ─────────────────────────── */}
@@ -189,6 +232,7 @@ export default function Timeline() {
           <RefreshIndicator refreshing={refreshing} />
         </div>
         <div className="flex items-center gap-2">
+          {viewToggle}
           <button
             onClick={() => setShowAdd(true)}
             className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-cd-green text-white hover:bg-cd-green-dark transition-colors"

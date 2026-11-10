@@ -1,10 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { getStatus, getSettings, updateSettings, testAiConnection, downloadExportActivities, downloadExportAppUsage, getBackupInfo, downloadBackup, restoreBackup, previewImport, executeImport, request, type CollectorStatus, type BackendSettings } from '../api/client'
 import { ToggleSwitch, useTimeout, useAsyncData, ApiErrorDisplay } from '../components/shared'
 import { useToast } from '../components/Toast'
 import { useTheme, ACCENT_PRESETS, FONT_PRESETS, RADIUS_PRESETS, SHADOW_PRESETS, OPACITY_PRESETS, SKIN_PRESETS } from '../components/ThemeContext'
 import { AppLockSettings } from '../components/AppLock'
-import { Shield, Bot, Eye, EyeOff, Server, FileText, ListFilter, Download, Loader2, CheckCircle, XCircle, RotateCcw, Database, Upload, HardDrive, Info, Palette, Type, GlassWater, Moon, Rocket, Search, Calendar, GitBranch, Heart } from 'lucide-react'
+import UpdateChecker from '../components/UpdateChecker'
+import BackendConnectionSettings from '../components/BackendConnectionSettings'
+import { Shield, Bot, Eye, EyeOff, Server, FileText, ListFilter, Download, Loader2, CheckCircle, XCircle, RotateCcw, Database, Upload, HardDrive, Info, Palette, Type, GlassWater, Moon, Rocket, Search, Calendar, GitBranch, Heart, Activity, Brain } from 'lucide-react'
 import dayjs from 'dayjs'
 import CalendarSubscriptionManager from '../components/CalendarSubscriptionManager'
 import GitRepoManager from '../components/GitRepoManager'
@@ -1096,6 +1099,33 @@ export default function Settings() {
         </div>
       </section>
 
+      {/* ─── 数据质量（原「数据校准」「深度画像」两个一级页收进这里）──────── */}
+      <section className="card space-y-3">
+        <div className="flex items-center gap-2">
+          <Database size={16} className="text-cd-green" />
+          <h2 className="text-sm font-semibold text-cd-text">数据质量</h2>
+        </div>
+        <p className="text-xs text-cd-text-tertiary">
+          采集覆盖率、采样偏差、系统事件校准，以及基于学术框架的个人工作画像。
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            to="/health"
+            className="flex items-center gap-1.5 rounded-lg border border-cd-border px-3 py-1.5 text-xs text-cd-text-secondary transition-colors hover:bg-cd-hover hover:text-cd-text"
+          >
+            <Activity size={13} />
+            数据校准与可信度
+          </Link>
+          <Link
+            to="/profile"
+            className="flex items-center gap-1.5 rounded-lg border border-cd-border px-3 py-1.5 text-xs text-cd-text-secondary transition-colors hover:bg-cd-hover hover:text-cd-text"
+          >
+            <Brain size={13} />
+            深度画像
+          </Link>
+        </div>
+      </section>
+
       {/* ─── 关于 ──────────────────────────────── */}
       <section
         id="settings-section-关于"
@@ -1114,6 +1144,10 @@ export default function Settings() {
             </p>
           </div>
         </div>
+
+        <UpdateChecker appVersion={appVersion} />
+
+        <BackendConnectionSettings />
 
         <div className="text-xs text-cd-text-tertiary space-y-1">
           <p>• 本软件为免费开源软件，数据完全本地存储</p>

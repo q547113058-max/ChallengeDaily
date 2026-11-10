@@ -1,5 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Lock, Unlock, Fingerprint, Eye, EyeOff, ShieldCheck } from 'lucide-react'
+import { serverStorage, isServerStorageLoaded, onServerStorageReady } from '../api/clientState'
+
+// 应用锁配置（含密码哈希）统一存到服务器，浏览器本地不再保留。
+const storage = serverStorage
 
 // 应用级隐私锁：密码 + Windows Hello + 闲置自动锁 + 模块级锁
 const LOCK_STORAGE_KEY = 'cd_app_lock_v1'
@@ -38,14 +42,14 @@ async function hashPassword(pw: string): Promise<string> {
 
 function loadConfig(): LockConfig {
   try {
-    const raw = localStorage.getItem(LOCK_STORAGE_KEY)
+    const raw = storage.getItem(LOCK_STORAGE_KEY)
     if (!raw) return DEFAULT_CONFIG
     return { ...DEFAULT_CONFIG, ...JSON.parse(raw) }
   } catch { return DEFAULT_CONFIG }
 }
 
 function saveConfig(cfg: LockConfig) {
-  localStorage.setItem(LOCK_STORAGE_KEY, JSON.stringify(cfg))
+  storage.setItem(LOCK_STORAGE_KEY, JSON.stringify(cfg))
 }
 
 // 闲置检测 hook
@@ -74,6 +78,11 @@ export function LockScreen({ onUnlock }: { onUnlock: () => void }) {
   const [error, setError] = useState('')
   const [cfg, setCfg] = useState(loadConfig())
   const [locked, setLocked] = useState(true)
+
+  useEffect(() => {
+    if (isServerStorageLoaded()) { setCfg(loadConfig()); return }
+    return onServerStorageReady(() => setCfg(loadConfig()))
+  }, [])
 
   const tryHello = useCallback(async () => {
     if (!window.electronAPI?.windowsHello) {
@@ -155,6 +164,13 @@ export function AppLockSettings() {
   const [newPw, setNewPw] = useState('')
   const [confirmPw, setConfirmPw] = useState('')
   const [msg, setMsg] = useState('')
+
+  // 设置页在状态加载后才会渲染，但组件可能被提前挂载，加载完成时重新
+  // 从服务器缓存读一次，保证显示的是最终配置。
+  useEffect(() => {
+    if (isServerStorageLoaded()) { setCfg(loadConfig()); return }
+    return onServerStorageReady(() => setCfg(loadConfig()))
+  }, [])
 
   const update = (patch: Partial<LockConfig>) => {
     const next = { ...cfg, ...patch }
@@ -250,13 +266,27 @@ export function AppLockSettings() {
 // 主 Hook：在 App.tsx 使用
 export function useAppLock() {
   const [cfg, setCfg] = useState(loadConfig())
+  // 服务器状态是否就绪：未就绪时由 App 的 LoadingScreen 遮挡，
+  // 这里不提前解锁，避免应用锁配置因异步加载被短暂绕过。
+  const [ready, setReady] = useState(isServerStorageLoaded())
   const [locked, setLocked] = useState(false)
 
-  // 启动时若启用则锁定
+  // 配置来自服务器缓存：分别处理「尚未加载」和「已加载」两种情况。
   useEffect(() => {
-    const c = loadConfig()
-    setCfg(c)
-    if (c.enabled) setLocked(true)
+    const apply = () => {
+      const c = loadConfig()
+      setCfg(c)
+      setReady(true)
+      if (c.enabled) setLocked(true)
+      else setLocked(false)
+    }
+    if (isServerStorageLoaded()) {
+      apply()
+      return
+    }
+    // 订阅加载完成事件；期间 ready=false，由 App 统一显示加载态
+    const off = onServerStorageReady(apply)
+    return off
   }, [])
 
   // 闲置自动锁
@@ -266,7 +296,8 @@ export function useAppLock() {
 
   const unlock = useCallback(() => setLocked(false), [])
 
-  return { locked, unlock, cfg }
+  // 配置未就绪时不渲染锁屏，但也不算「已解锁」——交给 App 的加载态门禁
+  return { locked: ready && locked, unlock, cfg, ready }
 }
 
 // 模块级锁检查

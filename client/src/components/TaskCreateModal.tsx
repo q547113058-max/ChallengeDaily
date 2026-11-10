@@ -155,7 +155,7 @@ export default function TaskCreateModal({ open, onClose, onCreated, defaults }: 
           {([
             { key: 'timer' as TaskMode, icon: Timer, label: '计时', desc: '专注计时' },
             { key: 'goal' as TaskMode, icon: Target, label: '目标', desc: '累计到目标' },
-            { key: 'habit' as TaskMode, icon: RotateCw, label: '习惯', desc: '每日打卡' },
+            // 「习惯」不再作为待办的一种模式：习惯统一在「习惯追踪」页管理
           ]).map(m => (
             <button
               key={m.key}

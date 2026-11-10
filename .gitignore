@@ -25,6 +25,7 @@ out/
 # Virtual environments
 venv/
 .venv/
+.venv312/
 env/
 
 # IDE
@@ -50,8 +51,8 @@ desktop.ini
 .env.local
 .env.*.local
 
-# GitHub workflows (Token无workflow scope, 无法推送包含此目录的commit)
-.github/
+# GitHub Actions 发版工作流（本目录需入库）
+# 注意：不要在此目录放置任何密钥 / token，CI 使用仓库内置 GITHUB_TOKEN
 
 # Temp files
 .temp/

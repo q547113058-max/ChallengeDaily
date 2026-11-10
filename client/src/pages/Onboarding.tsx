@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { updateSettings, testAiConnection, updatePreferences } from '../api/client'
+import { serverStorage } from '../api/clientState'
 import {
   Sparkles,
   Bot,
@@ -122,9 +123,11 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     } catch (err) {
       console.error('Failed to save preferences:', err)
     }
-    localStorage.setItem('cd_onboarding_done', '1')
+    // 首启标记存到服务器；App.tsx 的 onComplete 回调仍会再写一次，
+    // serverStorage 的防抖合并会把它压成一次请求。
+    serverStorage.setItem('cd_onboarding_done', '1')
     // 记录新手引导完成时间，用于渐进揭示
-    localStorage.setItem('cd_onboarding_done_at', new Date().toISOString())
+    serverStorage.setItem('cd_onboarding_done_at', new Date().toISOString())
     onComplete()
   }
 

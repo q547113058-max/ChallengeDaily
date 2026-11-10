@@ -3,40 +3,29 @@ import {
   LayoutDashboard,
   FileText,
   Clock,
-  Grid3X3,
   AppWindow,
   History,
   Bot,
-  Tags,
-  Shield,
   Settings as SettingsIcon,
   HelpCircle,
   Pause,
   Play,
   Loader2,
-  Brain,
-  Activity,
-  Sparkles,
   CheckSquare,
-  Calendar,
   CalendarDays,
-  CalendarRange,
   Flame,
   Download,
-  TrendingUp,
   Target,
   ChevronDown,
-  BarChart3,
   type LucideIcon,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { getStatus, pauseCollector, resumeCollector, getTodayStats, type CollectorStatus, type TodayStats } from '../api/client'
 import { useTheme } from './ThemeContext'
 
-// ─── 整合后的导航结构 ──────────────────────────────
-// 设计原则：从用户视角出发，将 32 个散乱入口整合为 3 组 + 设置
-// 每组最多 4 个父项，相似功能用折叠子菜单合并
-// 保留所有原有路由，仅重组导航入口
+// ─── 精简后的导航结构 ──────────────────────────────
+// 设计原则：一个功能只有一个出口。报告三合一（生成/历史/导出）、
+// 日历并入时间线、应用标签并入应用记录；数据看板/每日卡片/倒数日/热力图下线。
 
 type NavChild = { to: string; icon: LucideIcon; label: string; desc?: string }
 type NavParent = {
@@ -47,36 +36,9 @@ type NavParent = {
   children?: NavChild[]
 }
 
-// ─── 工作流导向导航（参考 GOALDAY/Notion/飞书）─────────────────
-// 设计原则：按「计划 → 执行 → 统计 → 成长」自然工作流组织
-// 用户心智路径：先规划（计划组）→ 再做事（执行组）→ 看结果（统计组）→ 持续优化（成长组）
 const NAV_GROUPS: { label: string; items: NavParent[] }[] = [
   {
-    // 计划组：目标拆解与时间安排（参考 GOALDAY 计划管理 + Notion 数据库视图）
-    label: '计划',
-    items: [
-      {
-        to: '/week-plan',
-        icon: CalendarDays,
-        label: '计划排期',
-        desc: '年/月/周/日四视图，任务拆解与拖拽分配',
-      },
-      {
-        to: '/goals',
-        icon: Target,
-        label: '长期目标',
-        desc: '年度目标管理与进度追踪',
-      },
-      {
-        to: '/countdowns',
-        icon: Calendar,
-        label: '倒数日',
-        desc: '重要节点倒计时',
-      },
-    ],
-  },
-  {
-    // 执行组：今日做事
+    // 执行组：今天做什么
     label: '执行',
     items: [
       {
@@ -91,17 +53,39 @@ const NAV_GROUPS: { label: string; items: NavParent[] }[] = [
         label: '待办清单',
         desc: '今日待办与子任务树形管理',
       },
+      {
+        to: '/habits',
+        icon: Flame,
+        label: '习惯追踪',
+        desc: '每日习惯打卡与连续天数',
+      },
     ],
   },
   {
-    // 统计组：数据洞察与日报（参考小黑日报助手自动生成）
+    // 计划组：目标 → 周 → 日，一个入口两个页签
+    label: '计划',
+    items: [
+      {
+        to: '/week-plan',
+        icon: CalendarDays,
+        label: '目标与排期',
+        desc: '长期目标与周/日排期',
+        children: [
+          { to: '/week-plan', icon: CalendarDays, label: '计划排期' },
+          { to: '/goals', icon: Target, label: '长期目标' },
+        ],
+      },
+    ],
+  },
+  {
+    // 统计组：记录与产出（报告三合一，时间线含日历）
     label: '统计',
     items: [
       {
         to: '/report',
         icon: FileText,
         label: '报告中心',
-        desc: '自动日报/周报/月报生成',
+        desc: '生成日报/周报/月报、历史与导出',
         children: [
           { to: '/report', icon: FileText, label: '生成报告' },
           { to: '/history', icon: History, label: '历史报告' },
@@ -109,51 +93,24 @@ const NAV_GROUPS: { label: string; items: NavParent[] }[] = [
         ],
       },
       {
-        to: '/daily-cards',
-        icon: Sparkles,
-        label: '每日卡片',
-        desc: '当日完成数据自动汇总回顾',
+        to: '/timeline',
+        icon: Clock,
+        label: '时间线',
+        desc: '逐条记录与日历视图',
       },
       {
-        to: '/dashboard',
-        icon: BarChart3,
-        label: '数据看板',
-        desc: '可视化分析工作数据',
-        children: [
-          { to: '/dashboard', icon: TrendingUp, label: '进度仪表盘' },
-          { to: '/timeline', icon: Clock, label: '工作时间线' },
-          { to: '/heatmap', icon: Grid3X3, label: '时段热力图' },
-          { to: '/calendar', icon: CalendarRange, label: '日历视图' },
-          { to: '/apps', icon: AppWindow, label: '应用记录' },
-        ],
-      },
-    ],
-  },
-  {
-    // 成长组：习惯养成与自我提升
-    label: '成长',
-    items: [
-      {
-        to: '/habits',
-        icon: Flame,
-        label: '习惯追踪',
-        desc: '每日习惯打卡与连续天数',
-      },
-      {
-        to: '/profile',
-        icon: Brain,
-        label: '深度画像',
-        desc: '个人工作风格分析',
+        to: '/apps',
+        icon: AppWindow,
+        label: '应用记录',
+        desc: '应用时长、标签与分类规则',
       },
     ],
   },
 ]
 
 const MORE_NAV = [
-  { to: '/app-tags',  icon: Tags,         label: '应用标签' },
-  { to: '/health',    icon: Activity,     label: '数据校准' },
-  { to: '/agent',     icon: Bot,          label: '智能代理' },
-  { to: '/settings',  icon: SettingsIcon, label: '设置' },
+  { to: '/agent', icon: Bot, label: '智能代理' },
+  { to: '/settings', icon: SettingsIcon, label: '设置' },
 ]
 
 export default function Sidebar() {

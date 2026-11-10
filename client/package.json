@@ -1,12 +1,14 @@
 {
   "name": "challenge-daily",
-  "version": "3.4.1",
+  "version": "3.4.2",
   "description": "ChallengeDaily Windows - AI Work Daily Report Assistant",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "build": "vite build && electron-builder",
+    "build:dir": "vite build && electron-builder --dir",
+    "publish:win": "vite build && electron-builder --win --publish always",
     "bump": "node scripts/bump-version.cjs",
     "preview": "vite preview",
     "start": "electron .",
@@ -69,7 +71,7 @@
     "appId": "com.challenge.daily",
     "productName": "ChallengeDaily",
     "directories": {
-      "output": "dist-electron-tmp6"
+      "output": "dist-electron"
     },
     "files": [
       "dist/**/*",
@@ -110,7 +112,14 @@
     "portable": {
       "artifactName": "ChallengeDaily-${version}-Portable.${ext}"
     },
-    "publish": null,
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "q547113058-max",
+        "repo": "ChallengeDaily",
+        "releaseType": "release"
+      }
+    ],
     "extraResources": [
       {
         "from": "../main.py",
@@ -119,14 +128,6 @@
       {
         "from": "../mcp_server.py",
         "to": "backend/mcp_server.py"
-      },
-      {
-        "from": "../mubu_sync.py",
-        "to": "backend/mubu_sync.py"
-      },
-      {
-        "from": "../routes/mubu_routes.py",
-        "to": "backend/routes/mubu_routes.py"
       },
       {
         "from": "../config.py",
@@ -193,28 +194,12 @@
         "to": "backend/classifier.py"
       },
       {
-        "from": "../install_deps.py",
-        "to": "backend/install_deps.py"
-      },
-      {
         "from": "../observability.py",
         "to": "backend/observability.py"
       },
       {
         "from": "../backup_scheduler.py",
         "to": "backend/backup_scheduler.py"
-      },
-      {
-        "from": "../db_consistency_check.py",
-        "to": "backend/db_consistency_check.py"
-      },
-      {
-        "from": "../feature_flags.py",
-        "to": "backend/feature_flags.py"
-      },
-      {
-        "from": "../screenshot_redactor.py",
-        "to": "backend/screenshot_redactor.py"
       },
       {
         "from": "../event_bus.py",

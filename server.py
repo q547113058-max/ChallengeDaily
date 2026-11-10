@@ -38,6 +38,12 @@ def add_cors_headers(response):
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-API-Token"
         response.headers["Access-Control-Max-Age"] = "86400"
+    # 客户端状态接口要求强一致：跳过 ETag / 5s 缓存，否则刚写入的状态
+    # 会被浏览器缓存成旧值（首启标记、主题、应用锁都会读到脏数据）。
+    if request.path.startswith("/api/client-state"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        response.headers.pop("ETag", None)
+        return response
     # P25: 为 GET JSON 响应添加 ETag + Cache-Control，减少重复数据传输
     # SSE 流式响应跳过 ETag，避免 get_data() 阻塞无限流
     if request.method == "GET" and response.status_code == 200 and response.mimetype != "text/event-stream":

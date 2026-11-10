@@ -3,6 +3,21 @@
 // 后端 API 基础 URL：优先从 Electron 主进程获取端口，兼容非 Electron 环境
 let BASE_URL = 'http://127.0.0.1:58888'
 
+// 浏览器 shell（ui-server.js）用空 BASE_URL 表示「走页面同源的 /api 代理」。
+// 这样远程浏览器访问时，请求发到页面所在服务器，而不是客户端自己的 127.0.0.1。
+// shim 通过 getBackendPort() 返回 0 来启用该模式。
+const SAME_ORIGIN_PROXY = ''
+
+function _isProxyPort(port: unknown): boolean {
+  return port === 0 || port === '0' || port === '' || port === null || port === undefined
+}
+
+// 把相对 endpoint（/api/xxx）解析成最终 URL。
+export function resolveApiUrl(endpoint: string): string {
+  if (BASE_URL === SAME_ORIGIN_PROXY) return endpoint
+  return `${BASE_URL}${endpoint}`
+}
+
 // 异步初始化 BASE_URL 的 Promise（避免启动初期竞态：模块加载时端口尚未就绪）
 let _baseUrlPromise: Promise<void> | null = null
 function ensureBaseUrl(): Promise<void> {
@@ -11,7 +26,8 @@ function ensureBaseUrl(): Promise<void> {
     if (typeof window !== 'undefined' && window.electronAPI?.getBackendPort) {
       try {
         const port = await window.electronAPI.getBackendPort()
-        if (port) BASE_URL = `http://127.0.0.1:${port}`
+        if (_isProxyPort(port)) BASE_URL = SAME_ORIGIN_PROXY
+        else BASE_URL = `http://127.0.0.1:${port}`
       } catch {
         // 保留默认 BASE_URL
       }
@@ -60,6 +76,9 @@ function markRequestFailure() {
 // ── API Token 管理 ──
 let _apiToken = ''
 let _tokenPromise: Promise<string> | null = null
+
+/** 同步返回已缓存的 API Token（供 beforeunload 等无法 await 的场景使用）。 */
+export function getApiTokenSync(): string { return _apiToken }
 
 async function _fetchTokenOnce(): Promise<string> {
   if (!window.electronAPI?.getApiToken) return ''
@@ -146,7 +165,7 @@ async function _requestImpl(endpoint: string, options?: RequestInit, timeoutMs =
     // 不再每次请求都设connecting——高频轮询时会导致UI闪烁
     // 只在真正断连后才设connecting
     if (_backendState === 'disconnected') setBackendState('connecting')
-    const res = await fetch(`${BASE_URL}${endpoint}`, {
+    const res = await fetch(resolveApiUrl(endpoint), {
       headers: {
         'Content-Type': 'application/json',
         ...(token ? { 'X-API-Token': token } : {}),

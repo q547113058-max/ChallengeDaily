@@ -30,7 +30,7 @@ export default function InsightCards({ insights, onIgnore }: Props) {
     if (!actionType) return
     switch (actionType) {
       case 'view_trend':
-        navigate('/heatmap')
+        navigate('/timeline')
         break
       default:
         break

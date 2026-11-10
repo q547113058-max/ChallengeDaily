@@ -14,7 +14,6 @@ from routes.profile import bp as profile_bp
 from routes.deep_insight import bp as deep_insight_bp
 from routes.todos import bp as todos_bp
 from routes.achievements import bp as achievements_bp
-from routes.countdowns import bp as countdowns_bp
 from routes.habits import bp as habits_bp
 from routes.week_plan import bp as week_plan_bp
 from routes.auth_routes import auth_bp
@@ -28,8 +27,8 @@ from routes.audit import bp as audit_bp
 from routes.calendar_routes import bp as calendar_bp
 from routes.git_routes import bp as git_integration_bp
 from routes.platform_routes import bp as platform_bp
-from routes.daily_card import bp as daily_card_bp
 from routes.scheduler import bp as scheduler_bp
+from routes.client_state import bp as client_state_bp
 
 ALL_BLUEPRINTS = [
     health_bp,
@@ -48,7 +47,6 @@ ALL_BLUEPRINTS = [
     deep_insight_bp,
     todos_bp,
     achievements_bp,
-    countdowns_bp,
     habits_bp,
     week_plan_bp,
     auth_bp,
@@ -62,6 +60,6 @@ ALL_BLUEPRINTS = [
     calendar_bp,
     git_integration_bp,
     platform_bp,
-    daily_card_bp,
     scheduler_bp,
+    client_state_bp,
 ]

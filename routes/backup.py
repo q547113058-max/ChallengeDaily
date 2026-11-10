@@ -35,6 +35,8 @@ def create_backup():
         ("settings.json", DATA_DIR / "settings.json"),
         ("webhooks.json", DATA_DIR / "webhooks.json"),
         ("auto_report.json", DATA_DIR / "auto_report.json"),
+        # 客户端状态（原本存浏览器 localStorage，现已迁移到服务器）
+        ("client_state.json", DATA_DIR / "client_state.json"),
     ]
 
     manifest = {}
@@ -104,6 +106,7 @@ def restore_backup():
             "settings.json": DATA_DIR / "settings.json",
             "webhooks.json": DATA_DIR / "webhooks.json",
             "auto_report.json": DATA_DIR / "auto_report.json",
+            "client_state.json": DATA_DIR / "client_state.json",
         }
 
         restored = []

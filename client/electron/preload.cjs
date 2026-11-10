@@ -34,6 +34,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   onBackendCrash: _makeManagedListener('backend-crash'),
 
+  // 在线更新（electron-updater）：状态订阅 + 只读状态 + 触发操作
+  onUpdaterState: _makeManagedListener('updater-state'),
+  updaterGetState: () => ipcRenderer.invoke('updater-get-state'),
+  updaterCheck: () => ipcRenderer.invoke('updater-check'),
+  updaterDownload: () => ipcRenderer.invoke('updater-download'),
+  updaterQuitAndInstall: () => ipcRenderer.invoke('updater-quit-and-install'),
+
+  // 后端连接配置（local / remote）：读回不含 token 明文；写入需重启生效
+  backendConfigGet: () => ipcRenderer.invoke('backend-config-get'),
+  backendConfigSet: (cfg) => ipcRenderer.invoke('backend-config-set', cfg),
+
   // 监听来自主进程的消息
   onCollectorAction: _makeManagedListener('collector-action'),
   onGenerateReport: _makeManagedListener('generate-report'),

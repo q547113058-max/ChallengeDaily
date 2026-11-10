@@ -206,14 +206,19 @@ Stop-Process -Id <PID> -Force
 
 ## 9. 已知遗留 / 待决策
 
-1. 番茄钟功能已在 commit `20403f6`（2026-09-12）**全量移除**，README 营销文案曾大幅宣传，本次已标注。
+1. 已被移除但历史文案仍在宣传的模块（**2026-11-07 已统一在 README 标注**，代码侧确认零引用）：
+   - 🍅 番茄钟 —— commit `20403f6`（2026-09-12）全量移除（39 文件，+139/−953）
+   - 🐾 桌面宠物 —— commit `6a34b2c`（2026-09-06）整段移除（14 文件、842 行，含 `Pet.tsx` 558 行、`pet.html`、`pet-entry.tsx`、主进程宠物窗口、`pet_mood.py`）
+   - 💬 AI 对话 / AI 教练 —— commit `1f13409`（2026-09-06）移除（`AIChat.tsx`、`AICoach.tsx`、`SmartCoachPanel.tsx`、`api/ai.ts`、`pet_mood.py`）
+   - 残留 `index.css` 中 4 条 `pet-*` 动画关键帧已于 2026-11-07 清理。
 2. `REVIEW_2026-09-10.md` §2.1：定时日报存在 `settings.json` 与 `auto_report.json` 两套并行配置，UI 各改一套，建议合并（未动）。
 3. `.env.example` 模型名与 `config.py` 默认值不一致（旧模板）。
 4. 历史上 Overview 的腾讯地图 IP 定位被 CSP 拦（`apis.map.qq.com` 不在 connect-src），非致命降级。
 5. `项目\data\`（1.6 MB 旧库）与运行时库（13.5 MB）并存，隔离测试须显式 `CHALLENGE_DAILY_DATA_DIR=<临时目录>`，否则污染项目库。
-6. 系统 Python312 仍未装后端依赖（§4.1 的可选修复未执行）。
+6. 系统 Python312 仍未装后端依赖（§4.1 的可选修复未执行）。**注意：本机实测 `C:\Users\54711\.workbuddy\binaries\python\versions\3.13.12\python.exe` 监听的回环端口不可被其他进程连接（防火墙/WFP 拦截），Web 模式启动请用 `ChallengeDaily\.venv312`（Python 3.12）。**
 7. `client/package.json` 的 `build.extraResources` 有 6 条指向已剪枝删除的文件，`npm run build` 打包会缺资源（静态检查，未实跑、未修，见 `RELEASE.md` §4）。
 8. 自动发布链路不存在：无 `.github/` / tag / Release，`publish: null`，主进程无 `autoUpdater`（见 `RELEASE.md` §5）。
+9. 2026-11-07 的「减脂」改造（A+B 档）：下线 数据看板 / 每日卡片 / 倒数日 / 热力图独立页 / 应用标签独立页，报告三合一（`ReportsHub`）、计划二合一（`PlanHub`）、日历并入时间线；后端删除 `/api/countdowns`、`/api/daily-card` 两组接口（183 → 178 端点），`todos.mode=habit` 返回 410，导入白名单同步收紧。表与历史数据保留。
 
 ---
 

@@ -1241,26 +1241,6 @@ def check_and_unlock_achievements():
 
     return unlocked
 
-# ── 倒数日 ──
-def insert_countdown(title, target_date, color="#7B68EE"):
-    _flush_pending_commits()
-    with get_conn() as conn:
-        cursor = conn.execute("INSERT INTO countdowns (title, target_date, color) VALUES (?,?,?)", (title, target_date, color))
-        conn.commit()
-        return cursor.lastrowid
-
-def get_countdowns():
-    _flush_pending_commits()
-    with get_conn() as conn:
-        rows = conn.execute("SELECT * FROM countdowns ORDER BY target_date ASC").fetchall()
-        return [dict(r) for r in rows]
-
-def delete_countdown(cid):
-    _flush_pending_commits()
-    with get_conn() as conn:
-        conn.execute("DELETE FROM countdowns WHERE id=?", (cid,))
-        conn.commit()
-        return True
 
 # ── AI对话历史 ──
 def insert_chat(role, content):

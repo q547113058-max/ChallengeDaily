@@ -1,5 +1,5 @@
 // ── 集成功能：Webhook、成就、目标、习惯、日历、Git、基准、本地模型、记忆等 ──
-import { request, getApiToken, getBaseUrl, _triggerDownload } from './core'
+import { request, getApiToken, resolveApiUrl, _triggerDownload } from './core'
 import { formatLocalDate } from './utils'
 
 // ── Agent / Webhook 类型 ──────────────────────────
@@ -105,40 +105,6 @@ export async function wipeAllData(confirmText: string): Promise<WipeResult> {
   }) as Promise<WipeResult>
 }
 
-// ── P10-4：赛季成就 ──
-export interface SeasonAchievement {
-  key: string
-  name: string
-  desc: string
-  target: number
-  metric: string
-  reward: string
-  current: number
-  progress_pct: number
-  unlocked: boolean
-}
-export interface SeasonData {
-  season_key: string
-  start_date: string
-  end_date: string
-  achievements: SeasonAchievement[]
-  unlocked_count: number
-  total_count: number
-}
-export async function getSeason(month?: string): Promise<SeasonData> {
-  const m = month ? `?month=${month}` : ''
-  return request(`/api/achievements/season${m}`) as Promise<SeasonData>
-}
-export interface SeasonHistoryItem {
-  season_key: string
-  unlocked_count: number
-  total_count: number
-  achievements: Array<{ key: string; name: string; unlocked: boolean; current: number; target: number }>
-}
-export async function getSeasonHistory(months = 6): Promise<{ history: SeasonHistoryItem[] }> {
-  return request(`/api/achievements/season/history?months=${months}`) as Promise<{ history: SeasonHistoryItem[] }>
-}
-
 /** 创建备份（安全下载：使用 header 传 token）
  *
  * 后端只注册了 POST /api/backup，此前这里用默认 GET → 405 Method Not Allowed，
@@ -146,7 +112,7 @@ export async function getSeasonHistory(months = 6): Promise<{ history: SeasonHis
  */
 export async function downloadBackup(): Promise<void> {
   const token = await getApiToken()
-  const res = await fetch(`${getBaseUrl()}/api/backup`, {
+  const res = await fetch(resolveApiUrl('/api/backup'), {
     method: 'POST',
     headers: token ? { 'X-API-Token': token } : {},
   })
@@ -247,27 +213,6 @@ export async function getSamplingDeviation(date?: string): Promise<SamplingDevia
 
 export async function getQuote(): Promise<{ quote: string }> {
   return request('/api/achievements/quote') as Promise<{ quote: string }>
-}
-
-// ── 倒数日 ──
-export interface Countdown {
-  id: number
-  title: string
-  target_date: string
-  color: string
-  created_at: string
-}
-
-export async function getCountdowns(): Promise<{ countdowns: Countdown[] }> {
-  return request('/api/countdowns') as Promise<{ countdowns: Countdown[] }>
-}
-
-export async function createCountdown(data: { title: string; target_date: string; color?: string }): Promise<{ status: string; id: number }> {
-  return request('/api/countdowns', { method: 'POST', body: JSON.stringify(data) }) as Promise<{ status: string; id: number }>
-}
-
-export async function deleteCountdown(id: number): Promise<{ status: string }> {
-  return request(`/api/countdowns/${id}`, { method: 'DELETE' }) as Promise<{ status: string }>
 }
 
 // ── 长期目标管理（GoalDay集大成） ──
@@ -411,41 +356,6 @@ export interface HabitStats {
 export async function getHabitStats(habitId: number, days = 30): Promise<{ status: string; stats: HabitStats }> {
   return request(`/api/habits/${habitId}/stats?days=${days}`) as Promise<{ status: string; stats: HabitStats }>
 }
-
-// ── 「今日完成」自动卡片 ──
-export interface DailyCardData {
-  date: string
-  todos_completed: { id: number; title: string; category: string; completed_at: string; priority: number }[]
-  todos_count: number
-  habits_logged: { habit_id: number; name: string; count: number; color: string; category: string }[]
-  habits_count: number
-  activity_categories: Record<string, number>
-  activity_total_min: number
-  activity_first_ts: string | null
-  activity_last_ts: string | null
-  achievements_unlocked: { code: string; name: string; description: string; icon: string; unlocked_at: string }[]
-  achievements_count: number
-  summary: {
-    total_tasks: number
-    total_focus_min: number
-    total_work_min: number
-    total_habits: number
-    total_achievements: number
-    productivity_score: number
-    grade: string
-  }
-}
-
-export async function getDailyCard(date?: string): Promise<DailyCardData> {
-  const d = date || new Date().toISOString().slice(0, 10)
-  return request(`/api/daily-card?date=${d}`) as Promise<DailyCardData>
-}
-
-export async function getDailyCardText(date?: string): Promise<{ date: string; text: string; summary: any }> {
-  const d = date || new Date().toISOString().slice(0, 10)
-  return request(`/api/daily-card/text?date=${d}`) as Promise<{ date: string; text: string; summary: any }>
-}
-
 
 // ── P11-2：用户个性化偏好 ──
 export interface UserPreferences {

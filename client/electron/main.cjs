@@ -17,6 +17,13 @@ const fs = require('fs')
 const crypto = require('crypto')
 // CSP 单一数据源：与 vite 注入到 index.html 的 meta CSP 同源
 const { buildCSP, buildBaseCSP } = require('./csp.cjs')
+const updater = require('./updater.cjs')
+const backendConfig = require('./backend-config.cjs')
+const remoteProxy = require('./remote-proxy.cjs')
+
+// 后端连接模式：local = 本机跑 Python（历史行为）；remote = 连已部署的后端
+const BACKEND_MODE = backendConfig.loadConfig().mode
+console.log('[Main] backend mode:', BACKEND_MODE, BACKEND_MODE === 'remote' ? backendConfig.loadConfig().url : '(local)')
 
 // 把主进程 console 输出持久化到文件，方便排查无窗口启动问题
 // 注意：__dirname 在打包后位于 asar 只读区，必须使用外部可写路径
@@ -216,6 +223,14 @@ async function startBackend() {
 }
 
 async function _doStartBackend() {
+  // remote 模式：后端已部署在别处，本机只起反向代理，不 spawn Python
+  if (BACKEND_MODE === 'remote') {
+    const cfg = backendConfig.loadConfig()
+    console.log('[Main] remote backend mode, starting local reverse proxy to', cfg.url)
+    await remoteProxy.start(cfg, BACKEND_PORT, (...a) => console.log(...a))
+    return
+  }
+
   // 1. 如果后端已存活且 token 有效，直接复用（支持 start.bat 先启动后端的情况）
   if (await isBackendRunning()) {
     if (await isBackendTokenValid()) {
@@ -406,6 +421,8 @@ async function _doStartBackend() {
 }
 
 function stopBackend() {
+  // remote 模式：关掉本地反向代理
+  remoteProxy.stop()
   if (backendProcess) {
     console.log('[Main] Stopping backend...')
     // 先移除 exit/error 监听器，防止 taskkill /F 触发的非零退出码被
@@ -569,6 +586,8 @@ function createTray() {
     { label: '生成日报', click: () => { sendToRenderer('generate-report', 'daily'); mainWindow?.show() } },
     { label: '生成周报', click: () => { sendToRenderer('generate-report', 'weekly'); mainWindow?.show() } },
     { type: 'separator' },
+    { label: '检查更新…', click: () => { updater.checkForUpdates({ manual: true }) } },
+    { type: 'separator' },
     { label: '退出', click: () => quitApp() },
   ])
 
@@ -641,6 +660,10 @@ function setupIPC() {
     'get-auto-start', 'set-auto-start',
     'get-windows-location', 'windows-hello',
     'show-notification',
+    // 在线更新（electron-updater）：渲染层只读状态 + 触发检查/下载/安装
+    'updater-get-state', 'updater-check', 'updater-download', 'updater-quit-and-install',
+    // 后端连接配置（local / remote）
+    'backend-config-get', 'backend-config-set',
   ])
   const _origOn = ipcMain.on.bind(ipcMain)
   const _origHandle = ipcMain.handle.bind(ipcMain)
@@ -688,6 +711,46 @@ function setupIPC() {
   })
 
   ipcMain.handle('get-app-version', () => app.getVersion())
+
+  // ─── 后端连接配置 IPC ──────────────────────────
+  // 读取：不返回 token 明文给渲染层；写入：仅主窗口可操作
+  ipcMain.handle('backend-config-get', () => {
+    const cfg = backendConfig.loadConfig()
+    return {
+      mode: cfg.mode,
+      url: cfg.url,
+      hasToken: Boolean(cfg.token),
+      // 环境变量覆盖时不允许 UI 改写
+      envOverride: Boolean(process.env.CHALLENGE_DAILY_BACKEND_MODE || process.env.CHALLENGE_DAILY_BACKEND_URL),
+      restartRequired: true,
+    }
+  })
+  ipcMain.handle('backend-config-set', (_event, raw) => {
+    if (!isFromMainWindow(_event.sender)) return { ok: false, error: 'denied' }
+    if (process.env.CHALLENGE_DAILY_BACKEND_MODE || process.env.CHALLENGE_DAILY_BACKEND_URL) {
+      return { ok: false, error: '配置由环境变量锁定，无法通过界面修改' }
+    }
+    const saved = backendConfig.saveConfig(raw || {})
+    if (!saved) return { ok: false, error: '保存失败' }
+    console.log('[Main] backend config saved, mode:', saved.mode, 'restart required')
+    return { ok: true, restartRequired: true }
+  })
+
+  // ─── 在线更新 IPC ──────────────────────────────
+  // 发送方校验：仅主窗口可触发检查/下载/安装，状态查询为只读可放宽
+  ipcMain.handle('updater-get-state', () => updater.getState())
+  ipcMain.handle('updater-check', async (_event) => {
+    if (!isFromMainWindow(_event.sender)) return { ...updater.getState(), error: 'denied' }
+    return updater.checkForUpdates({ manual: true })
+  })
+  ipcMain.handle('updater-download', async (_event) => {
+    if (!isFromMainWindow(_event.sender)) return { ...updater.getState(), error: 'denied' }
+    return updater.downloadUpdate()
+  })
+  ipcMain.handle('updater-quit-and-install', (_event) => {
+    if (!isFromMainWindow(_event.sender)) return false
+    return updater.quitAndInstall()
+  })
 
   // 桌面通知
   ipcMain.on('show-notification', (_event, { title, body }) => {
@@ -1097,8 +1160,11 @@ app.whenReady().then(async () => {
   })
   try {
     await startBackend()
-    watchBackend()  // 启动崩溃监控
-    startHealthCheck()  // 启动心跳检测（Kubernetes liveness probe 模式）
+    // remote 模式只有 HTTP 代理、没有子进程，跳过进程崩溃监控与本地心跳重启
+    if (BACKEND_MODE !== 'remote') {
+      watchBackend()  // 启动崩溃监控
+      startHealthCheck()  // 启动心跳检测（Kubernetes liveness probe 模式）
+    }
     console.log('[Main] Backend start sequence completed')
   } catch (err) {
     console.error('[Main] Backend start failed, continuing without it:', err)
@@ -1111,6 +1177,13 @@ app.whenReady().then(async () => {
   createTray()
   setupIPC()
   registerShortcuts()
+
+  // 在线更新：仅在打包版 Windows 生效，启动 8 秒后静默检查，发现新版本才弹窗
+  updater.initUpdater({
+    send: (channel, data) => sendToRenderer(channel, data),
+    getMainWindow: () => mainWindow,
+  })
+  updater.scheduleStartupCheck(8000)
 
 })
 

@@ -1,5 +1,5 @@
 // ── 活动采集、状态、设置、健康检查 ──
-import { request, getApiToken, getBaseUrl, _triggerDownload } from './core'
+import { request, getApiToken, resolveApiUrl, ensureBaseUrl, _triggerDownload } from './core'
 import type { CollectorStatus, TodayStats, Activity, ActivityPage, ActivitiesResponse, AppUsage, AppCategoryRule, BackendSettings, DailyCredibility, ReportContent } from './types-activity'
 
 /** 获取采集器状态 */
@@ -64,10 +64,10 @@ export async function startupHealthCheck(): Promise<boolean> {
   try {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 5000)
-    const port = window.electronAPI?.getBackendPort
-      ? await window.electronAPI.getBackendPort()
-      : 58888
-    const res = await fetch(`http://127.0.0.1:${port}/api/health?quick=1`, {
+    // 使用统一解析器：浏览器 shell 走页面同源 /api 代理（支持远程访问），
+    // Electron 走 127.0.0.1:<port> 直连。
+    await ensureBaseUrl()
+    const res = await fetch(resolveApiUrl('/api/health?quick=1'), {
       signal: controller.signal,
     })
     clearTimeout(timeoutId)
@@ -124,7 +124,7 @@ export async function testAiConnection(apiKey: string, baseUrl: string, model: s
 /** 导出活动记录 CSV（安全下载：使用 header 传 token，不暴露于 URL） */
 export async function downloadExportActivities(start: string, end: string): Promise<void> {
   const token = await getApiToken()
-  const res = await fetch(`${getBaseUrl()}/api/export/activities?start=${start}&end=${end}`, {
+  const res = await fetch(resolveApiUrl(`/api/export/activities?start=${start}&end=${end}`), {
     headers: token ? { 'X-API-Token': token } : {},
   })
   if (!res.ok) throw new Error(`导出失败: HTTP ${res.status}`)
@@ -135,7 +135,7 @@ export async function downloadExportActivities(start: string, end: string): Prom
 /** 导出应用使用时长 CSV（安全下载） */
 export async function downloadExportAppUsage(start: string, end: string): Promise<void> {
   const token = await getApiToken()
-  const res = await fetch(`${getBaseUrl()}/api/export/app-usage?start=${start}&end=${end}`, {
+  const res = await fetch(resolveApiUrl(`/api/export/app-usage?start=${start}&end=${end}`), {
     headers: token ? { 'X-API-Token': token } : {},
   })
   if (!res.ok) throw new Error(`导出失败: HTTP ${res.status}`)
@@ -146,7 +146,7 @@ export async function downloadExportAppUsage(start: string, end: string): Promis
 /** 导出历史报告（CSV / JSON） */
 export async function downloadExportReports(start: string, end: string, format: 'csv' | 'json' = 'csv'): Promise<void> {
   const token = await getApiToken()
-  const res = await fetch(`${getBaseUrl()}/api/exports/reports?format=${format}&start=${start}&end=${end}`, {
+  const res = await fetch(resolveApiUrl(`/api/exports/reports?format=${format}&start=${start}&end=${end}`), {
     headers: token ? { 'X-API-Token': token } : {},
   })
   if (!res.ok) throw new Error(`导出失败: HTTP ${res.status}`)
@@ -157,7 +157,7 @@ export async function downloadExportReports(start: string, end: string, format: 
 /** 导出活动明细聚合 CSV（多日期范围） */
 export async function downloadExportActivitiesDetail(start: string, end: string): Promise<void> {
   const token = await getApiToken()
-  const res = await fetch(`${getBaseUrl()}/api/exports/activities-detail?start=${start}&end=${end}`, {
+  const res = await fetch(resolveApiUrl(`/api/exports/activities-detail?start=${start}&end=${end}`), {
     headers: token ? { 'X-API-Token': token } : {},
   })
   if (!res.ok) throw new Error(`导出失败: HTTP ${res.status}`)
@@ -239,7 +239,7 @@ export async function restoreBackup(file: File): Promise<{ status: string; resto
   const token = await getApiToken()
   const formData = new FormData()
   formData.append('file', file)
-  const res = await fetch(`${getBaseUrl()}/api/backup/restore`, {
+  const res = await fetch(resolveApiUrl('/api/backup/restore'), {
     method: 'POST',
     headers: token ? { 'X-API-Token': token } : {},
     body: formData,
@@ -283,7 +283,7 @@ export async function deleteAppRule(appName: string): Promise<{ status: string; 
 
 /** 获取应用图标 URL（图标不敏感，无需 token） */
 export async function getAppIconUrl(appName: string): Promise<string> {
-  return `${getBaseUrl()}/api/icons/${encodeURIComponent(appName)}`
+  return resolveApiUrl(`/api/icons/${encodeURIComponent(appName)}`)
 }
 
 // ── 日报简要统计 ──
