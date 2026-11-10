@@ -15,6 +15,7 @@ export default function BackendConnectionSettings() {
   const [token, setToken] = useState('')
   const [hasToken, setHasToken] = useState(false)
   const [envOverride, setEnvOverride] = useState(false)
+  const [packagedDefault, setPackagedDefault] = useState(false)
   const [saving, setSaving] = useState(false)
   const [supported, setSupported] = useState(true)
 
@@ -25,6 +26,7 @@ export default function BackendConnectionSettings() {
       setUrl(c.url)
       setHasToken(c.hasToken)
       setEnvOverride(c.envOverride)
+      setPackagedDefault(c.packagedDefault)
     }).catch(() => {})
   }, [api])
 
@@ -63,6 +65,11 @@ export default function BackendConnectionSettings() {
       <p className="text-[11px] text-cd-text-tertiary">
         默认在本机运行后端。若后端已部署在其他机器，选择「远程后端」，本机只装客户端。
       </p>
+      {packagedDefault && (
+        <p className="flex items-center gap-1.5 text-[11px] text-cd-green">
+          <CheckCircle size={12} /> 已预置远程后端连接，开箱即用；如需更改可在下方修改并保存。
+        </p>
+      )}
 
       <div className="flex gap-2">
         {(['local', 'remote'] as const).map((m) => (

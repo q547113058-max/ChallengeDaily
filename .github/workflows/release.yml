@@ -9,6 +9,11 @@ name: Release
 #   2. 本地 `client/package.json` 的 version 必须与 tag 一致（脚本会校验）。
 #   3. Settings → Actions → General → Workflow permissions 需为 "Read and write permissions"。
 #   4. 不打 tag 时可用 workflow_dispatch 手动跑一次（不会创建 Release，仅上传 artifacts）。
+#   5. 随包默认后端配置（remote 地址 + token）由 Secrets 注入，源码不含任何凭据：
+#      Settings → Secrets and variables → Actions 中添加
+#        CD_BACKEND_URL    例如 http://193.112.246.85:5173
+#        CD_BACKEND_TOKEN  对应 X-API-Token
+#      未设置时打出的包保持 local 模式（client/build/backend-default.json 的占位值）。
 
 on:
   push:
@@ -57,6 +62,33 @@ jobs:
             throw "Version mismatch: package.json=$pkg tag=$tag. 请先运行 npm run bump 或修改 tag。"
           }
           Write-Host "Version OK: $pkg"
+
+      # 用 Secrets 覆盖占位文件，生成随包分发的默认后端配置。
+      # 该文件会由 extraResources 打进 resources/backend-default.json，
+      # 客户端首次启动即按 remote 模式连已部署后端；用户仍可在设置页覆盖。
+      - name: Inject default backend config from Secrets
+        shell: pwsh
+        working-directory: client
+        env:
+          CD_BACKEND_URL: ${{ secrets.CD_BACKEND_URL }}
+          CD_BACKEND_TOKEN: ${{ secrets.CD_BACKEND_TOKEN }}
+        run: |
+          if ($env:CD_BACKEND_URL -and $env:CD_BACKEND_TOKEN) {
+            $cfg = @{
+              mode  = 'remote'
+              url   = $env:CD_BACKEND_URL.TrimEnd('/')
+              token = $env:CD_BACKEND_TOKEN
+            } | ConvertTo-Json -Depth 5
+            # 用 UTF8Encoding($false) 避免 BOM（backend-config.cjs 已做防御，双保险）
+            [System.IO.File]::WriteAllText(
+              (Join-Path (Get-Location) 'backend-default.json'),
+              $cfg,
+              (New-Object System.Text.UTF8Encoding($false))
+            )
+            Write-Host "Default backend config injected (mode=remote). Token length: $($env:CD_BACKEND_TOKEN.Length)."
+          } else {
+            Write-Host "Secrets CD_BACKEND_URL / CD_BACKEND_TOKEN not both set; keeping local-mode placeholder."
+          }
 
       - name: Build frontend + create installer, publish to GitHub Release
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}

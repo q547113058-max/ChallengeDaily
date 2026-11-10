@@ -5,6 +5,7 @@ interface BackendConfigView {
   mode: 'local' | 'remote'
   url: string
   hasToken: boolean
+  packagedDefault: boolean
   envOverride: boolean
   restartRequired: boolean
 }

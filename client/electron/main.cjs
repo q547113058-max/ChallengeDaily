@@ -720,6 +720,8 @@ function setupIPC() {
       mode: cfg.mode,
       url: cfg.url,
       hasToken: Boolean(cfg.token),
+      // 随包预置了默认配置时提示用户（源码占位文件为 local，CI 注入后才为 true）
+      packagedDefault: backendConfig.hasPackagedDefault() && cfg.mode === 'remote',
       // 环境变量覆盖时不允许 UI 改写
       envOverride: Boolean(process.env.CHALLENGE_DAILY_BACKEND_MODE || process.env.CHALLENGE_DAILY_BACKEND_URL),
       restartRequired: true,
@@ -730,6 +732,7 @@ function setupIPC() {
     if (process.env.CHALLENGE_DAILY_BACKEND_MODE || process.env.CHALLENGE_DAILY_BACKEND_URL) {
       return { ok: false, error: '配置由环境变量锁定，无法通过界面修改' }
     }
+    // token 输入框留空 = 不修改（保留逻辑在 saveConfig 内统一处理：沿用随包默认或 userData）
     const saved = backendConfig.saveConfig(raw || {})
     if (!saved) return { ok: false, error: '保存失败' }
     console.log('[Main] backend config saved, mode:', saved.mode, 'restart required')

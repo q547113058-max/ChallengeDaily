@@ -28,7 +28,7 @@
 | 设置页 UI | `client/src/components/UpdateChecker.tsx`（新增） | 设置 → 关于：版本、检查更新、下载进度、下载/安装按钮、更新说明、错误提示；dev/浏览器模式显示「仅在已安装版本可用」且不联网 |
 | CI | `.github/workflows/release.yml`（新增） | 推 `vX.Y.Z` tag → Windows runner → `npm ci` → `tsc --noEmit` → `npm run publish:win` 上传 Release 资产；支持 `workflow_dispatch` dry-run |
 | 放行 workflow | `.gitignore` | 移除 `.github/` 排除规则（原注释「token 无 workflow scope」已不成立，见 §2）；补 `.venv312/` 忽略 |
-| 远程后端配置 | `client/electron/backend-config.cjs`（新增） | `local`（默认，本机跑 Python）/ `remote`（连已部署后端）。优先级：环境变量 > `userData/backend-config.json` > 默认 local |
+| 远程后端配置 | `client/electron/backend-config.cjs`（新增） | `local`（源码默认）/ `remote`（连已部署后端）。优先级：环境变量 > `userData/backend-config.json` > **随包默认 `resources/backend-default.json`** > 内置 local |
 | 远程反向代理 | `client/electron/remote-proxy.cjs`（新增） | remote 模式下在 `127.0.0.1:58888` 起轻量代理，把 `/api/*` 转发到远端并注入 `X-API-Token`；**前端 core.ts / CSP 零改动**，token 不进渲染层 |
 | 主进程分支 | `client/electron/main.cjs` | remote 模式跳过 Python spawn、进程崩溃监控与本地心跳重启；`stopBackend()` 同时停代理；新增 `backend-config-get/set` IPC（读回不含 token 明文，写入限主窗口） |
 | 设置页 UI | `client/src/components/BackendConnectionSettings.tsx`（新增） | 设置 → 关于 → 后端连接：切换本机/远程、填地址与 Token；保存后需重启生效 |
@@ -42,6 +42,20 @@ $env:CHALLENGE_DAILY_BACKEND_TOKEN = '<后端 X-API-Token>'
 ```
 
 > 前端仍连 `http://127.0.0.1:58888`，由本地代理转发，因此 CSP 白名单无需改动。
+
+### 随包预置默认配置（开箱即用）
+
+装到其他机器的客户端**无需任何配置**即可连已部署后端：CI 打包时用 GitHub Actions Secrets 生成 `client/backend-default.json`，由 `extraResources` 打进 `resources/backend-default.json`，客户端首次启动按 `remote` 模式起本地代理。
+
+| 项 | 值 |
+|---|---|
+| Secrets | `CD_BACKEND_URL`、`CD_BACKEND_TOKEN`（在 Settings → Secrets and variables → Actions 设置，**不入库**） |
+| 源码占位 | `client/backend-default.json` = `{ mode: local, url: "", token: "" }` —— 本地开发/未配 Secrets 时保持 local 模式 |
+| 用户覆盖 | 设置页保存后写入 `userData/backend-config.json`，优先级高于随包默认；**token 留空 = 不修改**，不会清掉预置凭据 |
+| 安全 | 源码与公开仓库**不含任何真实地址/token**；token 仅存在于 CI Secrets、Release 安装包内、以及用户本机配置 |
+| BOM 防御 | `backend-config.cjs` 读 JSON 时剥离 BOM；workflow 用 `UTF8Encoding($false)` 无 BOM 写入 |
+
+> 已装 v3.4.2 的用户通过在线更新升到下一版即可获得预置配置（更新包会带上新的 `backend-default.json`）。
 
 **安全约定**：客户端不携带任何 token。`electron-updater` 的 GitHub provider 从包内 `app-update.yml` 读取**公开**仓库的 feed 地址，这也是必须把仓库转公开的原因（feed 方案见 §3）。
 
