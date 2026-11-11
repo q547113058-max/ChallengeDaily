@@ -85,7 +85,9 @@ jobs:
               $cfg,
               (New-Object System.Text.UTF8Encoding($false))
             )
-            Write-Host "Default backend config injected (mode=remote). Token length: $($env:CD_BACKEND_TOKEN.Length)."
+            # 只打印 host（不含凭据），便于核对注入的是哪个后端地址
+            $u = [uri]$env:CD_BACKEND_URL
+            Write-Host "Default backend config injected (mode=remote). Host: $($u.Host) Port: $($u.Port). Token length: $($env:CD_BACKEND_TOKEN.Length)."
           } else {
             Write-Host "Secrets CD_BACKEND_URL / CD_BACKEND_TOKEN not both set; keeping local-mode placeholder."
           }
