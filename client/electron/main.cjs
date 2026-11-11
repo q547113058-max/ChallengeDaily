@@ -764,7 +764,14 @@ function setupIPC() {
   ipcMain.handle('get-backend-port', () => BACKEND_PORT)
 
   // API Token
+  // remote 模式下本机不跑 Python 后端，数据目录里没有 .api_token，
+  // readApiToken() 必然返回空。此时真正的 token 由本地反向代理在转发时注入，
+  // 渲染层不需要也不应该持有它 —— 返回空令牌并让前端跳过「等 token 重试」，
+  // 否则每次请求都要白等 10×300ms，表现为「无法连接到后端服务」。
   ipcMain.handle('get-api-token', (_event) => {
+    if (BACKEND_MODE === 'remote') {
+      return ''
+    }
     console.log('[IPC] get-api-token called')
     try {
       const token = readApiToken()
@@ -1071,9 +1078,16 @@ function readApiToken(maxAttempts = 1) {
         } catch (_) {}
       }
       if (attempt < maxAttempts - 1) {
-        // 同步等待 200ms，主进程启动阶段可接受
-        const t = Date.now()
-        while (Date.now() - t < 200) {}
+        // 关键：不能用 while(Date.now()) 空转。那是同步忙等，会完全卡死
+        // 主进程事件循环 —— remote 模式下本机没有 .api_token，readApiToken(10)
+        // 会空转 10×200ms=2s，期间本地反向代理虽在 listen 但无法 accept，
+        // 表现为渲染层请求全部卡在 SYN_SENT / 超时。
+        // 改用 Atomics.wait 让出 CPU（仍然同步语义，但不占用事件循环以外的时间片）。
+        try {
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200)
+        } catch (_) {
+          // 极端环境不支持 SharedArrayBuffer 时放弃等待，直接下一轮
+        }
       }
     }
   } catch (_) {}

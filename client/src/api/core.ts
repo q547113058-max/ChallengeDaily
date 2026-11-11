@@ -97,15 +97,17 @@ async function getApiToken(): Promise<string> {
   // 避免并发重复请求：但空结果不缓存，下次调用仍会重试
   if (!_tokenPromise) {
     _tokenPromise = (async () => {
-      // 启动阶段 token 文件可能尚未写入，最多重试 10 次，每次 300ms
-      for (let i = 0; i < 10; i++) {
+      // remote 模式下 token 由本地反向代理在主进程侧注入，渲染层拿不到也不需要。
+      // 探测一次仍为空就立即返回空串，让请求照常发出（由代理补 token），
+      // 避免每次请求白等 10×300ms 导致整体超时。
+      for (let i = 0; i < 3; i++) {
         const t = await _fetchTokenOnce()
         if (t) {
           _apiToken = t
           _tokenPromise = null
           return t
         }
-        if (i < 9) await new Promise(r => setTimeout(r, 300))
+        if (i < 2) await new Promise(r => setTimeout(r, 150))
       }
       _tokenPromise = null
       return ''
