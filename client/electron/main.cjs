@@ -282,6 +282,15 @@ async function startBackend() {
 }
 
 async function _doStartBackend() {
+  // direct 模式：渲染层直接访问远端后端（不经本机回环端口）。
+  // 适用场景：安全软件会拦截客户端进程建立的【本机监听】，
+  // 此时 remote 模式的 127.0.0.1 代理必然不可达，只能让页面直连云端。
+  if (BACKEND_MODE === 'direct') {
+    const cfg = backendConfig.loadConfig()
+    console.log('[Main] direct backend mode, renderer will call', cfg.url, 'directly (no local proxy)')
+    return
+  }
+
   // remote 模式：后端已部署在别处，本机只起反向代理，不 spawn Python
   if (BACKEND_MODE === 'remote') {
     const cfg = backendConfig.loadConfig()
@@ -721,7 +730,7 @@ function setupIPC() {
   // P37: IPC 通道白名单 — 仅允许已注册的通道名
   const ALLOWED_IPC_CHANNELS = new Set([
     'window-minimize', 'window-maximize', 'window-close', 'window-show',
-    'get-backend-port', 'get-api-token',
+    'get-backend-port', 'get-backend-url', 'get-api-token',
     'get-app-version',
     'get-auto-start', 'set-auto-start',
     'get-windows-location', 'windows-hello',
@@ -768,9 +777,15 @@ function setupIPC() {
   // readApiToken() 必然返回空。此时真正的 token 由本地反向代理在转发时注入，
   // 渲染层不需要也不应该持有它 —— 返回空令牌并让前端跳过「等 token 重试」，
   // 否则每次请求都要白等 10×300ms，表现为「无法连接到后端服务」。
+  //
+  // direct 模式例外：渲染层直连云端，没有代理帮忙注入 token，
+  // 必须把 token 交给渲染层（仅内存传递，不落盘到页面可读的位置）。
   ipcMain.handle('get-api-token', (_event) => {
     if (BACKEND_MODE === 'remote') {
       return ''
+    }
+    if (BACKEND_MODE === 'direct') {
+      return backendConfig.loadConfig().token || ''
     }
     console.log('[IPC] get-api-token called')
     try {
@@ -781,6 +796,13 @@ function setupIPC() {
       console.error('[IPC] get-api-token error:', e?.message || e, e?.stack || '')
       return ''
     }
+  })
+
+  // direct 模式：告诉渲染层应直连的完整后端地址；其它模式返回空串（走本机端口）
+  ipcMain.handle('get-backend-url', () => {
+    if (BACKEND_MODE !== 'direct') return ''
+    const url = backendConfig.loadConfig().url
+    return url || ''
   })
 
   ipcMain.handle('get-app-version', () => app.getVersion())

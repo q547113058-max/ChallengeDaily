@@ -29,8 +29,16 @@ const DEFAULT_FILE = () => path.join(process.resourcesPath || __dirname, 'backen
 
 const DEFAULTS = { mode: 'local', url: '', token: '' }
 
+/** 合法模式：local（本机 Python）/ remote（本机代理转发云端）/ direct（渲染层直连云端） */
+const VALID_MODES = ['local', 'remote', 'direct']
+
+function _normalizeMode(raw) {
+  const m = typeof raw === 'string' ? raw.trim().toLowerCase() : ''
+  return VALID_MODES.includes(m) ? m : ''
+}
+
 function _sanitize(raw) {
-  const mode = raw?.mode === 'remote' ? 'remote' : 'local'
+  const mode = _normalizeMode(raw?.mode) || 'local'
   let url = typeof raw?.url === 'string' ? raw.url.trim().replace(/\/+$/, '') : ''
   if (url) {
     try {
@@ -69,9 +77,9 @@ function loadConfig() {
     token: process.env.CHALLENGE_DAILY_BACKEND_TOKEN || file.token || packaged.token || DEFAULTS.token,
   }
   const cfg = _sanitize(merged)
-  // remote 但没给有效 URL 时回退 local，避免起一个必然不可用的代理
-  if (cfg.mode === 'remote' && !cfg.url) {
-    console.warn('[BackendConfig] remote mode requested but no valid URL, falling back to local')
+  // remote / direct 都必须有有效 URL，否则回退 local，避免起一个必然不可用的链路
+  if ((cfg.mode === 'remote' || cfg.mode === 'direct') && !cfg.url) {
+    console.warn('[BackendConfig] %s mode requested but no valid URL, falling back to local', cfg.mode)
     cfg.mode = 'local'
   }
   return cfg

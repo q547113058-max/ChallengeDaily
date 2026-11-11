@@ -45,6 +45,8 @@ interface Window {
     close: () => void
     show: () => void
     getBackendPort: () => Promise<number>
+    /** remote-direct 模式：渲染层应直连的完整后端地址；空串表示走本机端口代理 */
+    getBackendUrl?: () => Promise<string>
     getApiToken: () => Promise<string>
     getAppVersion: () => Promise<string>
     onBackendCrash: (cb: (data: { title: string; body: string; type: string }) => void) => void

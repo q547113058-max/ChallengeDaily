@@ -64,8 +64,8 @@ jobs:
           Write-Host "Version OK: $pkg"
 
       # 用 Secrets 覆盖占位文件，生成随包分发的默认后端配置。
-      # 该文件会由 extraResources 打进 resources/backend-default.json，
-      # 客户端首次启动即按 remote 模式连已部署后端；用户仍可在设置页覆盖。
+      # mode=direct：渲染层直连远端后端，不在本机起回环代理
+      # ——某些安全软件会拦截客户端进程建立的本机监听，导致 remote 模式必挂。
       - name: Inject default backend config from Secrets
         shell: pwsh
         working-directory: client
@@ -75,7 +75,7 @@ jobs:
         run: |
           if ($env:CD_BACKEND_URL -and $env:CD_BACKEND_TOKEN) {
             $cfg = @{
-              mode  = 'remote'
+              mode  = 'direct'
               url   = $env:CD_BACKEND_URL.TrimEnd('/')
               token = $env:CD_BACKEND_TOKEN
             } | ConvertTo-Json -Depth 5
@@ -87,7 +87,9 @@ jobs:
             )
             # 只打印 host（不含凭据），便于核对注入的是哪个后端地址
             $u = [uri]$env:CD_BACKEND_URL
-            Write-Host "Default backend config injected (mode=remote). Host: $($u.Host) Port: $($u.Port). Token length: $($env:CD_BACKEND_TOKEN.Length)."
+            Write-Host "Default backend config injected (mode=direct). Host: $($u.Host) Port: $($u.Port). Token length: $($env:CD_BACKEND_TOKEN.Length)."
+            # 供构建期 CSP 放行该远端 origin（csp.cjs 读取 CD_BACKEND_ORIGIN）
+            Write-Output ("CD_BACKEND_ORIGIN=" + $u.GetLeftPart([System.UriPartial]::Authority)) >> $env:GITHUB_ENV
           } else {
             Write-Host "Secrets CD_BACKEND_URL / CD_BACKEND_TOKEN not both set; keeping local-mode placeholder."
           }

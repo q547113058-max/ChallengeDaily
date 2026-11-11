@@ -28,6 +28,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 后端端口
   getBackendPort: () => ipcRenderer.invoke('get-backend-port'),
 
+  // direct 模式：渲染层应直连的完整后端地址（空串 = 走本机端口代理）
+  getBackendUrl: () => ipcRenderer.invoke('get-backend-url'),
+
   // API Token（通过 IPC 从主进程读取，兼容 Electron 31 sandbox 模式）
   getApiToken: () => ipcRenderer.invoke('get-api-token'),
 

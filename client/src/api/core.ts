@@ -23,9 +23,25 @@ let _baseUrlPromise: Promise<void> | null = null
 function ensureBaseUrl(): Promise<void> {
   if (_baseUrlPromise) return _baseUrlPromise
   _baseUrlPromise = (async () => {
-    if (typeof window !== 'undefined' && window.electronAPI?.getBackendPort) {
+    if (typeof window === 'undefined') return
+    const api = window.electronAPI
+    // 优先：主进程直接给出完整后端地址（remote-direct 模式，渲染层直连云端）。
+    // 某些安全软件会拦截客户端进程建立的【本机回环监听】，
+    // 此时不能依赖 127.0.0.1 代理，必须让渲染层直接访问远端地址。
+    if (api?.getBackendUrl) {
       try {
-        const port = await window.electronAPI.getBackendPort()
+        const url = await api.getBackendUrl()
+        if (url) {
+          BASE_URL = String(url).replace(/\/+$/, '')
+          return
+        }
+      } catch {
+        // 回退到端口模式
+      }
+    }
+    if (api?.getBackendPort) {
+      try {
+        const port = await api.getBackendPort()
         if (_isProxyPort(port)) BASE_URL = SAME_ORIGIN_PROXY
         else BASE_URL = `http://127.0.0.1:${port}`
       } catch {

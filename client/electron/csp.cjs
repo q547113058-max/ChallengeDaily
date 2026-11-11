@@ -17,11 +17,24 @@
 
 const { BACKEND_PORT } = require('./port-config.cjs')
 
-/** connect-src 白名单：本地后端 + 第三方 API */
+/**
+ * direct 模式（渲染层直连远端后端）需要在 CSP 里放行该地址。
+ * 构建时由 CI 通过 CD_BACKEND_ORIGIN 注入；未设置则不加。
+ */
+function _backendOrigins() {
+  const raw = process.env.CD_BACKEND_ORIGIN || ''
+  return raw
+    .split(/[\s,;]+/)
+    .map(s => s.trim())
+    .filter(Boolean)
+}
+
+/** connect-src 白名单：本地后端 + 远端后端（direct 模式）+ 第三方 API */
 const CONNECT_SRC = [
   `http://127.0.0.1:${BACKEND_PORT}`,
   `http://localhost:${BACKEND_PORT}`,
   'http://localhost:5173',
+  ..._backendOrigins(),
   'https://wttr.in',
   'https://api.open-meteo.com',
   'https://geocoding-api.open-meteo.com',
