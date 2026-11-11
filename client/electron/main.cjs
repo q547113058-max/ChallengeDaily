@@ -368,7 +368,14 @@ async function _doStartBackend() {
     fs.mkdirSync(logDir, { recursive: true })
     const logFile = path.join(logDir, 'electron-backend.log')
     const logStream = fs.createWriteStream(logFile, { flags: 'a' })
+    // werkzeug 的每条 HTTP 访问日志（"127.0.0.1 - - [date] \"GET /api/...\" 200 -"）
+    // 在 stdout/stderr 各输出一次，是主日志膨胀到 27MB 的主要来源。
+    // 这些纯访问行没有排障价值，直接丢弃；报错/异常/启动信息全部保留。
+    const isWerkzeugAccess = (s) =>
+      /werkzeug|\[INFO\]\s+\d+\.\d+\.\d+\.\d+\s+-\s+-\s+\[/.test(s) ||
+      /"?(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+\/api\/\S*\s+HTTP\/\d/.test(s)
     const log = (tag, msg) => {
+      if (isWerkzeugAccess(String(msg))) return
       const line = `[${new Date().toISOString()}] [${tag}] ${msg}`
       try { console.log(line) } catch (_) {}
       try { logStream.write(line + '\n') } catch (_) {}
