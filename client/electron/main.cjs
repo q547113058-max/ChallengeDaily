@@ -46,14 +46,73 @@ const _resolveMainLogDir = () => {
 const mainLogDir = _resolveMainLogDir()
 try { fs.mkdirSync(mainLogDir, { recursive: true }) } catch (_) {}
 const mainLogFile = path.join(mainLogDir, 'electron-main.log')
-const mainLogStream = fs.createWriteStream(mainLogFile, { flags: 'a' })
+
+// 日志轮转：主进程日志此前是纯追加、无上限，旧版本在本机跑 Python 后端时
+// werkzeug 每条 HTTP 访问日志会被 stdout/stderr 各记一遍，实测 66 天攒到
+// 27MB / 16 万行。这里限制单文件 5MB、保留 3 份（与后端 main.py 的
+// RotatingFileHandler 口径一致），并在启动时清理超限的旧文件。
+const LOG_MAX_BYTES = 5 * 1024 * 1024
+const LOG_BACKUPS = 3
 const _origLog = console.log
 const _origErr = console.error
+const _logLine = (tag, args) =>
+  `[${new Date().toISOString()}] [${tag}] ${args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ')}`
+
+function _rotateLogNow() {
+  try {
+    // 先删最旧的一份，再依次 .2 -> .3、.1 -> .2、 当前 -> .1
+    const oldest = `${mainLogFile}.${LOG_BACKUPS}`
+    if (fs.existsSync(oldest)) fs.unlinkSync(oldest)
+    for (let i = LOG_BACKUPS - 1; i >= 1; i--) {
+      const from = i === 1 ? mainLogFile : `${mainLogFile}.${i - 1}`
+      const to = `${mainLogFile}.${i}`
+      if (fs.existsSync(from)) fs.renameSync(from, to)
+    }
+  } catch (e) {
+    _origErr('[Main] log rotate failed:', e?.message || e)
+  }
+}
+
+// 启动时即检查：上一版留下的 27MB 大文件立即轮转掉，不再继续追加
+try {
+  if (fs.existsSync(mainLogFile) && fs.statSync(mainLogFile).size >= LOG_MAX_BYTES) {
+    _rotateLogNow()
+  }
+} catch (_) {}
+
+let _logBytes = 0
+let _lastLogKey = ''
+let _repeatCount = 0
 const _writeLog = (tag, args) => {
-  const line = `[${new Date().toISOString()}] [${tag}] ${args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ')}`
+  const line = _logLine(tag, args)
+  // 重复刷屏抑制：同一条消息连续重复时只记一次，累计次数在下次变化时补一行
+  // （旧日志里 werkzeug 访问日志与 [clientState] flush failed 都刷了几万行）
+  const key = tag + '|' + line.replace(/^\[[^\]]+\]\s*/, '').slice(0, 160)
+  if (key === _lastLogKey) {
+    _repeatCount++
+    return
+  }
+  if (_repeatCount > 0) {
+    const summary = `[${new Date().toISOString()}] [LOG] [Main] 上一条日志重复 ${_repeatCount} 次（已抑制）`
+    _origLog(summary)
+    try { fs.appendFileSync(mainLogFile, summary + '\n') } catch (_) {}
+    _repeatCount = 0
+  }
+  _lastLogKey = key
   if (tag === 'ERR') _origErr(line)
   else _origLog(line)
-  try { mainLogStream.write(line + '\n') } catch (_) {}
+  const text = line + '\n'
+  try {
+    _logBytes += Buffer.byteLength(text)
+    // 每写满 64KB 检查一次文件大小，避免每行都 stat
+    if (_logBytes >= 64 * 1024) {
+      _logBytes = 0
+      if (fs.existsSync(mainLogFile) && fs.statSync(mainLogFile).size + Buffer.byteLength(text) > LOG_MAX_BYTES) {
+        _rotateLogNow()
+      }
+    }
+    fs.appendFileSync(mainLogFile, text)
+  } catch (_) {}
 }
 console.log = (...args) => _writeLog('LOG', args)
 console.error = (...args) => _writeLog('ERR', args)
