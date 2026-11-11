@@ -72,6 +72,7 @@ jobs:
         env:
           CD_BACKEND_URL: ${{ secrets.CD_BACKEND_URL }}
           CD_BACKEND_TOKEN: ${{ secrets.CD_BACKEND_TOKEN }}
+          CD_UPDATES_URL: ${{ secrets.CD_UPDATES_URL }}
         run: |
           if ($env:CD_BACKEND_URL -and $env:CD_BACKEND_TOKEN) {
             $cfg = @{
@@ -79,6 +80,12 @@ jobs:
               url   = $env:CD_BACKEND_URL.TrimEnd('/')
               token = $env:CD_BACKEND_TOKEN
             } | ConvertTo-Json -Depth 5
+            # 自建更新源（可选）：客户端从该地址的 latest.yml 检查更新
+            if ($env:CD_UPDATES_URL) {
+              $cfgObj = $cfg | ConvertFrom-Json
+              $cfgObj | Add-Member -NotePropertyName updatesUrl -NotePropertyValue $env:CD_UPDATES_URL.TrimEnd('/') -Force
+              $cfg = $cfgObj | ConvertTo-Json -Depth 5
+            }
             # 用 UTF8Encoding($false) 避免 BOM（backend-config.cjs 已做防御，双保险）
             [System.IO.File]::WriteAllText(
               (Join-Path (Get-Location) 'backend-default.json'),

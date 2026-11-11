@@ -269,8 +269,48 @@ function initUpdater({ send, getMainWindow } = {}) {
   }
 
   _bindEvents()
+  _applyFeedConfig()
   _initialized = true
   console.log('[Updater] initialized, current version:', _state.currentVersion)
+}
+
+/**
+ * 更新源配置。
+ *
+ * 默认源来自打包时写入 app-update.yml 的 GitHub provider。
+ * 若随包默认配置里带了 updatesUrl（或环境变量 CD_UPDATES_URL），
+ * 则改用自建服务器（generic provider）——国内访问更快、不依赖 GitHub。
+ *
+ * 服务器目录结构（server.py 的 /updates/ 路由）：
+ *   <updatesUrl>/latest.yml
+ *   <updatesUrl>/ChallengeDaily-<ver>-Setup.exe
+ *   <updatesUrl>/ChallengeDaily-<ver>-Setup.exe.blockmap
+ */
+function _applyFeedConfig() {
+  let updatesUrl = process.env.CD_UPDATES_URL || ''
+  if (!updatesUrl) {
+    try {
+      const cfg = require('./backend-config.cjs').loadConfig()
+      updatesUrl = cfg.updatesUrl || ''
+    } catch (_) {}
+  }
+  if (!updatesUrl) {
+    console.log('[Updater] feed: packaged app-update.yml (github)')
+    return
+  }
+  const base = String(updatesUrl).replace(/\/+$/, '')
+  try {
+    autoUpdater.setFeedURL({
+      provider: 'generic',
+      url: base,
+      // generic provider 默认会拼接 channel，这里显式指定，避免多出路径
+      channel: 'latest',
+    })
+    _state.feed = base
+    console.log('[Updater] feed: server', base)
+  } catch (e) {
+    console.error('[Updater] setFeedURL failed, fallback to packaged feed:', _errMessage(e))
+  }
 }
 
 module.exports = {

@@ -27,7 +27,7 @@ const CONFIG_FILE = () => path.join(app.getPath('userData'), 'backend-config.jso
 // 打包后 process.resourcesPath 指向 resources/；源码运行时回退到本文件同目录
 const DEFAULT_FILE = () => path.join(process.resourcesPath || __dirname, 'backend-default.json')
 
-const DEFAULTS = { mode: 'local', url: '', token: '' }
+const DEFAULTS = { mode: 'local', url: '', token: '', updatesUrl: '' }
 
 /** 合法模式：local（本机 Python）/ remote（本机代理转发云端）/ direct（渲染层直连云端） */
 const VALID_MODES = ['local', 'remote', 'direct']
@@ -50,7 +50,17 @@ function _sanitize(raw) {
     }
   }
   const token = typeof raw?.token === 'string' ? raw.token.trim() : ''
-  return { mode, url, token }
+  // 自建更新源（generic provider）。留空则用打包时写入的 app-update.yml（GitHub）
+  let updatesUrl = typeof raw?.updatesUrl === 'string' ? raw.updatesUrl.trim().replace(/\/+$/, '') : ''
+  if (updatesUrl) {
+    try {
+      const u = new URL(updatesUrl)
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') updatesUrl = ''
+    } catch (_) {
+      updatesUrl = ''
+    }
+  }
+  return { mode, url, token, updatesUrl }
 }
 
 function _readJson(file) {
@@ -75,6 +85,7 @@ function loadConfig() {
     mode: process.env.CHALLENGE_DAILY_BACKEND_MODE || file.mode || packaged.mode || DEFAULTS.mode,
     url: process.env.CHALLENGE_DAILY_BACKEND_URL || file.url || packaged.url || DEFAULTS.url,
     token: process.env.CHALLENGE_DAILY_BACKEND_TOKEN || file.token || packaged.token || DEFAULTS.token,
+    updatesUrl: process.env.CD_UPDATES_URL || file.updatesUrl || packaged.updatesUrl || DEFAULTS.updatesUrl,
   }
   const cfg = _sanitize(merged)
   // remote / direct 都必须有有效 URL，否则回退 local，避免起一个必然不可用的链路
