@@ -52,9 +52,14 @@ const CONNECT_SRC = [
 
 /**
  * 主窗口 / 页面 CSP
- * @param {{ dev?: boolean }} opts dev=true 时放宽 script-src（Vite HMR 需要 unsafe-inline）
+ * @param {{ dev?: boolean, extraConnectSrc?: string[] }} opts
+ *   dev=true 时放宽 script-src（Vite HMR 需要 unsafe-inline）
+ *   extraConnectSrc：运行时追加的 connect-src（direct 模式下为远端后端 origin）
  */
-function buildCSP({ dev = false } = {}) {
+function buildCSP({ dev = false, extraConnectSrc = [] } = {}) {
+  const connect = [...CONNECT_SRC, ...extraConnectSrc.filter(Boolean)]
+  // 去重，避免重复项让策略冗长
+  const uniqConnect = [...new Set(connect)]
   return [
     "default-src 'self'",
     dev ? "script-src 'self' 'unsafe-inline'" : "script-src 'self'",
@@ -65,7 +70,7 @@ function buildCSP({ dev = false } = {}) {
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "img-src 'self' data: blob: http: https:",
     "font-src 'self' data: https://fonts.gstatic.com",
-    `connect-src 'self' ${CONNECT_SRC.join(' ')}`,
+    `connect-src 'self' ${uniqConnect.join(' ')}`,
     "media-src 'none'",
     "object-src 'none'",
     "frame-src 'none'",

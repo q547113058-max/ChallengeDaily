@@ -574,7 +574,16 @@ function createMainWindow() {
   applyCSPToSession(mainWindow.webContents.session)
   // CSP 由 electron/csp.cjs 单点生成（与 index.html 的 meta 同源，见 vite.config.js 的
   // injectCSP 插件）。开发模式放宽 script-src 以支持 Vite HMR。
-  const _csp = buildCSP({ dev: isDev })
+  // direct 模式：渲染层直连远端后端，必须在运行时把该 origin 加入 connect-src，
+  // 否则浏览器会以 "violates Content Security Policy" 拒绝请求。
+  const _extraConnect = []
+  if (BACKEND_MODE === 'direct') {
+    try {
+      const u = new URL(backendConfig.loadConfig().url)
+      _extraConnect.push(u.origin)
+    } catch (_) { /* URL 无效时忽略，配置层已做回退 */ }
+  }
+  const _csp = buildCSP({ dev: isDev, extraConnectSrc: _extraConnect })
   mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {

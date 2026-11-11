@@ -89,7 +89,11 @@ jobs:
             $u = [uri]$env:CD_BACKEND_URL
             Write-Host "Default backend config injected (mode=direct). Host: $($u.Host) Port: $($u.Port). Token length: $($env:CD_BACKEND_TOKEN.Length)."
             # 供构建期 CSP 放行该远端 origin（csp.cjs 读取 CD_BACKEND_ORIGIN）
-            Write-Output ("CD_BACKEND_ORIGIN=" + $u.GetLeftPart([System.UriPartial]::Authority)) >> $env:GITHUB_ENV
+            # 注意：PowerShell 下用 Add-Content 追加到 GITHUB_ENV；
+            # 不能用 `"KEY=VALUE" >> $env:GITHUB_ENV`（会带引号写入导致变量名错误）
+            $origin = $u.GetLeftPart([System.UriPartial]::Authority)
+            Add-Content -Path $env:GITHUB_ENV -Value ("CD_BACKEND_ORIGIN=" + $origin)
+            Write-Host "CD_BACKEND_ORIGIN set to $origin"
           } else {
             Write-Host "Secrets CD_BACKEND_URL / CD_BACKEND_TOKEN not both set; keeping local-mode placeholder."
           }

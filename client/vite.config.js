@@ -9,6 +9,27 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)
 const { buildCSP } = require('./electron/csp.cjs')
 const { BACKEND_PORT } = require('./electron/port-config.cjs')
+const fs = require('node:fs')
+
+/**
+ * 读取随包默认后端配置里的远端 origin（CI 在打包前写入 client/backend-default.json）。
+ * direct 模式下渲染层直连该地址，meta CSP 必须放行，否则浏览器拒绝请求
+ * （响应头 CSP 对 file:// 不生效，真正把关的是 index.html 里的 meta）。
+ */
+function readDirectOrigins() {
+  try {
+    const p = path.join(__dirname, 'backend-default.json')
+    if (!fs.existsSync(p)) return []
+    const cfg = JSON.parse(fs.readFileSync(p, 'utf8').replace(/^\uFEFF/, ''))
+    if (!cfg || cfg.mode !== 'direct' || !cfg.url) return []
+    const origin = new URL(cfg.url).origin
+    console.log('[vite][csp] direct 模式，CSP 追加 connect-src:', origin)
+    return [origin]
+  } catch (e) {
+    console.warn('[vite] 读取 backend-default.json 失败，CSP 不追加远端 origin:', e.message)
+    return []
+  }
+}
 
 /**
  * Vite 插件：把 CSP 注入 index.html 的 <!--CSP_META--> 占位符
@@ -20,8 +41,9 @@ function injectCSP(isServe) {
   return {
     name: 'inject-csp',
     transformIndexHtml(html) {
+      const extra = isServe ? [] : readDirectOrigins()
       const meta =
-        `<meta http-equiv="Content-Security-Policy" content="${buildCSP({ dev: isServe })}">`
+        `<meta http-equiv="Content-Security-Policy" content="${buildCSP({ dev: isServe, extraConnectSrc: extra })}">`
       if (!html.includes('<!--CSP_META-->')) {
         // 宁可构建失败，也不能静默产出一份没有 CSP 的页面
         throw new Error('index.html 缺少 <!--CSP_META--> 占位符，CSP 注入失败')
