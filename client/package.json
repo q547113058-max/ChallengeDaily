@@ -11,7 +11,7 @@
     "publish:win": "vite build && electron-builder --win --publish always",
     "bump": "node scripts/bump-version.cjs",
     "preview": "vite preview",
-    "start": "electron .",
+    "start": "node scripts/dev-launch.cjs",
     "test": "jest",
     "test:coverage": "jest --coverage",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings 0",
