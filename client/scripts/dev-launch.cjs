@@ -25,6 +25,7 @@ const ELECTRON = path.join(CLIENT, 'node_modules', 'electron', 'dist', 'electron
 const args = process.argv.slice(2)
 const dryRun = args.includes('--dry-run')
 const noBuild = args.includes('--no-build')
+const buildOnly = args.includes('--build-only')
 
 function readToken() {
   try {
@@ -56,6 +57,14 @@ if (dryRun) {
   console.log('dist/index.html            =', fs.existsSync(DIST_INDEX))
   console.log('electron.exe               =', fs.existsSync(ELECTRON))
   process.exit(0)
+}
+
+if (buildOnly) {
+  console.log('[dev] 构建前端 dist/（仅构建，不启动 Electron）...')
+  const r = spawnSync(process.execPath, [path.join(CLIENT, 'node_modules', 'vite', 'bin', 'vite.js'), 'build'], {
+    cwd: CLIENT, env, stdio: 'inherit',
+  })
+  process.exit(r.status || 0)
 }
 
 if (!fs.existsSync(ELECTRON)) {

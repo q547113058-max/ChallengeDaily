@@ -1,42 +1,42 @@
 @echo off
-chcp 65001 >nul 2>&1
 setlocal
 
 REM ============================================================
-REM  ChallengeDaily 源码调试启动（双击即用）
-REM  不使用 npm / .ps1，绕开 PowerShell 执行策略限制
-REM  等价于: node scripts/dev-launch.cjs
+REM  ChallengeDaily source debug launcher (double-click to run)
+REM  Pure ASCII: cmd.exe parses .cmd with the system ANSI codepage,
+REM  so any non-ASCII text gets garbled and executed as commands.
+REM  Equivalent to: node scripts/dev-launch.cjs
 REM
-REM  可选参数:
-REM    start-dev.cmd          构建前端 + 启动源码 Electron
-REM    start-dev.cmd fast     跳过构建，直接启动（仅改了 .cjs 时用）
-REM    start-dev.cmd browser  只构建并打开浏览器外壳
+REM  Args:
+REM    (none)   build frontend + launch source Electron
+REM    fast     skip build, launch directly (when only .cjs changed)
+REM    browser  build and open browser shell on 5173
 REM ============================================================
 
 set "CLIENT=D:\project\daily\ChallengeDaily\client"
 cd /d "%CLIENT%"
 
-if /i "%~1"=="fast"    goto :FAST
-if /i "%~1"=="browser" goto :BROWSER
+if /i "%~1"=="fast"    goto FAST
+if /i "%~1"=="browser" goto BROWSER
 
-echo [1/1] 构建前端并启动源码 Electron ...
+echo [1/1] Building frontend and launching source Electron ...
 node scripts\dev-launch.cjs
-goto :DONE
+goto DONE
 
 :FAST
-echo [跳过构建] 直接启动源码 Electron ...
+echo [skip build] Launching source Electron ...
 node scripts\dev-launch.cjs --no-build
-goto :DONE
+goto DONE
 
 :BROWSER
-echo 构建前端并打开浏览器外壳 ...
-node scripts\dev-launch.cjs --no-build 2>nul
+echo Building and opening browser shell ...
+node scripts\dev-launch.cjs --no-build
 start "" "http://127.0.0.1:5173/"
-goto :DONE
+goto DONE
 
 :DONE
 echo.
-echo 若窗口未出现或一闪而过，请把日志发我：
+echo If the window flashes and closes, send me this log:
 echo   %%APPDATA%%\challenge-daily\logs\electron-main.log
 timeout /t 3 >nul
 endlocal
