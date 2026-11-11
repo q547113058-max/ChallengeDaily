@@ -7,6 +7,8 @@ import {
 import {
   getTodayStats,
   getStatus,
+  getSyncStatus,
+  isReadOnlySnapshot,
   getActivities,
   pauseCollector,
   resumeCollector,
@@ -72,6 +74,7 @@ export default function Overview() {
   const navigate = useNavigate()
   const [stats, setStats] = useState<TodayStats | null>(null)
   const [status, setStatus] = useState<CollectorStatus | null>(null)
+  const [syncStatus, setSyncStatus] = useState<{ last_push: string | null; last_push_ts?: string } | null>(null)
   const [activities, setActivities] = useState<Activity[]>([])
   const [heatmapData, setHeatmapData] = useState<RecentHeatmapDay[]>([])
   const [trendData, setTrendData] = useState<Array<{ date: string; count: number; category_count: number; duration_min: number }>>([])
@@ -94,6 +97,11 @@ export default function Overview() {
         setStats(s)
         setStatus(st)
         setActivities(actsPage.activities)
+
+        // 云端只读节点：拉取最后一次数据同步时间（接口不存在时静默返回 null）
+        if (isReadOnlySnapshot(st)) {
+          getSyncStatus().then((ss) => setSyncStatus(ss)).catch(() => {})
+        }
 
         try {
           const heat = await getRecentHeatmap(3)
@@ -170,6 +178,11 @@ export default function Overview() {
   const longestFocus = stats?.longest_focus_min || 0
   const isRecording = status?.running && !status?.paused
   const isPaused = status !== null && !status.running
+  // 云端只读快照：本机没有采集器，开始/暂停按钮无意义，改为展示同步状态
+  const readOnly = isReadOnlySnapshot(status)
+  const lastPushText = syncStatus?.last_push
+    ? dayjs(syncStatus.last_push).format('MM-DD HH:mm')
+    : null
 
   const days = [0, 1, 2].map((offset) => dayjs().subtract(offset, 'day'))
   const intervalSec = status?.interval_sec || 60
@@ -250,7 +263,12 @@ export default function Overview() {
             <ActivityIcon size={40} className="text-cd-green" />
           </div>
           <h2 className="text-xl font-semibold text-cd-text mb-3 font-display">欢迎使用 <span className="font-brand font-bold">ChallengeDaily</span></h2>
-          {isPaused ? (
+          {readOnly ? (
+            <p className="text-base text-cd-text-secondary">
+              当前连接到云端数据节点（只读），记录由本机采集器自动同步。
+              {lastPushText && <span className="block text-sm text-cd-text-tertiary mt-2">最后同步：{lastPushText}</span>}
+            </p>
+          ) : isPaused ? (
             <>
               <p className="text-base text-cd-text-secondary mb-6">采集器已暂停，点击开始自动记录。</p>
               <button onClick={handleResume}
@@ -274,16 +292,27 @@ export default function Overview() {
           <div className="flex-1 min-w-0">
             <HeroInfo todayDurationMin={stats?.total_duration_min || 0} />
           </div>
-          <button
-            onClick={isRecording ? handlePause : handleResume}
-            className={`shrink-0 flex items-center gap-2 text-sm px-4 py-2 rounded-lg transition border ${
-              isRecording
-                ? 'border-cd-green/20 bg-cd-green/5 text-cd-green'
-                : 'border-cd-red/20 bg-cd-red/5 text-cd-red'
-            }`}
-          >
-            {isRecording ? <><span className="w-2 h-2 rounded-full bg-cd-green animate-pulse-soft" /> 正在记录</> : <><span className="w-2 h-2 rounded-full bg-cd-red" /> 已暂停</>}
-          </button>
+          {readOnly ? (
+            <div className="shrink-0 flex flex-col items-end gap-1 text-right">
+              <span className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg border border-cd-border bg-cd-bg-secondary text-cd-text-secondary">
+                <span className="w-2 h-2 rounded-full bg-cd-green" /> 只读 · 本机同步
+              </span>
+              {lastPushText && (
+                <span className="text-[11px] text-cd-text-tertiary">最后同步 {lastPushText}</span>
+              )}
+            </div>
+          ) : (
+            <button
+              onClick={isRecording ? handlePause : handleResume}
+              className={`shrink-0 flex items-center gap-2 text-sm px-4 py-2 rounded-lg transition border ${
+                isRecording
+                  ? 'border-cd-green/20 bg-cd-green/5 text-cd-green'
+                  : 'border-cd-red/20 bg-cd-red/5 text-cd-red'
+              }`}
+            >
+              {isRecording ? <><span className="w-2 h-2 rounded-full bg-cd-green animate-pulse-soft" /> 正在记录</> : <><span className="w-2 h-2 rounded-full bg-cd-red" /> 已暂停</>}
+            </button>
+          )}
         </div>
 
         {/* 三个核心指标：大号衬线数字 */}

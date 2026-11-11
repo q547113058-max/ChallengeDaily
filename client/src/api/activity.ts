@@ -8,6 +8,25 @@ export async function getStatus(): Promise<CollectorStatus> {
   return data as CollectorStatus
 }
 
+/**
+ * 获取数据同步状态（云端只读节点用）。
+ * 返回 last_push：本机 Windows 采集器最后一次推送数据的时间。
+ * 后端未部署该接口时返回 null，调用方需容错。
+ */
+export async function getSyncStatus(): Promise<{ last_push: string | null; last_push_ts?: string } | null> {
+  try {
+    const data = await request('/api/sync/status', {}, 8000)
+    return data as { last_push: string | null; last_push_ts?: string }
+  } catch {
+    return null
+  }
+}
+
+/** 是否为「云端只读快照」模式（无本地采集器，不能开始/暂停记录） */
+export function isReadOnlySnapshot(status: CollectorStatus | null): boolean {
+  return status?.mode === 'synced-snapshot' || status?.mode === 'server-only'
+}
+
 /** 获取今日统计 */
 export async function getTodayStats(): Promise<TodayStats> {
   const data = await request('/api/stats/today')

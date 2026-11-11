@@ -20,7 +20,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
-import { getStatus, pauseCollector, resumeCollector, getTodayStats, type CollectorStatus, type TodayStats } from '../api/client'
+import { getStatus, isReadOnlySnapshot, pauseCollector, resumeCollector, getTodayStats, type CollectorStatus, type TodayStats } from '../api/client'
 import { useTheme } from './ThemeContext'
 
 // ─── 精简后的导航结构 ──────────────────────────────
@@ -191,22 +191,25 @@ export default function Sidebar() {
       {/* ─── 顶部状态 ───────────────── */}
       <div className="px-5 pt-5 pb-4">
         <button
-          onClick={handleToggleCollector}
+          onClick={isReadOnlySnapshot(status) ? undefined : handleToggleCollector}
+          disabled={isReadOnlySnapshot(status)}
           className={`flex items-center gap-2 w-full px-2.5 py-1.5 rounded-lg transition-colors ${
-            status !== null && !status?.running
-              ? 'bg-cd-red/8 hover:bg-cd-red/15 border border-cd-red/15'
-              : 'hover:bg-cd-hover'
+            isReadOnlySnapshot(status)
+              ? 'cursor-default'
+              : status !== null && !status?.running
+                ? 'bg-cd-red/8 hover:bg-cd-red/15 border border-cd-red/15'
+                : 'hover:bg-cd-hover'
           }`}
         >
           <span
             className={`w-2 h-2 rounded-full ${
-              status === null ? 'bg-cd-text-tertiary animate-pulse' : (status?.running && !status?.paused) ? 'bg-cd-green animate-pulse-soft' : 'bg-cd-red'
+              isReadOnlySnapshot(status) ? 'bg-cd-green' : status === null ? 'bg-cd-text-tertiary animate-pulse' : (status?.running && !status?.paused) ? 'bg-cd-green animate-pulse-soft' : 'bg-cd-red'
             }`}
           />
-          <span className={`text-xs ${status !== null && !(status?.running && !status?.paused) ? 'text-cd-red font-medium' : 'text-cd-text-secondary'}`}>
-            {status === null ? '连接中...' : (status?.running && !status?.paused) ? '正在记录' : '已暂停 — 点击开始'}
+          <span className={`text-xs ${isReadOnlySnapshot(status) ? 'text-cd-text-secondary' : status !== null && !(status?.running && !status?.paused) ? 'text-cd-red font-medium' : 'text-cd-text-secondary'}`}>
+            {isReadOnlySnapshot(status) ? '只读 · 本机同步' : status === null ? '连接中...' : (status?.running && !status?.paused) ? '正在记录' : '已暂停 — 点击开始'}
           </span>
-          {status === null ? (
+          {isReadOnlySnapshot(status) ? null : status === null ? (
             <Loader2 size={12} className="text-cd-text-tertiary ml-auto animate-spin" />
           ) : (status?.running && !status?.paused) ? (
             <Pause size={12} className="text-cd-text-tertiary ml-auto" />

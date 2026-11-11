@@ -7,6 +7,8 @@ export interface CollectorStatus {
   total_captures: number
   screenshots_size_mb: number
   ai_enabled: boolean
+  /** 后端运行形态。'synced-snapshot' 表示云端只读数据节点，没有本地采集器 */
+  mode?: string
 }
 
 export interface TodayStats {
