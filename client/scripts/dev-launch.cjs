@@ -41,6 +41,18 @@ const env = { ...process.env }
 delete env.ELECTRON_RUN_AS_NODE          // 否则 electron 以 Node 模式启动，main.cjs 主动退出
 delete env.PYTHONHOME
 delete env.PYTHONPATH
+
+// 关键：esbuild 会在 %TEMP% 下建临时服务目录并尝试删除；某些 Windows 环境
+// （cmd.exe / 受限账户）对该目录无删除权限，导致 vite build 报
+// "remove ...: Access is denied" 而失败。重定向到工作区内可写目录。
+const BUILD_TMP = path.join(CLIENT, '.temp', 'build')
+try { fs.mkdirSync(BUILD_TMP, { recursive: true }) } catch (_) {}
+env.TEMP = BUILD_TMP
+env.TMP = BUILD_TMP
+
+// 用包内自带的 esbuild 二进制，避免它再去 %TEMP% 解包临时服务
+env.ESBUILD_BINARY_PATH = path.join(CLIENT, 'node_modules', '@esbuild', 'win32-x64', 'esbuild.exe')
+
 env.ELECTRON_IS_DEV = '0'                // 加载 dist/index.html（非 dev server）
 env.CHALLENGE_DAILY_BACKEND_MODE = 'direct'
 env.CHALLENGE_DAILY_BACKEND_URL = 'http://193.112.246.85'
