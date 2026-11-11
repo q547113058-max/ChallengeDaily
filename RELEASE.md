@@ -57,6 +57,27 @@ $env:CHALLENGE_DAILY_BACKEND_TOKEN = '<后端 X-API-Token>'
 
 > 已装 v3.4.2 的用户通过在线更新升到下一版即可获得预置配置（更新包会带上新的 `backend-default.json`）。
 
+### 默认后端地址：标准端口 80（v3.4.5 起）
+
+部分公司/家庭出口网络会拦截非标端口 5173。服务器上新增 `port80_proxy.py` + `challengedaily-port80.service`（root 绑定 80，纯标准库转发到本机 5173），因此 Secret 已改为：
+
+```
+CD_BACKEND_URL = http://193.112.246.85        # 不带端口 = 80
+```
+
+- 5173 仍保留、可直连；两条通道等价（预检 / GET / PATCH / 静态页均已实测 200）。
+- CI 日志注入步骤会打印 `Host: 193.112.246.85 Port: 80`（不含凭据），便于核对。
+- 转发器以独立 systemd unit 运行、开机自启、`Restart=always`；只授予 `CAP_NET_BIND_SERVICE`。
+
+### 日志膨胀治理（v3.4.4 / 3.4.5）
+
+旧版本 `electron-main.log` 纯追加无上限，实测 66 天攒到 **27MB / 16 万行**，87% 是 werkzeug 每条 HTTP 访问日志在 stdout/stderr 各记一遍。已修：
+
+| 版本 | 措施 |
+|---|---|
+| 3.4.4 | 主日志加 **5MB × 3 轮转** + 启动时清理旧大文件 + 连续重复行抑制 |
+| 3.4.5 | 后端 `log()` 过滤纯 werkzeug 访问行（保留报错/异常/启动信息） |
+
 **安全约定**：客户端不携带任何 token。`electron-updater` 的 GitHub provider 从包内 `app-update.yml` 读取**公开**仓库的 feed 地址，这也是必须把仓库转公开的原因（feed 方案见 §3）。
 
 ---

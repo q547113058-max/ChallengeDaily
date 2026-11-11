@@ -102,7 +102,9 @@ jobs:
       - name: Build frontend + create installer (dry run, no publish)
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
         working-directory: client
-        run: npm run build
+        # build.publish 配了 GitHub provider，不加 --publish never 时 electron-builder
+        # 会因缺少 GH_TOKEN 在准备发布元数据阶段报错（dry-run 不需要发布）
+        run: npx vite build && npx electron-builder --win --publish never
 
       - name: Upload build artifacts (always, for inspection)
         uses: actions/upload-artifact@v4
