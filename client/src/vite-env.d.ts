@@ -1,5 +1,8 @@
 /// <reference types="vite/client" />
 
+/** 由 vite.config.js 从 electron/port-config.cjs 注入的本地后端端口 */
+declare const __BACKEND_PORT__: number
+
 /** 后端连接配置（读回；token 不返回明文） */
 interface BackendConfigView {
   mode: 'local' | 'remote'

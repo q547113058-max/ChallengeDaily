@@ -125,7 +125,7 @@ let backendProcess = null
 let _backendDir = null        // 后端工作目录，供 readApiToken 使用
 let _backendStarting = false  // 防止并发启动多个后端实例
 
-const BACKEND_PORT = 58888
+const { BACKEND_PORT } = require('./port-config.cjs')
 // isDev 判断优先级：
 // 1. ELECTRON_IS_DEV=0 → 强制生产模式（start.bat/start.vbs 使用）
 // 2. app.isPackaged → 真正打包后始终生产模式
@@ -296,7 +296,7 @@ async function _doStartBackend() {
       console.log('[Main] Backend already running with valid token, skip spawning')
       return
     }
-    console.error('[Main] WARNING: Port 58888 is occupied by another backend with mismatched token.')
+    console.error(`[Main] WARNING: Port ${BACKEND_PORT} is occupied by another backend with mismatched token.`)
     console.error('[Main] If the app shows 401 errors, kill any stale python.exe processes and restart.')
   }
 

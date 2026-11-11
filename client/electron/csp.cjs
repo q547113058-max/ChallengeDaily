@@ -15,10 +15,12 @@
  * 修改白名单只需改这里。
  */
 
+const { BACKEND_PORT } = require('./port-config.cjs')
+
 /** connect-src 白名单：本地后端 + 第三方 API */
 const CONNECT_SRC = [
-  'http://127.0.0.1:58888',
-  'http://localhost:58888',
+  `http://127.0.0.1:${BACKEND_PORT}`,
+  `http://localhost:${BACKEND_PORT}`,
   'http://localhost:5173',
   'https://wttr.in',
   'https://api.open-meteo.com',
@@ -70,7 +72,7 @@ function buildBaseCSP({ dev = false } = {}) {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
-    "connect-src 'self' http://127.0.0.1:58888 http://localhost:5173 http://localhost:58888",
+    `connect-src 'self' http://127.0.0.1:${BACKEND_PORT} http://localhost:5173 http://localhost:${BACKEND_PORT}`,
     "media-src 'none'",
     "object-src 'none'",
     "frame-src 'none'",

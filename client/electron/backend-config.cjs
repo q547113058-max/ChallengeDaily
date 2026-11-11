@@ -4,7 +4,7 @@
  * 两种模式：
  *   - local  （源码默认，行为与历史版本完全一致）：Electron 启动本地 Python 后端进程。
  *   - remote ：后端已部署在另一台机器/服务器上，本机只装客户端。
- *             Electron 不起 Python，改起一个 127.0.0.1:58888 的本地反向代理，
+ *             Electron 不起 Python，改起一个 127.0.0.1:<BACKEND_PORT> 的本地反向代理，
  *             把 /api/* 转发到远端并注入 X-API-Token。前端 core.ts 无需改动。
  *
  * 配置优先级（高 → 低）：

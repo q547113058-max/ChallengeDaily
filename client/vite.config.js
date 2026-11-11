@@ -8,6 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // CSP 单一数据源（与 electron/main.cjs 用同一份，避免双份维护）
 const require = createRequire(import.meta.url)
 const { buildCSP } = require('./electron/csp.cjs')
+const { BACKEND_PORT } = require('./electron/port-config.cjs')
 
 /**
  * Vite 插件：把 CSP 注入 index.html 的 <!--CSP_META--> 占位符
@@ -49,6 +50,10 @@ function removeCrossorigin() {
 export default defineConfig(({ command }) => ({
   // command: 'serve'（开发）| 'build'（打包）—— 开发期需放宽 script-src 以支持 HMR
   plugins: [react(), removeCrossorigin(), injectCSP(command === 'serve')],
+  // 与 electron/port-config.cjs 同源，避免前端 BASE_URL 默认值写死端口
+  define: {
+    __BACKEND_PORT__: JSON.stringify(BACKEND_PORT),
+  },
   base: './',
   root: '.',
   build: {

@@ -3,6 +3,8 @@
  * 覆盖：ensureBaseUrl 单例模式、X-API-Token 注入、请求超时中断
  */
 
+const { BACKEND_PORT } = require('../../electron/port-config.cjs')
+
 describe('API client', () => {
   beforeEach(() => {
     jest.resetModules()
@@ -10,7 +12,7 @@ describe('API client', () => {
 
   // ── 测试1：ensureBaseUrl 单例 — getBackendPort 仅调用一次 ──
   it('ensureBaseUrl calls getBackendPort once (singleton pattern)', async () => {
-    const mockGetBackendPort = jest.fn().mockResolvedValue(58888)
+    const mockGetBackendPort = jest.fn().mockResolvedValue(BACKEND_PORT)
     ;(window as any).electronAPI = { getBackendPort: mockGetBackendPort }
 
     const client = await import('./client')
@@ -33,7 +35,7 @@ describe('API client', () => {
 
   // ── 测试2：request 注入 X-API-Token 头 ──
   it('request sends X-API-Token header', async () => {
-    const mockGetBackendPort = jest.fn().mockResolvedValue(58888)
+    const mockGetBackendPort = jest.fn().mockResolvedValue(BACKEND_PORT)
     const mockGetApiToken = jest.fn().mockResolvedValue('test-token-123')
     ;(window as any).electronAPI = {
       getBackendPort: mockGetBackendPort,
@@ -64,7 +66,7 @@ describe('API client', () => {
 
   // ── 测试3：请求超时中断 ──
   it('request timeout aborts when server does not respond', async () => {
-    const mockGetBackendPort = jest.fn().mockResolvedValue(58888)
+    const mockGetBackendPort = jest.fn().mockResolvedValue(BACKEND_PORT)
     const mockGetApiToken = jest.fn().mockResolvedValue('test-token')
     ;(window as any).electronAPI = {
       getBackendPort: mockGetBackendPort,

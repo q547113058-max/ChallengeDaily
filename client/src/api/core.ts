@@ -1,7 +1,7 @@
 // ── API 核心基础设施：BASE_URL、请求层、Token 管理、后端状态 ──
 
 // 后端 API 基础 URL：优先从 Electron 主进程获取端口，兼容非 Electron 环境
-let BASE_URL = 'http://127.0.0.1:58888'
+let BASE_URL = `http://127.0.0.1:${__BACKEND_PORT__}`
 
 // 浏览器 shell（ui-server.js）用空 BASE_URL 表示「走页面同源的 /api 代理」。
 // 这样远程浏览器访问时，请求发到页面所在服务器，而不是客户端自己的 127.0.0.1。

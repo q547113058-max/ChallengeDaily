@@ -99,7 +99,7 @@ export default function BackendConnectionSettings() {
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               disabled={envOverride}
-              placeholder="http://192.168.1.10:58888"
+              placeholder="http://192.168.1.10:5173"
               className="w-full px-2.5 py-1.5 rounded-lg text-xs bg-cd-bg border border-cd-border text-cd-text placeholder:text-cd-text-tertiary focus:outline-none focus:ring-1 focus:ring-cd-green disabled:opacity-50"
             />
           </label>
@@ -119,7 +119,7 @@ export default function BackendConnectionSettings() {
           </label>
           <p className="flex items-start gap-1.5 text-[10px] text-cd-text-tertiary">
             <AlertCircle size={11} className="mt-0.5 shrink-0" />
-            客户端会在本机 127.0.0.1:58888 起一个反向代理转发请求，Token 只保存在主进程，不会发给页面。
+            客户端会在本机 127.0.0.1:{String(__BACKEND_PORT__)} 起一个反向代理转发请求，Token 只保存在主进程，不会发给页面。
           </p>
         </div>
       )}
