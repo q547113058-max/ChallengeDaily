@@ -54,6 +54,11 @@ env.TMP = BUILD_TMP
 env.ESBUILD_BINARY_PATH = path.join(CLIENT, 'node_modules', '@esbuild', 'win32-x64', 'esbuild.exe')
 
 env.ELECTRON_IS_DEV = '0'                // 加载 dist/index.html（非 dev server）
+// 源码调试用独立 userData，避免与已安装的打包版争抢单实例锁
+// （否则会报 "Lock file can not be created! Error code: 5" 并立即退出）
+const DEV_USER_DATA = path.join(CLIENT, '.temp', 'dev-userdata')
+try { fs.mkdirSync(DEV_USER_DATA, { recursive: true }) } catch (_) {}
+env.CHALLENGE_DAILY_USER_DATA_DIR = DEV_USER_DATA
 env.CHALLENGE_DAILY_BACKEND_MODE = 'direct'
 env.CHALLENGE_DAILY_BACKEND_URL = 'http://193.112.246.85'
 env.CHALLENGE_DAILY_BACKEND_TOKEN = readToken()
@@ -102,9 +107,12 @@ if (!fs.existsSync(DIST_INDEX)) {
   process.exit(1)
 }
 
-// 2) 启动源码 Electron（GUI 进程需由用户终端启动）
+// 2) 启动源码 Electron
+// --no-sandbox：本机 Chromium 沙箱初始化会触发 STATUS_BREAKPOINT(0x80000003)，
+//   实测只有带该开关才能启动（见 probe-electron 结果）。仅用于本地源码调试，
+//   打包版不受影响（安装版由 electron-builder 正常启动）。
 console.log('[dev] 启动源码 Electron（direct 模式，不监听 58889）...')
-const child = spawn(ELECTRON, ['.'], {
+const child = spawn(ELECTRON, ['.', '--no-sandbox'], {
   cwd: CLIENT, env, stdio: 'inherit', windowsHide: false,
 })
 child.on('exit', (code) => {

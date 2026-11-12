@@ -21,9 +21,11 @@ const updater = require('./updater.cjs')
 const backendConfig = require('./backend-config.cjs')
 const remoteProxy = require('./remote-proxy.cjs')
 
-// 后端连接模式：local = 本机跑 Python（历史行为）；remote = 连已部署的后端
+// 后端连接模式：local = 本机跑 Python（历史行为）；remote = 本机代理转发云端；
+// direct = 渲染层直连云端（无本机监听）
 const BACKEND_MODE = backendConfig.loadConfig().mode
-console.log('[Main] backend mode:', BACKEND_MODE, BACKEND_MODE === 'remote' ? backendConfig.loadConfig().url : '(local)')
+const _modeLabel = BACKEND_MODE === 'local' ? '(local)' : `(${BACKEND_MODE} -> ${backendConfig.loadConfig().url || 'no-url'})`
+console.log('[Main] backend mode:', BACKEND_MODE, _modeLabel)
 
 // 把主进程 console 输出持久化到文件，方便排查无窗口启动问题
 // 注意：__dirname 在打包后位于 asar 只读区，必须使用外部可写路径
@@ -145,12 +147,13 @@ app.setAppUserModelId('com.challenge.daily')
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=256 --gc-interval=100')
 
 // ─── 关键：在 requestSingleInstanceLock() 之前显式设置 userData 路径 ───
-// Electron 单实例锁基于 userData 路径生成命名管道名。
-// 如果不显式设置，开发模式下（electron.exe .）可能与其他使用相同 Electron 二进制的
-// 应用共享命名管道，导致误判"已有实例在运行"从而拒绝启动。
-// 必须在 requestSingleInstanceLock() 之前调用。
-// 使用 package.json name 作为目录名，与之前保持一致以复用配置。
-const _userDataPath = path.join(app.getPath('appData'), 'challenge-daily')
+// Electron 单实例锁基于 userData 路径生成命名管道/互斥体名。
+// 如果与已安装的打包版共用同一目录，两方的全局锁会互相冲突，
+// 源码调试版会误判"已有实例在运行"而 app.exit(0)（表现为启动即关闭）。
+// 源码调试通过 CHALLENGE_DAILY_USER_DATA_DIR 指定独立目录，彻底隔离。
+const _userDataPath = process.env.CHALLENGE_DAILY_USER_DATA_DIR
+  ? path.resolve(process.env.CHALLENGE_DAILY_USER_DATA_DIR)
+  : path.join(app.getPath('appData'), 'challenge-daily')
 try {
   fs.mkdirSync(_userDataPath, { recursive: true })
 } catch (_) {}
