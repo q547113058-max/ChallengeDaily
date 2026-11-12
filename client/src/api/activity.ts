@@ -98,17 +98,35 @@ export async function startupHealthCheck(): Promise<boolean> {
 
 /** 获取后端设置 */
 export async function getSettings(): Promise<BackendSettings> {
-  const data = await request('/api/settings')
-  return data as BackendSettings
+  const data = await request('/api/settings') as Partial<BackendSettings>
+  // 云端只读节点(server-only)的 /api/settings 是精简占位，缺少多个字段。
+  // 在此统一补齐默认值，避免调用方（如 Settings 的 exclude_apps.join）拿到
+  // undefined 而崩溃。
+  const s = data || {}
+  return {
+    exclude_apps: Array.isArray(s.exclude_apps) ? s.exclude_apps : [],
+    screenshot_interval_sec: typeof s.screenshot_interval_sec === 'number' ? s.screenshot_interval_sec : 60,
+    work_start_hour: typeof s.work_start_hour === 'number' ? s.work_start_hour : 9,
+    work_end_hour: typeof s.work_end_hour === 'number' ? s.work_end_hour : 18,
+    custom_report_instructions: s.custom_report_instructions || '',
+    ai_enabled: s.ai_enabled ?? false,
+    ai_base_url: s.ai_base_url || 'https://open.bigmodel.cn/api/paas/v4',
+    ai_vision_model: s.ai_vision_model || (s as any).ai_model || 'glm-4.1v-thinking-flash',
+    ai_text_model: s.ai_text_model || (s as any).ai_model || 'glm-4-flash',
+    birthday: s.birthday || '',
+    life_expectancy: typeof s.life_expectancy === 'number' ? s.life_expectancy : 80,
+    ...(s as any),  // 保留后端返回的其他字段（如 ai_api_key_set）
+  } as BackendSettings
 }
 
 /** 更新后端设置 */
-export async function updateSettings(settings: Partial<BackendSettings>): Promise<{ status: string; settings: BackendSettings }> {
+export async function updateSettings(settings: Partial<BackendSettings>): Promise<{ status: string; settings?: BackendSettings }> {
   const data = await request('/api/settings', {
     method: 'POST',
     body: JSON.stringify(settings),
   })
-  return data as { status: string; settings: BackendSettings }
+  // server-only 节点返回 {status:'ok', mode:'server-only'}，无 settings 字段
+  return data as { status: string; settings?: BackendSettings }
 }
 
 /** 暂停采集器 */

@@ -183,6 +183,12 @@ export default function Settings() {
       }
 
       const res = await updateSettings(settings)
+      // 云端只读节点(server-only)不落盘，返回 200 但无 settings 字段
+      const readOnly = (res as any)?.mode === 'server-only' || !res.settings
+      if (readOnly) {
+        toast.warning('当前连接的是云端只读节点，设置仅保存在本机采集端')
+        return
+      }
       setSaved(true)
       // 如果用户输入了新的 API Key，保存成功后标记为已配置并隐藏输入框
       if (apiKey.trim()) {
