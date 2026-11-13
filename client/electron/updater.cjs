@@ -100,6 +100,8 @@ async function _showAvailableDialog(info) {
   }
 }
 
+let _autoInstallTimer = null
+
 async function _showDownloadedDialog(info) {
   if (_dialogOpen) return
   _dialogOpen = true
@@ -109,13 +111,14 @@ async function _showDownloadedDialog(info) {
       title: '更新已就绪',
       message: `ChallengeDaily ${info?.version || _state.version || ''} 已下载完成`,
       detail:
-        '重启应用即可完成安装。也可以选择稍后，在你下次退出应用时自动安装。\n\n' +
+        '即将自动重启安装（3 秒后）。也可以选择「稍后」，在你下次退出应用时自动安装。\n\n' +
         '安装过程不会删除本地数据（数据库、设置、备份均保留）。',
-      buttons: ['立即重启安装', '退出时安装'],
+      buttons: ['立即重启安装', '稍后'],
       defaultId: 0,
       cancelId: 1,
       noLink: true,
     })
+    if (_autoInstallTimer) { clearTimeout(_autoInstallTimer); _autoInstallTimer = null }
     if (response === 0) {
       quitAndInstall()
     }
@@ -191,7 +194,18 @@ function _bindEvents() {
       progress: null,
       error: null,
     })
+    // 弹「更新已就绪」；同时设兜底定时器：3 秒后若用户未选择，
+    // 自动重启安装。避免用户没看到弹窗（或页面被错误边界遮住）时
+    // 更新一直停在 pending 不生效 —— 这正是 3.4.11 卡住的原因。
     _showDownloadedDialog(info)
+    if (_autoInstallTimer) clearTimeout(_autoInstallTimer)
+    _autoInstallTimer = setTimeout(() => {
+      _autoInstallTimer = null
+      if (_state.status === 'downloaded') {
+        console.log('[Updater] 未在弹窗中操作，3 秒后自动重启安装')
+        quitAndInstall()
+      }
+    }, 3000)
   })
 }
 
