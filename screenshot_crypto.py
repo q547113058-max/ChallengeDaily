@@ -36,7 +36,17 @@ _MAGIC_HEADER = b"CDE1"  # ChallengeDaily Encrypted v1
 
 
 def _get_backend_data_dir() -> Path:
-    """获取后端数据目录（与 db.py 一致）"""
+    """获取后端数据目录。
+
+    与 config.py / db.py 保持一致：源码运行时通过 CHALLENGE_DAILY_DATA_DIR
+    把数据目录指到项目内；打包版仍用 %APPDATA%\\challenge-daily\\backend-data。
+    之前这里硬编码 %APPDATA%，在源码模式（run-collector.cmd 设了
+    CHALLENGE_DAILY_DATA_DIR）下会因该目录 ACL 不可写而抛 WinError 5，
+    导致截图加密被禁用、回退明文存储。
+    """
+    override = os.environ.get('CHALLENGE_DAILY_DATA_DIR', '').strip()
+    if override:
+        return Path(override)
     if sys.platform == 'win32':
         base = os.environ.get('APPDATA') or os.path.expanduser('~')
         return Path(base) / 'challenge-daily' / 'backend-data'
