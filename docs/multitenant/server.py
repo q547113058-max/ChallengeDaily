@@ -425,7 +425,20 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/admin/tenants":
             if not tenant_store.is_admin(self.headers):
                 return self._json(403, {"error": "admin only"})
-            return self._json(200, {"tenants": tenant_store.list_tenants()})
+            tenants = tenant_store.list_tenants()
+            for t in tenants:
+                t["stats"] = tenant_store.tenant_stats(t["tenant_id"])
+            return self._json(200, {"tenants": tenants})
+
+        # 普通 token 也能查「我是谁」，供客户端显示当前租户
+        if path == "/api/tenant/me":
+            if tenant_store.is_admin(self.headers):
+                return self._json(200, {"role": "admin"})
+            tid = tenant_store.resolve_tenant(self.headers)
+            if not tid:
+                return self._json(401, {"error": "invalid token"})
+            return self._json(200, dict(tenant_store.tenant_info(tid) or {}, role="tenant"),
+                              extra=self._no_store())
 
         if path == "/api/admin/whoami":
             if tenant_store.is_admin(self.headers):
@@ -876,7 +889,7 @@ th,td{text-align:left;padding:9px 8px;border-bottom:1px solid #eef0f4}
 </div>
 <div class="card">
   <h2 style="font-size:17px">租户列表</h2>
-  <table><thead><tr><th>租户 ID</th><th>名称</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
+  <table><thead><tr><th>租户 ID</th><th>名称</th><th>状态</th><th>活动数 / DB 大小</th><th>创建时间</th><th>操作</th></tr></thead>
   <tbody id="rows"></tbody></table>
   <div class="msg" id="m2"></div>
 </div>
@@ -894,12 +907,13 @@ function load(){
     if(!ok)return;
     var h='';
     j.tenants.forEach(function(t){
-      h+='<tr><td><span class="code">'+t.tenant_id+'</span></td><td>'+t.name+'</td><td>'+(t.enabled?'<span style="color:#27ae60">启用</span>':'<span style="color:#e74c3c">停用</span>')+'</td><td>'+t.created_at+'</td><td>'+
+      var st=t.stats||{};var sz=st.db_size_bytes?((st.db_size_bytes/1024/1024).toFixed(1)+' MB'):'0 MB';
+      h+='<tr><td><span class="code">'+t.tenant_id+'</span></td><td>'+t.name+'</td><td>'+(t.enabled?'<span style="color:#27ae60">启用</span>':'<span style="color:#e74c3c">停用</span>')+'</td><td>'+(st.activities||0)+' 条 / '+sz+'</td><td>'+t.created_at+'</td><td>'+
         '<button class="small ok" onclick="act(\''+t.tenant_id+'\',\'rotate-token\')">重置Token</button>'+
         '<button class="small warn" onclick="act(\''+t.tenant_id+'\',\''+(t.enabled?'disable':'enable')+'\')">'+(t.enabled?'停用':'启用')+'</button>'+
         '<button class="small danger" onclick="del(\''+t.tenant_id+'\')">删除</button></td></tr>';
     });
-    document.getElementById('rows').innerHTML=h||'<tr><td colspan="5">暂无租户</td></tr>';
+    document.getElementById('rows').innerHTML=h||'<tr><td colspan="6">暂无租户</td></tr>';
   });
 }
 function createTenant(){

@@ -57,6 +57,16 @@ Start-ScheduledTask -TaskName ChallengeDailySync
 - 桌面版：`%APPDATA%\challenge-daily\backend-config.json` 中 `token` 字段改为该租户 token
 - 或浏览器外壳：访问 `http://193.112.246.85/?token=<该租户token>`，shim 会注入对应 token
 
+## 客户端租户标识
+桌面客户端侧栏顶部会显示当前租户名称（数据来自 `/api/tenant/me`）。鼠标悬停可看租户 ID、
+token 提示、创建时间。旧版服务端无此接口时该标识自动隐藏，不影响使用。
+
+租户自己可查询身份（普通 token 即可，返回信息已脱敏，不含完整 token）：
+```bash
+curl -H "X-API-Token: <租户token>" http://193.112.246.85/api/tenant/me
+# {"tenant_id":"acme","name":"Acme","token_hint":"1288f4…14f5","role":"tenant",...}
+```
+
 ## 数据隔离验证
 ```bash
 # 用租户 A 的 token 查
@@ -64,6 +74,12 @@ curl -H "X-API-Token: <tokenA>" http://193.112.246.85/api/activities
 # 用租户 B 的 token 查（只会返回 B 自己的数据）
 curl -H "X-API-Token: <tokenB>" http://193.112.246.85/api/activities
 ```
+
+## 完善项说明
+- **token 唯一**：创建/重置 token 时自动校验，一个 token 只能属于一个租户
+- **删除即清理**：后台删除租户会同时删除其数据目录（`tenants/<id>/`），不留垃圾
+- **数据概况**：管理后台列表显示每租户的活动数与 DB 大小
+- **脱敏**：`/api/tenant/me` 与租户列表均不返回完整 token，仅显示 token 提示
 
 ## 升级部署
 1. 备份：`cp -a /opt/challengedaily /opt/challengedaily.bak-<date>`

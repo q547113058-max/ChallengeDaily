@@ -29,6 +29,7 @@ import json
 import hmac
 import threading
 import hashlib
+import shutil
 from datetime import datetime
 
 
@@ -196,7 +197,13 @@ def create_tenant(tenant_id, name, token=None):
         if tid in reg["tenants"]:
             return None, "tenant already exists"
         if not token:
-            token = hashlib.sha256(os.urandom(32)).hexdigest()
+            token = _new_unique_token_locked()
+        else:
+            token = str(token).strip()
+            # token 冲突检测：一个 token 只能属于一个租户
+            for other, info in reg["tenants"].items():
+                if hmac.compare_digest(token, str(info.get("token", ""))):
+                    return None, "token already used by tenant: %s" % other
         reg["tenants"][tid] = {
             "name": str(name or tid)[:64],
             "token": token,
@@ -206,16 +213,6 @@ def create_tenant(tenant_id, name, token=None):
         os.makedirs(tenant_dir(tid), exist_ok=True)
         _save_locked()
         return {"tenant_id": tid, "name": reg["tenants"][tid]["name"], "token": token}, None
-
-
-def delete_tenant(tenant_id):
-    with _lock:
-        reg = _load()
-        if tenant_id not in reg["tenants"]:
-            return False
-        del reg["tenants"][tenant_id]
-        _save_locked()
-        return True
 
 
 def set_tenant_enabled(tenant_id, enabled):
@@ -233,7 +230,73 @@ def rotate_token(tenant_id):
         reg = _load()
         if tenant_id not in reg["tenants"]:
             return None
-        token = hashlib.sha256(os.urandom(32)).hexdigest()
+        token = _new_unique_token_locked()
         reg["tenants"][tenant_id]["token"] = token
         _save_locked()
         return token
+
+
+def _new_unique_token_locked():
+    """生成不与任何现有租户 token 冲突的新 token。"""
+    reg = _load()
+    used = set(str(v.get("token", "")) for v in reg["tenants"].values())
+    while True:
+        token = hashlib.sha256(os.urandom(32)).hexdigest()
+        if token not in used:
+            return token
+
+
+def tenant_info(tenant_id):
+    """给租户自己看的脱敏信息（不含完整 token）。"""
+    info = _load()["tenants"].get(tenant_id)
+    if not info:
+        return None
+    tok = str(info.get("token", ""))
+    return {
+        "tenant_id": tenant_id,
+        "name": info.get("name", ""),
+        "enabled": info.get("enabled", True),
+        "created_at": info.get("created_at", ""),
+        "token_hint": (tok[:6] + "…" + tok[-4:]) if len(tok) > 12 else "****",
+    }
+
+
+def tenant_stats(tenant_id):
+    """租户数据概况：DB 大小、活动数（供管理后台展示）。"""
+    tdir = tenant_dir(tenant_id)
+    db = os.path.join(tdir, "synced.db")
+    out = {"db_size_bytes": 0, "activities": 0}
+    if os.path.isfile(db):
+        out["db_size_bytes"] = os.path.getsize(db)
+        try:
+            import sqlite3
+            con = sqlite3.connect("file:%s?mode=ro" % db.replace("\\", "/"), uri=True, timeout=3)
+            try:
+                out["activities"] = con.execute("SELECT COUNT(*) FROM activities").fetchone()[0]
+            except Exception:
+                pass
+            finally:
+                con.close()
+        except Exception:
+            pass
+    return out
+
+
+def delete_tenant(tenant_id, purge_data=True):
+    """删除租户。purge_data=True 时同时删除其数据目录。"""
+    with _lock:
+        reg = _load()
+        if tenant_id not in reg["tenants"]:
+            return False
+        del reg["tenants"][tenant_id]
+        _save_locked()
+        if purge_data:
+            tdir = tenant_dir(tenant_id)
+            # 二次校验：只允许删 tenants/ 下的合法 id 目录
+            if _safe_id(tenant_id) and os.path.isdir(tdir) and \
+                    os.path.dirname(os.path.abspath(tdir)) == os.path.abspath(os.path.join(DATA_DIR, "tenants")):
+                try:
+                    shutil.rmtree(tdir)
+                except OSError:
+                    pass
+        return True
