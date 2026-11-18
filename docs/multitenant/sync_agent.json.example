@@ -1,0 +1,6 @@
+{
+  "server": "http://193.112.246.85",
+  "token": "把该租户的专属 API Token 粘贴到这里（由管理员在 /admin 后台创建租户后获得）",
+  "db": "D:\\project\\daily\\ChallengeDaily\\data\\xiaohei.db",
+  "interval": 60
+}

@@ -1,0 +1,239 @@
+# -*- coding: utf-8 -*-
+"""
+多租户注册表（CentOS 7 / Python 3.6 标准库，零第三方依赖）。
+
+设计：
+  * 一个 JSON 文件 tenants.json 保存租户列表：
+      {
+        "tenants": {
+          "<tenant_id>": {
+            "name": "显示名",
+            "token": "<该租户唯一 API Token>",
+            "created_at": "ISO",
+            "enabled": true
+          }
+        },
+        "admins": ["<admin token>", ...]
+      }
+  * 每个租户的数据放在 DATA_DIR/tenants/<tenant_id>/ 下：
+      synced.db          —— 采集数据（独立 DB）
+      client_state.json  —— 前端状态
+  * token -> tenant_id 映射从注册表构建，用于请求鉴权后切换数据目录。
+  * 单个 admin token 可以管理（创建/删除/列表）所有租户。
+
+向后兼容：初始化时若注册表为空，把旧的 DATA_DIR/.api_token + synced.db
+迁移为 "default" 租户；旧 token 继续可用。
+"""
+import os
+import json
+import hmac
+import threading
+import hashlib
+from datetime import datetime
+
+
+DATA_DIR = os.environ.get("CD_DATA_DIR", "/opt/challengedaily/data")
+REGISTRY_FILE = os.environ.get("CD_TENANTS_FILE", os.path.join(DATA_DIR, "tenants.json"))
+ADMIN_TOKEN_FILE = os.environ.get("CD_ADMIN_TOKEN_FILE", os.path.join(DATA_DIR, ".admin_token"))
+LEGACY_TOKEN_FILE = os.environ.get("CD_TOKEN_FILE", os.path.join(DATA_DIR, ".api_token"))
+
+_lock = threading.RLock()
+_registry = None
+
+
+def _now():
+    return datetime.now().isoformat()
+
+
+def _fresh():
+    return {"tenants": {}, "admins": []}
+
+
+def _load():
+    global _registry
+    with _lock:
+        if _registry is not None:
+            return _registry
+        data = _fresh()
+        if os.path.isfile(REGISTRY_FILE):
+            try:
+                with open(REGISTRY_FILE, "r", encoding="utf-8") as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    data.setdefault("tenants", {})
+                    data.setdefault("admins", [])
+                    if isinstance(loaded.get("tenants"), dict):
+                        data["tenants"] = loaded["tenants"]
+                    if isinstance(loaded.get("admins"), list):
+                        data["admins"] = loaded["admins"]
+            except Exception:
+                pass
+        _registry = data
+        _migrate_legacy_locked()
+        return _registry
+
+
+def _save_locked():
+    os.makedirs(os.path.dirname(REGISTRY_FILE), exist_ok=True)
+    tmp = REGISTRY_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(_registry, f, ensure_ascii=False, indent=2)
+    try:
+        os.replace(tmp, REGISTRY_FILE)
+    except OSError:
+        os.rename(tmp, REGISTRY_FILE)
+    try:
+        os.chmod(REGISTRY_FILE, 0o600)
+    except OSError:
+        pass
+
+
+def _migrate_legacy_locked():
+    """首次运行：把旧的单一 token 迁移为 default 租户，避免现有用户断线。"""
+    if _registry["tenants"]:
+        return
+    legacy = ""
+    if os.path.isfile(LEGACY_TOKEN_FILE):
+        try:
+            with open(LEGACY_TOKEN_FILE, "r", encoding="utf-8") as f:
+                legacy = f.read().strip()
+        except Exception:
+            pass
+    if not legacy:
+        return
+    _registry["tenants"]["default"] = {
+        "name": "默认租户",
+        "token": legacy,
+        "created_at": _now(),
+        "enabled": True,
+    }
+    # 把旧数据文件移到 default 目录（存在才移）
+    tdir = tenant_dir("default")
+    os.makedirs(tdir, exist_ok=True)
+    for name in ("synced.db", "synced.db-wal", "synced.db-shm", "client_state.json"):
+        src = os.path.join(DATA_DIR, name)
+        dst = os.path.join(tdir, name)
+        if os.path.isfile(src) and not os.path.isfile(dst):
+            try:
+                os.rename(src, dst)
+            except OSError:
+                pass
+    _save_locked()
+
+
+def _safe_id(tenant_id):
+    """tenant_id 只能含安全字符，防目录穿越。"""
+    if not tenant_id or len(tenant_id) > 64:
+        return None
+    ok = all(c.isalnum() or c in "-_" for c in tenant_id)
+    return tenant_id if ok else None
+
+
+def tenant_dir(tenant_id):
+    tid = _safe_id(tenant_id)
+    if not tid:
+        return os.path.join(DATA_DIR, "tenants", "_invalid")
+    return os.path.join(DATA_DIR, "tenants", tid)
+
+
+def get_admin_tokens():
+    toks = list(_load()["admins"])
+    if os.path.isfile(ADMIN_TOKEN_FILE):
+        try:
+            with open(ADMIN_TOKEN_FILE, "r", encoding="utf-8") as f:
+                t = f.read().strip()
+            if t and t not in toks:
+                toks.append(t)
+        except Exception:
+            pass
+    return toks
+
+
+def is_admin(headers):
+    got = headers.get("X-API-Token", "") or headers.get("X-Admin-Token", "")
+    return any(hmac.compare_digest(got, t) for t in get_admin_tokens() if t)
+
+
+def resolve_tenant(headers):
+    """根据 X-API-Token 返回 tenant_id；无效返回 None。"""
+    got = headers.get("X-API-Token", "")
+    if not got:
+        return None
+    for tid, info in _load()["tenants"].items():
+        if not info.get("enabled", True):
+            continue
+        if hmac.compare_digest(got, str(info.get("token", ""))):
+            return tid
+    # admin token 不是租户 token
+    return None
+
+
+def tenant_token(tenant_id):
+    info = _load()["tenants"].get(tenant_id)
+    return str(info.get("token", "")) if info else ""
+
+
+def list_tenants():
+    out = []
+    for tid, info in _load()["tenants"].items():
+        out.append({
+            "tenant_id": tid,
+            "name": info.get("name", ""),
+            "created_at": info.get("created_at", ""),
+            "enabled": info.get("enabled", True),
+            # 不返回 token 明文，避免列表接口泄露
+            "has_token": bool(info.get("token")),
+        })
+    return sorted(out, key=lambda x: x["tenant_id"])
+
+
+def create_tenant(tenant_id, name, token=None):
+    with _lock:
+        reg = _load()
+        tid = _safe_id(tenant_id)
+        if not tid:
+            return None, "invalid tenant_id"
+        if tid in reg["tenants"]:
+            return None, "tenant already exists"
+        if not token:
+            token = hashlib.sha256(os.urandom(32)).hexdigest()
+        reg["tenants"][tid] = {
+            "name": str(name or tid)[:64],
+            "token": token,
+            "created_at": _now(),
+            "enabled": True,
+        }
+        os.makedirs(tenant_dir(tid), exist_ok=True)
+        _save_locked()
+        return {"tenant_id": tid, "name": reg["tenants"][tid]["name"], "token": token}, None
+
+
+def delete_tenant(tenant_id):
+    with _lock:
+        reg = _load()
+        if tenant_id not in reg["tenants"]:
+            return False
+        del reg["tenants"][tenant_id]
+        _save_locked()
+        return True
+
+
+def set_tenant_enabled(tenant_id, enabled):
+    with _lock:
+        reg = _load()
+        if tenant_id not in reg["tenants"]:
+            return False
+        reg["tenants"][tenant_id]["enabled"] = bool(enabled)
+        _save_locked()
+        return True
+
+
+def rotate_token(tenant_id):
+    with _lock:
+        reg = _load()
+        if tenant_id not in reg["tenants"]:
+            return None
+        token = hashlib.sha256(os.urandom(32)).hexdigest()
+        reg["tenants"][tenant_id]["token"] = token
+        _save_locked()
+        return token
