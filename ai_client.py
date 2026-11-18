@@ -9,6 +9,10 @@ import threading
 import time
 import httpx
 from openai import OpenAI, RateLimitError
+try:
+    from openai import AuthenticationError, PermissionDeniedError
+except ImportError:  # 兼容旧版 openai
+    AuthenticationError = PermissionDeniedError = ()
 
 import config
 from screenshot import encode_image_to_base64
@@ -93,24 +97,34 @@ def _cb_check() -> bool:
 def _cb_record_success():
     """记录一次成功请求，重置熔断器"""
     global _cb_state, _cb_consecutive_failures, _cb_cooldown_sec
+    was_recovering = False
     with _cb_lock:
         if _cb_state == "half_open":
             logger.info("Circuit breaker: HALF_OPEN → CLOSED，试探成功，恢复服务")
+            was_recovering = True
         _cb_state = "closed"
         _cb_consecutive_failures = 0
         _cb_cooldown_sec = _CB_COOLDOWN_INIT_SEC  # 重置冷却时间
+    # 锁外发通知：写 DB 是慢操作，不能持锁
+    if was_recovering:
+        _notify_ai("AI 服务已恢复", "视觉模型调用恢复正常，熔断器已关闭", "success", "ai_recovered")
 
 
 def _cb_record_failure():
     """记录一次失败请求，累计失败次数（指数退避冷却）"""
     global _cb_state, _cb_consecutive_failures, _cb_opened_at, _cb_cooldown_sec
+    just_opened = False
+    cooldown = 0
+    fails = 0
     with _cb_lock:
         _cb_consecutive_failures += 1
+        fails = _cb_consecutive_failures
         if _cb_state == "half_open":
             # 半开状态失败 → 重新熔断，指数退避
             _cb_cooldown_sec = min(_cb_cooldown_sec * 2, _CB_COOLDOWN_MAX_SEC)
             _cb_state = "open"
             _cb_opened_at = time.monotonic()
+            cooldown = _cb_cooldown_sec
             logger.warning(
                 f"Circuit breaker: HALF_OPEN → OPEN，试探失败，重新熔断，"
                 f"冷却 {_cb_cooldown_sec}s"
@@ -120,10 +134,25 @@ def _cb_record_failure():
             _cb_cooldown_sec = _CB_COOLDOWN_INIT_SEC
             _cb_state = "open"
             _cb_opened_at = time.monotonic()
+            cooldown = _cb_cooldown_sec
+            just_opened = True
             logger.warning(
                 f"Circuit breaker: CLOSED → OPEN，连续 {_cb_consecutive_failures} 次失败，"
                 f"冷却 {_cb_cooldown_sec}s"
             )
+    # 锁外发通知
+    if just_opened:
+        _notify_ai("AI 服务异常", f"视觉模型连续失败 {fails} 次，已暂停调用 {cooldown} 秒后重试",
+                   "warning", "ai_circuit_open")
+
+
+def _notify_ai(title: str, body: str, ntype: str, dedup_key: str) -> None:
+    """熔断相关的通知（延迟导入避免循环依赖，失败不影响主流程）。"""
+    try:
+        from routes.notifications import add_notification
+        add_notification(title, body, ntype, category="ai", dedup_key=dedup_key)
+    except Exception:
+        pass
 
 
 # ── AI 速率限制器（令牌桶，防止单次异常导致 API 账单暴涨） ──
@@ -408,6 +437,14 @@ def analyze_screenshot(image_path: str, app_name: str = "", window_title: str = 
             return {"category": "生活", "summary": "解析失败", "detail": raw[:50]}
 
         except Exception as e:
+            # 401/403：API Key 无效，重试无意义且会造成重试风暴打满 HTTP 线程 —— 立即熔断返回
+            _status = getattr(e, 'status_code', None)
+            if _status in (401, 403) or isinstance(e, (AuthenticationError, PermissionDeniedError)):
+                logger.error("AI API Key 无效或未授权 (HTTP %s)，停止重试并熔断", _status)
+                _reset_client()
+                _cb_record_failure()
+                return {"category": "生活", "summary": app_name or "AI 服务不可用",
+                        "detail": "AI API Key 无效(401)，请在设置中更新", "windows": []}
             wait = 1.0 * (2 ** attempt)  # 1s, 2s, 4s
             if attempt < max_retries - 1:
                 logger.warning(_sanitize_log(f"AI 分析失败 (尝试 {attempt+1}/{max_retries})，{wait:.0f}s 后重试: {e}"))
@@ -738,3 +775,117 @@ def generate_greeting(context: dict) -> str:
                 except Exception:
                     pass
                 return draft
+
+
+# ── AI 自我认知分析（MBTI / 荣格八维 / 大五 / 认知风格）──────────────
+_COGNITION_SCHEMAS = {
+    "mbti_inference": (
+        "输出 JSON：{mbti_type:\"如 INTP 四字母\", ei_label:\"必须写成 外向(E)/内向(I)/中间型 之一\", "
+        "sn_label:\"必须写成 直觉(N)/感觉(S)/中间型 之一\", tf_label:\"必须写成 情感(F)/思考(T)/中间型 之一\", "
+        "jp_label:\"必须写成 知觉(P)/判断(J)/中间型 之一\", confidence:0-1小数, narrative:\"2-3句中文解读\"}"
+    ),
+    "jungian_functions": (
+        "输出 JSON：{dominant_function:\"如 内倾直觉(Ni)\", "
+        "function_stack:[\"主导\",\"辅助\",\"第三\"三个功能名], "
+        "confidence:0-1小数, narrative:\"2-3句中文解读\"}"
+    ),
+    "cognitive_style": (
+        "输出 JSON：{wa_label:\"分析型/整体型\", vi_label:\"言语型/表象型\", "
+        "ri_label:\"反思型/行动型\", confidence:0-1小数, narrative:\"2-3句中文解读\"}"
+    ),
+    "big_five": (
+        "输出 JSON：{openness_score:0-100, conscientiousness_score:0-100, "
+        "extraversion_score:0-100, agreeableness_score:0-100, neuroticism_score:0-100, "
+        "confidence:0-1小数, narrative:\"2-3句中文解读\"}"
+    ),
+}
+
+
+def analyze_cognition(atype: str, data_summary: str, previous: str = "") -> dict | None:
+    """用文本模型基于工作行为数据推断人格/认知类型。
+
+    atype: mbti_inference | jungian_functions | cognitive_style | big_five
+    data_summary: 近 7 天活动聚合的紧凑文本（分类时长/应用/时段分布）
+    previous: 上次该类型的分析结论 JSON 文本，用于「累积理解」——AI 会在前次基础上修正
+    成功返回结构化 dict；失败/限流/无 Key 返回 None，由调用方回退规则计算。
+    """
+    schema = _COGNITION_SCHEMAS.get(atype)
+    if not schema or not config.AI_API_KEY:
+        return None
+    if not _cb_check() or not _rate_limit_check("text"):
+        return None
+
+    continuity = ""
+    if previous and previous.strip() not in ("{}", "null", ""):
+        continuity = (
+            "\n\n【上次分析结论（请在它基础上结合新数据修正，保持连续性，不要无依据地推翻）】\n"
+            + previous[:1200]
+        )
+
+    prompt = (
+        "你是 ChallengeDaily 的行为认知分析师。请基于用户真实的工作行为数据，"
+        "推断其人格/认知特征。只依据给定数据，不要编造；结论要谨慎、避免标签化、语气友好。\n\n"
+        f"【分析任务】{schema}\n\n"
+        f"【近7天工作行为数据】\n{data_summary[:4000]}"
+        f"{continuity}\n\n"
+        "只输出一个 JSON 对象，不要任何额外文字或代码块标记。"
+    )
+
+    for attempt in range(2):
+        try:
+            client = _get_client()
+            response = client.chat.completions.create(
+                model=config.AI_TEXT_MODEL,
+                messages=[
+                    {"role": "system", "content": "你是严谨、温和的行为认知分析师，只输出合法 JSON，不编造数据。"},
+                    {"role": "user", "content": prompt},
+                ],
+                max_tokens=500,
+                temperature=0.3,
+                extra_body={"thinking": {"type": "disabled"}},
+            )
+            text = (response.choices[0].message.content or "").strip()
+            _cb_record_success()
+            parsed = _parse_json_response(text)
+            if isinstance(parsed, dict) and parsed:
+                # MBTI 四维 label 兜底规范化：AI 常只给单字母，补全成前端期望的「中文(字母)」
+                if atype == "mbti_inference":
+                    _label_map = {
+                        "ei_label": {"E": "外向(E)", "I": "内向(I)"},
+                        "sn_label": {"S": "感觉(S)", "N": "直觉(N)"},
+                        "tf_label": {"T": "思考(T)", "F": "情感(F)"},
+                        "jp_label": {"J": "判断(J)", "P": "知觉(P)"},
+                    }
+                    for key, mapping in _label_map.items():
+                        val = str(parsed.get(key, "")).strip()
+                        if val in mapping:
+                            parsed[key] = mapping[val]
+                        elif val and val not in mapping and "(" not in val:
+                            # 其它异常值：按 mbti_type 对应字母兜底
+                            letter = {"ei_label": 0, "sn_label": 1, "tf_label": 2, "jp_label": 3}[key]
+                            mtype = str(parsed.get("mbti_type", ""))
+                            if len(mtype) == 4 and mtype[letter] in mapping:
+                                parsed[key] = mapping[mtype[letter]]
+                try:
+                    from audit_logger import log_audit
+                    log_audit("ai_cognition", atype, "success", metadata={"keys": len(parsed)})
+                except Exception:
+                    pass
+                return parsed
+            return None
+        except Exception as e:
+            wait = 1.0 * (2 ** attempt)
+            if attempt < 1:
+                logger.warning(_sanitize_log(f"AI 认知分析失败 (尝试 {attempt+1}/2)，{wait:.0f}s 重试: {e}"))
+                time.sleep(wait)
+            else:
+                logger.error(_sanitize_log(f"AI 认知分析最终失败: {e}"))
+                _reset_client()
+                _cb_record_failure()
+                try:
+                    from audit_logger import log_audit
+                    log_audit("ai_cognition", atype, "failure", detail=_sanitize_log(str(e))[:200])
+                except Exception:
+                    pass
+                return None
+    return None
