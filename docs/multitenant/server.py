@@ -601,6 +601,18 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = unquote(parsed.path)
 
+        # ── 租户登录（公开接口：租户 ID + 密码 → 该租户 token）────────
+        if path == "/api/auth/login":
+            body = self._read_body() or {}
+            tid = str(body.get("tenant_id", "")).strip()
+            pw = str(body.get("password", ""))
+            token, err = tenant_store.login(tid, pw)
+            if err:
+                log.warning("login failed for %s: %s", tid, err)
+                return self._json(401, {"error": err}, extra=self._no_store())
+            return self._json(200, {"status": "ok", "token": token, "tenant_id": tid},
+                              extra=self._no_store())
+
         # ── 管理 API（仅 admin token）────────────────────────────────
         if path.startswith("/api/admin/"):
             if not tenant_store.is_admin(self.headers):
@@ -610,10 +622,16 @@ class Handler(BaseHTTPRequestHandler):
                 info, err = tenant_store.create_tenant(
                     str(body.get("tenant_id", "")).strip(),
                     str(body.get("name", "")).strip(),
-                    body.get("token") or None)
+                    body.get("token") or None,
+                    body.get("password") or None)
                 if err:
                     return self._json(400, {"error": err})
                 return self._json(200, {"status": "ok", "tenant": info})
+            if path == "/api/admin/tenants/set-password":
+                ok = tenant_store.set_password(str(body.get("tenant_id", "")),
+                                               str(body.get("password", "")))
+                return self._json(200 if ok else 404,
+                                  {"status": "ok" if ok else "not found"})
             if path == "/api/admin/tenants/enable":
                 ok = tenant_store.set_tenant_enabled(str(body.get("tenant_id", "")), True)
                 return self._json(200 if ok else 404, {"status": "ok" if ok else "not found"})

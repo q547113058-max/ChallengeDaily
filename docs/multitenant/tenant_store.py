@@ -30,7 +30,38 @@ import hmac
 import threading
 import hashlib
 import shutil
+import binascii
 from datetime import datetime
+
+# 租户登录密码：PBKDF2-HMAC-SHA256（标准库，Python 3.6 可用）
+_PBKDF2_ITER = 100000
+_PW_SALT_BYTES = 16
+
+
+def hash_password(password):
+    """返回 'pbkdf2$<iter>$<salt_hex>$<hash_hex>'。"""
+    salt = os.urandom(_PW_SALT_BYTES)
+    dk = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, _PBKDF2_ITER)
+    return 'pbkdf2$%d$%s$%s' % (_PBKDF2_ITER, binascii.hexlify(salt).decode('ascii'),
+                                binascii.hexlify(dk).decode('ascii'))
+
+
+def verify_password(password, encoded):
+    """校验密码；返回 (ok, need_rehash)。兼容旧明文（自动升级）。"""
+    if not encoded:
+        return False, False
+    if not encoded.startswith('pbkdf2$'):
+        # 旧数据兼容：明文相等即可，并建议升级
+        return hmac.compare_digest(str(password), str(encoded)), True
+    try:
+        parts = encoded.split('$')
+        iter_n = int(parts[1])
+        salt = binascii.unhexlify(parts[2])
+        want = binascii.unhexlify(parts[3])
+        got = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, iter_n)
+        return hmac.compare_digest(got, want), False
+    except Exception:
+        return False, False
 
 
 DATA_DIR = os.environ.get("CD_DATA_DIR", "/opt/challengedaily/data")
@@ -182,13 +213,14 @@ def list_tenants():
             "name": info.get("name", ""),
             "created_at": info.get("created_at", ""),
             "enabled": info.get("enabled", True),
-            # 不返回 token 明文，避免列表接口泄露
+            # 不返回 token / 密码 hash 明文，避免列表接口泄露
             "has_token": bool(info.get("token")),
+            "has_password": bool(info.get("password_hash")),
         })
     return sorted(out, key=lambda x: x["tenant_id"])
 
 
-def create_tenant(tenant_id, name, token=None):
+def create_tenant(tenant_id, name, token=None, password=None):
     with _lock:
         reg = _load()
         tid = _safe_id(tenant_id)
@@ -204,15 +236,51 @@ def create_tenant(tenant_id, name, token=None):
             for other, info in reg["tenants"].items():
                 if hmac.compare_digest(token, str(info.get("token", ""))):
                     return None, "token already used by tenant: %s" % other
+        pw_hash = hash_password(password) if password else ""
         reg["tenants"][tid] = {
             "name": str(name or tid)[:64],
             "token": token,
+            "password_hash": pw_hash,
             "created_at": _now(),
             "enabled": True,
         }
         os.makedirs(tenant_dir(tid), exist_ok=True)
         _save_locked()
-        return {"tenant_id": tid, "name": reg["tenants"][tid]["name"], "token": token}, None
+        return {"tenant_id": tid, "name": reg["tenants"][tid]["name"],
+                "token": token, "has_password": bool(pw_hash)}, None
+
+
+def set_password(tenant_id, password):
+    """管理员设置/重置租户登录密码。"""
+    with _lock:
+        reg = _load()
+        if tenant_id not in reg["tenants"]:
+            return False
+        reg["tenants"][tenant_id]["password_hash"] = hash_password(password)
+        _save_locked()
+        return True
+
+
+def login(tenant_id, password):
+    """租户登录：校验 tenant_id + password，成功返回 (token, None)。"""
+    with _lock:
+        reg = _load()
+        info = reg["tenants"].get(tenant_id)
+        if not info:
+            return None, "invalid tenant or password"
+        if not info.get("enabled", True):
+            return None, "tenant disabled"
+        stored = str(info.get("password_hash", ""))
+        if not stored:
+            return None, "password not set for this tenant"
+        ok, need_rehash = verify_password(str(password), stored)
+        if not ok:
+            return None, "invalid tenant or password"
+        # 旧明文密码自动升级为 hash
+        if need_rehash:
+            info["password_hash"] = hash_password(str(password))
+            _save_locked()
+        return str(info["token"]), None
 
 
 def set_tenant_enabled(tenant_id, enabled):
