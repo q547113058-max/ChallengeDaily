@@ -54,6 +54,14 @@ import data_api
 import queries
 import tenant_store
 
+def _q(name):
+    """安全取查询函数：缺失时返回空结构，兼容不同版本 queries.py。"""
+    fn = getattr(queries, name, None)
+    if callable(fn):
+        return fn
+    return lambda q, *a, **k: ({}, None)
+
+
 # ── 多租户上下文 ──────────────────────────────────────────────────────────
 # 每个 HTTP 请求独立线程；鉴权后设置该线程的租户上下文（DB 路径 + state 文件）。
 _ctx = threading.local()
@@ -99,49 +107,49 @@ LOG_FILE = os.environ.get("CD_LOG_FILE", os.path.join(DATA_DIR, "server.log"))
 # 采集数据查询接口：路径 -> (查询函数, 是否需要 token)
 # 这些接口由 Windows 同步代理推送的真实 SQLite 数据驱动（data_api / queries）。
 DATA_ROUTES = {
-    "/api/activities": (queries.activities, True),
-    "/api/activities/search": (queries.activities_search, True),
-    "/api/timeline": (queries.timeline, True),
-    "/api/app-usage": (queries.app_usage, True),
-    "/api/stats/today": (queries.stats_today, True),
-    "/api/stats/hourly": (queries.stats_hourly, True),
-    "/api/stats/trend": (queries.stats_trend, True),
-    "/api/stats/rhythm": (queries.stats_rhythm, True),
-    "/api/stats/recent-heatmap": (queries.stats_recent_heatmap, True),
-    "/api/stats/calendar": (queries.stats_calendar, True),
-    "/api/stats/sankey": (queries.stats_sankey, True),
-    "/api/stats/heatmap": (queries.stats_heatmap, True),
-    "/api/daily-summary": (queries.daily_summary, True),
-    "/api/todos": (queries.todos, True),
-    "/api/habits": (queries.habits, True),
-    "/api/goals": (queries.goals, True),
-    "/api/goals/summary": (queries.goals_summary, True),
-    "/api/report": (queries.reports, True),
-    "/api/report/daily/content": (queries.report_daily_content, True),
-    "/api/report/daily": (queries.report_daily, True),
-    "/api/report/weekly": (queries.report_weekly, True),
-    "/api/report/monthly": (queries.report_monthly, True),
-    "/api/achievements": (queries.achievements, True),
-    "/api/profile": (queries.profile, True),
-    "/api/backup/info": (queries.backup_info, True),
-    "/api/status": (queries.app_status, True),
+    "/api/activities": (_q("activities"), True),
+    "/api/activities/search": (_q("activities_search"), True),
+    "/api/timeline": (_q("timeline"), True),
+    "/api/app-usage": (_q("app_usage"), True),
+    "/api/stats/today": (_q("stats_today"), True),
+    "/api/stats/hourly": (_q("stats_hourly"), True),
+    "/api/stats/trend": (_q("stats_trend"), True),
+    "/api/stats/rhythm": (_q("stats_rhythm"), True),
+    "/api/stats/recent-heatmap": (_q("stats_recent_heatmap"), True),
+    "/api/stats/calendar": (_q("stats_calendar"), True),
+    "/api/stats/sankey": (_q("stats_sankey"), True),
+    "/api/stats/heatmap": (_q("stats_heatmap"), True),
+    "/api/daily-summary": (_q("daily_summary"), True),
+    "/api/todos": (_q("todos"), True),
+    "/api/habits": (_q("habits"), True),
+    "/api/goals": (_q("goals"), True),
+    "/api/goals/summary": (_q("goals_summary"), True),
+    "/api/report": (_q("reports"), True),
+    "/api/report/daily/content": (_q("report_daily_content"), True),
+    "/api/report/daily": (_q("report_daily"), True),
+    "/api/report/weekly": (_q("report_weekly"), True),
+    "/api/report/monthly": (_q("report_monthly"), True),
+    "/api/achievements": (_q("achievements"), True),
+    "/api/profile": (_q("profile"), True),
+    "/api/backup/info": (_q("backup_info"), True),
+    "/api/status": (_q("app_status"), True),
     # Overview / 报告 / 计划等页面必需：返回真实或合法空结构
-    "/api/report/search": (queries.report_search, True),
-    "/api/week-plan/stats": (queries.week_plan_stats, True),
+    "/api/report/search": (_q("report_search"), True),
+    "/api/week-plan/stats": (_q("week_plan_stats"), True),
     "/api/week-plan/unassigned": (lambda q: ({"todos": []}, None), True),
     "/api/week-plan/today": (lambda q: ({"todos": [], "date": date_today_str()}, None), True),
-    "/api/goals/mood-heatmap": (queries.goals_mood_heatmap, True),
-    "/api/habits/recommend": (queries.habit_recommend, True),
-    "/api/profile/analysis": (queries.profile_analyses, True),
-    "/api/audit/logs": (queries.audit_logs, True),
-    "/api/audit/stats": (queries.audit_stats, True),
-    "/api/app-rules": (queries.app_rules, True),
-    "/api/app-rules/known": (queries.known_apps, True),
-    "/api/credibility/daily-report": (queries.credibility_daily, True),
-    "/api/reports/templates": (queries.report_templates, True),
-    "/api/report/weekly-goal": (queries.weekly_goal, True),
-    "/api/ai/overview-summary": (queries.overview_summary, True),
-    "/api/achievements/quote": (queries.ai_quote, True),
+    "/api/goals/mood-heatmap": (_q("goals_mood_heatmap"), True),
+    "/api/habits/recommend": (_q("habit_recommend"), True),
+    "/api/profile/analysis": (_q("profile_analyses"), True),
+    "/api/audit/logs": (_q("audit_logs"), True),
+    "/api/audit/stats": (_q("audit_stats"), True),
+    "/api/app-rules": (_q("app_rules"), True),
+    "/api/app-rules/known": (_q("known_apps"), True),
+    "/api/credibility/daily-report": (_q("credibility_daily"), True),
+    "/api/reports/templates": (_q("report_templates"), True),
+    "/api/report/weekly-goal": (_q("weekly_goal"), True),
+    "/api/ai/overview-summary": (_q("overview_summary"), True),
+    "/api/achievements/quote": (_q("ai_quote"), True),
     "/api/notifications": (lambda q: ({"notifications": []}, None), True),
     "/api/webhooks": (lambda q: ({"webhooks": []}, None), True),
     "/api/auto-report/config": (lambda q: ({"enabled": False, "auto_time": "21:00", "auto_push": False}, None), True),
@@ -171,30 +179,30 @@ DATA_ROUTES = {
 # 动态路径前缀：fn(rest, q) -> (obj, err)
 def _dyn_goals(rest, q):
     if rest.endswith("/progress"):
-        return queries.goals_progress(q, rest.split("/")[0])
+        return _q("goals_progress")(q, rest.split("/")[0])
     if rest.endswith("/mood-heatmap"):
-        return queries.goals_mood_heatmap(q)
+        return _q("goals_mood_heatmap")(q)
     return None, "not_found"
 
 
 def _dyn_habits(rest, q):
     if rest.endswith("/stats"):
-        return queries.habit_stats(q, rest.split("/")[0])
+        return _q("habit_stats")(q, rest.split("/")[0])
     return None, "not_found"
 
 
 DATA_DYNAMIC_PREFIXES = [
-    ("/api/stats/date/", lambda rest, q: queries.stats_today(q, rest)),
-    ("/api/report/date/", lambda rest, q: queries.report_by_date(q, rest)),
-    ("/api/week-plan/month/", lambda rest, q: queries.week_plan_month(q, rest)),
-    ("/api/week-plan/week/", lambda rest, q: queries.week_plan_week(q, rest)),
+    ("/api/stats/date/", lambda rest, q: _q("stats_today")(q, rest)),
+    ("/api/report/date/", lambda rest, q: _q("report_by_date")(q, rest)),
+    ("/api/week-plan/month/", lambda rest, q: _q("week_plan_month")(q, rest)),
+    ("/api/week-plan/week/", lambda rest, q: _q("week_plan_week")(q, rest)),
     ("/api/goals/", _dyn_goals),
     ("/api/habits/", _dyn_habits),
-    ("/api/profile/daily/", lambda rest, q: queries.profile_daily(q, rest)),
+    ("/api/profile/daily/", lambda rest, q: _q("profile_daily")(q, rest)),
     ("/api/activities/", lambda rest, q: ({"activity": None}, None)),
     ("/api/todos/", lambda rest, q: ({"todo": None}, None)),
     ("/api/icons/", lambda rest, q: ({"icon": None}, None)),
-    ("/api/profile/analysis/", lambda rest, q: queries.profile_analysis_by_type(q, rest)),
+    ("/api/profile/analysis/", lambda rest, q: _q("profile_analysis_by_type")(q, rest)),
 ]
 
 # server-only 模式下，对少数未实现接口的兜底响应。
@@ -217,6 +225,40 @@ MAX_KEY_LEN = 64
 MAX_VALUE_LEN = 64 * 1024
 MAX_BODY = 32 * 1024 * 1024  # 32MB：全量同步含 windows_json 的活动记录
 ALLOWED_PREFIX = "cd_"
+SETTINGS_KEY = "cd_settings_json"  # 设置持久化到 client-state（按租户隔离）
+
+# 设置默认值（与前端 BackendSettings 对齐）
+SETTINGS_DEFAULTS = {
+    "exclude_apps": [], "screenshot_interval_sec": 60,
+    "work_start_hour": 9, "work_end_hour": 18,
+    "custom_report_instructions": "", "ai_enabled": False,
+    "ai_base_url": "https://open.bigmodel.cn/api/paas/v4",
+    "ai_vision_model": "glm-4.1v-thinking-flash", "ai_text_model": "glm-4-flash",
+    "birthday": "", "life_expectancy": 80,
+}
+
+
+def load_saved_settings():
+    """从当前租户的 client-state 读回已保存的设置（合并默认值）。"""
+    out = dict(SETTINGS_DEFAULTS)
+    try:
+        raw = read_state().get(SETTINGS_KEY)
+        if raw:
+            saved = json.loads(raw)
+            if isinstance(saved, dict):
+                out.update(saved)
+    except Exception:
+        pass
+    return out
+
+
+def save_settings_obj(obj):
+    """把设置写入当前租户的 client-state（value 存 JSON 字符串）。"""
+    with _state_lock:
+        st = read_state()
+        st[SETTINGS_KEY] = json.dumps(obj, ensure_ascii=False)
+        write_state(st)
+    return load_saved_settings()
 
 _state_lock = threading.Lock()
 _api_token = ""
@@ -573,6 +615,13 @@ class Handler(BaseHTTPRequestHandler):
             self._proxy("GET", None)
             return
 
+        # 设置：从 client-state 读回（按租户隔离，真正持久化）
+        if path == "/api/settings":
+            if not self._auth():
+                return
+            saved = load_saved_settings()
+            return self._json(200, dict(saved, settings=saved), extra=self._no_store())
+
         # server-only 模式：对少数未实现接口返回占位，避免满屏报错
         if path in SERVER_ONLY_DEFAULTS:
             return self._json(200, SERVER_ONLY_DEFAULTS[path], extra=self._no_store())
@@ -702,6 +751,27 @@ class Handler(BaseHTTPRequestHandler):
                 st["cd_onboarding_done"] = "1"
                 write_state(st)
             return self._json(200, {"status": "ok"})
+        # 设置保存：持久化到 client-state（按租户隔离）
+        if path == "/api/settings":
+            if not self._auth():
+                return
+            body = self._read_body()
+            if not isinstance(body, dict):
+                return self._json(400, {"error": "invalid settings"})
+            # 合并到已有设置（保留未提交的字段，如 ai_api_key_set）
+            current = load_saved_settings()
+            # 不在设置页提交的字段（如 ai_api_key 明文）按约定处理
+            for k, v in body.items():
+                if k == "ai_api_key" and not v:
+                    continue  # 空 key 不清空
+                current[k] = v
+            saved = save_settings_obj(current)
+            # 不回传 ai_api_key 明文
+            safe = dict(saved)
+            safe["ai_api_key_set"] = bool(saved.get("ai_api_key"))
+            safe.pop("ai_api_key", None)
+            return self._json(200, {"status": "ok", "settings": safe}, extra=self._no_store())
+
         if path.startswith("/api/") and UPSTREAM:
             return self._proxy("POST", self._proxy_body())
         # server-only 模式下，常见写操作返回 ok（no-op），避免设置页报错
