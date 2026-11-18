@@ -56,7 +56,7 @@ function corsFor(req) {
   return {
     'Access-Control-Allow-Origin': ALLOWED_ORIGINS.has(origin) ? origin : 'null',
     'Access-Control-Allow-Headers': 'Content-Type, X-API-Token',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
     'Access-Control-Max-Age': '86400',
     Vary: 'Origin',
   }
@@ -86,8 +86,20 @@ function _mapPath(rawUrl) {
 
   const m = /^\/api\/bridge\/todos\/(\d+)\/(status|approve|reject)$/.exec(path)
   if (m) return { path: `/api/todos/${m[1]}/${m[2]}` }
-  // AI 连接测试：转发到本机采集端（真实 openai 调用），不注入 todo token
-  if (path === '/api/ai/test') return { path: '/api/ai/test', local: true }
+
+  // ── 只在 Windows 采集端实现的接口：原样转发到本机 58888 ──
+  // 云端只读节点没有 AI 引擎，这些接口返回空壳或 501。
+  //   /api/ai/*          AI 连接测试
+  //   /api/profile/*     深度画像（个人信息/蒸馏画像/每日画像/心理分析）
+  //   /api/deep-insight* 深度洞察引擎
+  //   /api/experience/*  经历档案
+  if (path === '/api/ai/test' ||
+      path.startsWith('/api/ai/') ||
+      path === '/api/profile' || path.startsWith('/api/profile/') ||
+      path === '/api/deep-insight' || path.startsWith('/api/deep-insight/') ||
+      path === '/api/experience' || path.startsWith('/api/experience/')) {
+    return { path: path + query, local: true }
+  }
   return null
 }
 
