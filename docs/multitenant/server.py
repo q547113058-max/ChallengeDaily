@@ -161,6 +161,9 @@ DATA_ROUTES = {
     "/api/git/repositories": (lambda q: ({"repositories": []}, None), True),
     "/api/profile/weekly-context": (lambda q: ({"context": ""}, None), True),
     "/api/profile/distilled": (lambda q: ({"work_habits": {}, "common_software": [], "work_content": {}, "behavior_patterns": {}, "efficiency_trend": []}, None), True),
+    # 经历档案：本机 AI 引擎才有；云端只读节点返回合法空结构，避免页面 501 崩溃。
+    # 画像的 MBTI/荣格/大五/认知风格由 /api/profile/analysis 提供真实数据（同步代理推送）。
+    "/api/experience/profile": (lambda q: ({"ok": True, "profile": {"projects": [], "episodes": [], "skills": [], "collaborators": [], "habits": [], "generated_at": ""}}, None), True),
     "/api/deep-insight": (lambda q: ({"status": "ok", "date": date_today_str(), "data_points": 0, "frameworks": {}, "summary": {"findings": [], "positive_count": 0, "negative_count": 0, "overall": ""}}, None), True),
     "/api/report/deep-insights": (lambda q: ({"status": "ok", "insights": {"weekly_stats": [], "trends": [], "patterns": {}, "benchmark": [], "benchmarks_definition": {}}}, None), True),
     "/api/health/coverage": (lambda q: ({"date": date_today_str(), "system": {}, "collected": {}, "gap": {}}, None), True),
@@ -774,6 +777,15 @@ class Handler(BaseHTTPRequestHandler):
 
         if path.startswith("/api/") and UPSTREAM:
             return self._proxy("POST", self._proxy_body())
+        # 经历档案重建：本机 AI 引擎才有；云端 no-op 但返回前端期望的结构
+        if path.startswith("/api/experience/rebuild"):
+            self._read_body()
+            return self._json(200, {"ok": True, "stats": {}}, extra=self._no_store())
+        if path.startswith("/api/analysis/trigger") or path.startswith("/api/profile/analysis/trigger"):
+            self._read_body()
+            return self._json(200, {"ok": True, "results": {},
+                                    "message": "云端只读节点不生成画像；请在 Windows 本机触发"},
+                              extra=self._no_store())
         # server-only 模式下，常见写操作返回 ok（no-op），避免设置页报错
         if path.startswith("/api/"):
             self._read_body()  # 消费请求体，保持 HTTP/1.1 连接干净
