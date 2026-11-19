@@ -143,11 +143,10 @@ class TestConstants:
 
     def test_thresholds_positive(self):
         from constants import (
-            DEEP_WORK_MIN_MINUTES, FOCUS_SESSION_MIN_MINUTES,
+            FOCUS_SESSION_MIN_MINUTES,
             DISTRACTION_LIGHT_MIN, DISTRACTION_HEAVY_MIN,
             OVERWORK_THRESHOLD_MIN,
         )
-        assert DEEP_WORK_MIN_MINUTES > 0
         assert FOCUS_SESSION_MIN_MINUTES > 0
         assert DISTRACTION_LIGHT_MIN < DISTRACTION_HEAVY_MIN
         assert DISTRACTION_HEAVY_MIN < OVERWORK_THRESHOLD_MIN

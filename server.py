@@ -82,7 +82,7 @@ _PUBLIC_PATHS = {"/", "/api/health", "/api/metrics"}
 # 自习室功能已在 875ca12 移除（routes/study_room.py 已删），此处前缀随之清理
 _PUBLIC_PREFIXES = ["/api/icons/"]
 # SSE 端点：不能通过 header 传 token，改用 query param ?token=xxx，在 handler 内自行校验
-_SSE_PATHS = {"/api/events/stream"}
+_SSE_PATHS = {"/api/events/stream", "/api/bridge/events"}
 
 
 def _is_public_path(path: str) -> bool:
@@ -259,6 +259,21 @@ def start_server():
         init_auto_report_scheduler()
     except Exception as e:
         logger.warning(f"自动日报调度器启动失败: {e}")
+
+    # 周报/月报自动落库：写进 reports 表，由同步器推送到云端只读节点，
+    # 使云端 /api/report/weekly|monthly 能返回完整报告而非数据摘要。
+    try:
+        from period_report_sync import init_period_report_sync
+        init_period_report_sync()
+    except Exception as e:
+        logger.warning(f"周报/月报自动同步启动失败: {e}")
+
+    # 任务经历档案：把采集活动增量聚合为项目/任务/技能/习惯，供多功能的共享上下文
+    try:
+        from experience_scheduler import init_experience_scheduler
+        init_experience_scheduler()
+    except Exception as e:
+        logger.warning(f"经历档案调度启动失败: {e}")
 
     # 本地桌面应用场景：使用 Flask 内置 threaded 服务器
     # 原因：waitress 不支持 SSE 流式响应（/api/events/stream），会返回 500

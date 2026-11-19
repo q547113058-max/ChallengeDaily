@@ -379,35 +379,6 @@ def compute_ultradian_metrics(activities, interval_sec=60):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 框架6: 深度工作 — 计算 Deep Work Ratio
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-def compute_deep_work_metrics(activities, interval_sec=60):
-    segments = _extract_focus_segments(activities, interval_sec)
-    if not segments:
-        return {'deep_work_ratio': 0, 'shallow_work_ratio': 0}
-    
-    total_duration = sum(s['duration_min'] for s in segments)
-    
-    deep_min = 0
-    shallow_min = 0
-    for seg in segments:
-        profile = get_category_profile(seg['category'])
-        is_deep_eligible = profile.get('deep_work_eligible', False)
-        # 深度工作 = 高认知类别 + 持续>30分钟
-        if is_deep_eligible and seg['duration_min'] >= 30:
-            deep_min += seg['duration_min']
-        else:
-            shallow_min += seg['duration_min']
-    
-    return {
-        'deep_work_ratio': round(deep_min / total_duration if total_duration > 0 else 0, 3),
-        'shallow_work_ratio': round(shallow_min / total_duration if total_duration > 0 else 0, 3),
-        'deep_work_min': round(deep_min, 1),
-        'shallow_work_min': round(shallow_min, 1),
-    }
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 框架7: 结构洞/社会资本 — 计算 Diversity & Bridging
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def compute_structural_holes_metrics(activities, interval_sec=60):
@@ -677,15 +648,6 @@ def generate_deep_insight_report(activities, interval_sec=60, history_activities
         logger.warning(f"[DeepInsight] ultradian_rhythm failed: {e}")
     
     try:
-        report['frameworks']['deep_work'] = {
-            'name': '深度工作',
-            'scholar': 'Newport (2016)',
-            'metrics': compute_deep_work_metrics(activities, interval_sec),
-        }
-    except Exception as e:
-        logger.warning(f"[DeepInsight] deep_work failed: {e}")
-    
-    try:
         report['frameworks']['structural_holes'] = {
             'name': '结构洞与社会资本',
             'scholar': 'Burt (1992)',
@@ -781,13 +743,6 @@ def _generate_summary(frameworks):
         findings.append({'dimension': '认知深度', 'verdict': 'positive', 'detail': f"认知深度{bloom['cognitive_depth']}/6，高阶思维{bloom.get('higher_order_ratio',0):.0%}"})
     elif bloom.get('cognitive_depth', 0) < 2.5:
         findings.append({'dimension': '认知深度', 'verdict': 'negative', 'detail': f"认知深度{bloom['cognitive_depth']}/6，停留在{bloom.get('dominant_level_name','低阶')}"})
-    
-    # 深度工作
-    dw = frameworks.get('deep_work', {}).get('metrics', {})
-    if dw.get('deep_work_ratio', 0) >= 0.5:
-        findings.append({'dimension': '深度工作', 'verdict': 'positive', 'detail': f"深度工作比{dw['deep_work_ratio']:.0%}"})
-    elif dw.get('shallow_work_ratio', 0) > 0.6:
-        findings.append({'dimension': '深度工作', 'verdict': 'negative', 'detail': f"浅层工作占{dw['shallow_work_ratio']:.0%}"})
     
     # 刻意练习
     dp = frameworks.get('deliberate_practice', {}).get('metrics', {})
@@ -1188,10 +1143,11 @@ def compute_cognitive_style_metrics(activities, interval_sec=60):
     # 整体-分析：跨域切换 vs 深度单域
     structural = compute_structural_holes_metrics(activities, interval_sec)
     cross_domain = structural.get('cross_domain_index', 0)
-    deep_work = compute_deep_work_metrics(activities, interval_sec)
-    deep_ratio = deep_work.get('deep_work_ratio', 0)
-    # 正值=分析型（深度专注），负值=整体型（跨域切换）
-    wa_raw = (deep_ratio - cross_domain) * 50
+    # 用「长时段占比」作为持续专注指标：持续 ≥30 分钟的专注段占总时长比例
+    long_segment_min = sum(s['duration_min'] for s in segments if s['duration_min'] >= 30)
+    sustained_ratio = round(long_segment_min / total_duration, 3) if total_duration > 0 else 0
+    # 正值=分析型（持续专注），负值=整体型（跨域切换）
+    wa_raw = (sustained_ratio - cross_domain) * 50
     wa_score = round(max(-50, min(50, wa_raw)), 1)
 
     # 言语-表象：文档/代码 vs 设计/可视化

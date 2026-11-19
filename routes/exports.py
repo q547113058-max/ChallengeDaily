@@ -385,7 +385,6 @@ def export_monthly_report():
             "",
             "## 📊 完成率统计",
             f"- 总专注分钟：**{stats.get('total_focus_min', 0)}** 分钟",
-            f"- 深度专注分钟：**{stats.get('deep_focus_min', 0)}** 分钟",
             f"- 中断次数：**{stats.get('interrupt_count', 0)}**",
             f"- 日任务总数：**{stats.get('total_tasks', 0)}**",
             f"- 已完成：**{stats.get('completed_tasks', 0)}**",

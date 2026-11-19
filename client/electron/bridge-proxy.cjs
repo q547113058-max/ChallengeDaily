@@ -32,7 +32,7 @@ const https = require('https')
 const { URL } = require('url')
 
 const DEFAULT_UPSTREAM = 'http://193.112.246.85:18766'
-const DEFAULT_TOKEN = '51500b289da5acb9419adc0580c2a4e22e76c34dc057f250'
+const DEFAULT_TOKEN = ''  /* 由环境变量 TODO_SYNC_TOKEN 提供 */
 // 本机采集端地址：AI 连接测试等只有它实现了真实逻辑，云端只读节点是 no-op
 const DEFAULT_LOCAL_COLLECTOR = 'http://127.0.0.1:58888'
 
@@ -66,11 +66,40 @@ const MAX_BODY = 1024 * 1024
 
 let _server = null
 
+/**
+ * 解析 TODO_SYNC 写令牌（不写死在源码里，仓库是公开的）。
+ * 优先级：环境变量 → deploy/sync_agent.json（仓库外，不入库）。
+ */
+let _cachedFileToken = null
+function _readFileToken() {
+  if (_cachedFileToken !== null) return _cachedFileToken
+  _cachedFileToken = ''
+  try {
+    const path = require('path')
+    const fs = require('fs')
+    // __dirname = <repo>/client/electron  →  上三级 = D:\project\daily
+    const candidates = [
+      process.env.CD_SYNC_CONFIG || '',
+      path.join(__dirname, '..', '..', '..', 'deploy', 'sync_agent.json'),
+      path.join(__dirname, '..', '..', 'deploy', 'sync_agent.json'),
+    ].filter(Boolean)
+    for (const p of candidates) {
+      if (!fs.existsSync(p)) continue
+      const j = JSON.parse(fs.readFileSync(p, 'utf8'))
+      if (j && typeof j.token === 'string' && j.token.trim()) {
+        _cachedFileToken = j.token.trim()
+        break
+      }
+    }
+  } catch (_) { /* 读不到就留空，由调用方决定降级 */ }
+  return _cachedFileToken
+}
+
 function _config() {
   return {
     upstream: (process.env.TODO_SYNC_URL || DEFAULT_UPSTREAM).trim().replace(/\/+$/, ''),
     local: (process.env.CD_LOCAL_COLLECTOR_URL || DEFAULT_LOCAL_COLLECTOR).trim().replace(/\/+$/, ''),
-    token: (process.env.TODO_SYNC_TOKEN || DEFAULT_TOKEN).trim(),
+    token: (process.env.TODO_SYNC_TOKEN || DEFAULT_TOKEN || _readFileToken()).trim(),
   }
 }
 

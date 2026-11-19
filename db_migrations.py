@@ -10,7 +10,7 @@ from config import DB_PATH
 logger = logging.getLogger(__name__)
 
 # ── 数据库 Schema 版本 ──
-SCHEMA_VERSION = 40
+SCHEMA_VERSION = 43
 
 # P-01: 默认数据保留天数（90 天）
 DEFAULT_DATA_RETENTION_DAYS = 90
@@ -877,7 +877,6 @@ def _init_db_impl():
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         date TEXT NOT NULL UNIQUE,
                         score REAL NOT NULL,
-                        deep_work_min INTEGER DEFAULT 0,
                         learning_min INTEGER DEFAULT 0,
                         exercise_min INTEGER DEFAULT 0,
                         distraction_count INTEGER DEFAULT 0,
@@ -1032,6 +1031,149 @@ def _init_db_impl():
                 logger.info("V40: 已删除番茄钟表并移除 todos 的 pomodoro 列")
             except Exception as e:
                 logger.warning(f"V40 迁移失败（可忽略，不影响其他功能）: {e}")
+
+        # V41: 通知持久化（原先只存内存 list，重启即丢，且一读就全标记已读）
+        if current_version < 41:
+            try:
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS notifications (
+                        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                        title       TEXT NOT NULL,
+                        body        TEXT NOT NULL DEFAULT '',
+                        type        TEXT NOT NULL DEFAULT 'info',
+                        category    TEXT NOT NULL DEFAULT 'system',
+                        dedup_key   TEXT NOT NULL DEFAULT '',
+                        created_at  TEXT NOT NULL,
+                        read_at     TEXT
+                    )
+                    """
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_notifications_created "
+                    "ON notifications(created_at DESC)"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_notifications_unread "
+                    "ON notifications(read_at, id)"
+                )
+                # dedup：同 dedup_key 在时间窗口内只留一条（查询用）
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_notifications_dedup "
+                    "ON notifications(dedup_key, created_at DESC)"
+                )
+                logger.info("V41: 已创建 notifications 表（通知持久化）")
+            except Exception as e:
+                logger.warning(f"V41 迁移失败（可忽略，不影响其他功能）: {e}")
+
+        # V42: 任务经历档案 —— 从采集数据聚合出的项目/任务/技能/协作/习惯
+        if current_version < 42:
+            try:
+                conn.executescript("""
+                    CREATE TABLE IF NOT EXISTS exp_project (
+                        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name         TEXT NOT NULL UNIQUE,
+                        aliases      TEXT DEFAULT '[]',
+                        category_mix TEXT DEFAULT '{}',
+                        total_min    REAL DEFAULT 0,
+                        first_seen   TEXT,
+                        last_seen    TEXT,
+                        status       TEXT DEFAULT 'active',
+                        confidence   REAL DEFAULT 0.0,
+                        created_at   TEXT DEFAULT (datetime('now','localtime')),
+                        updated_at   TEXT DEFAULT (datetime('now','localtime'))
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_exp_project_last ON exp_project(last_seen);
+
+                    CREATE TABLE IF NOT EXISTS exp_task_episode (
+                        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                        project_id    INTEGER,
+                        title         TEXT NOT NULL,
+                        summary       TEXT DEFAULT '',
+                        status        TEXT DEFAULT 'open',
+                        category      TEXT DEFAULT '',
+                        skills_json   TEXT DEFAULT '[]',
+                        collaborators_json TEXT DEFAULT '[]',
+                        start_ts      TEXT,
+                        end_ts        TEXT,
+                        total_min     REAL DEFAULT 0,
+                        sessions      INTEGER DEFAULT 0,
+                        evidence_json TEXT DEFAULT '[]',
+                        confidence    REAL DEFAULT 0.0,
+                        source        TEXT DEFAULT 'rule',
+                        fingerprint   TEXT,
+                        created_at    TEXT DEFAULT (datetime('now','localtime')),
+                        updated_at    TEXT DEFAULT (datetime('now','localtime')),
+                        UNIQUE(project_id, fingerprint)
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_exp_episode_project ON exp_task_episode(project_id);
+                    CREATE INDEX IF NOT EXISTS idx_exp_episode_end ON exp_task_episode(end_ts);
+
+                    CREATE TABLE IF NOT EXISTS exp_skill (
+                        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name        TEXT NOT NULL UNIQUE,
+                        category    TEXT DEFAULT '',
+                        level       TEXT DEFAULT 'practicing',
+                        total_min   REAL DEFAULT 0,
+                        episode_cnt INTEGER DEFAULT 0,
+                        first_seen  TEXT,
+                        last_seen   TEXT,
+                        created_at  TEXT DEFAULT (datetime('now','localtime')),
+                        updated_at  TEXT DEFAULT (datetime('now','localtime'))
+                    );
+
+                    CREATE TABLE IF NOT EXISTS exp_collaborator (
+                        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name         TEXT NOT NULL UNIQUE,
+                        kind         TEXT DEFAULT 'person',
+                        category     TEXT DEFAULT '',
+                        interact_cnt INTEGER DEFAULT 0,
+                        total_min    REAL DEFAULT 0,
+                        last_seen    TEXT,
+                        created_at   TEXT DEFAULT (datetime('now','localtime')),
+                        updated_at   TEXT DEFAULT (datetime('now','localtime'))
+                    );
+
+                    CREATE TABLE IF NOT EXISTS exp_work_habit (
+                        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                        habit_key    TEXT NOT NULL UNIQUE,
+                        habit_type   TEXT NOT NULL,
+                        value_json   TEXT DEFAULT '{}',
+                        evidence_cnt INTEGER DEFAULT 0,
+                        confidence   REAL DEFAULT 0.0,
+                        source       TEXT DEFAULT 'rule',
+                        updated_at   TEXT DEFAULT (datetime('now','localtime'))
+                    );
+
+                    CREATE TABLE IF NOT EXISTS exp_activity_link (
+                        activity_id INTEGER PRIMARY KEY,
+                        episode_id  INTEGER,
+                        project_id  INTEGER,
+                        extracted   INTEGER DEFAULT 1,
+                        created_at  TEXT DEFAULT (datetime('now','localtime'))
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_exp_link_episode ON exp_activity_link(episode_id);
+
+                    CREATE TABLE IF NOT EXISTS exp_extraction_state (
+                        key        TEXT PRIMARY KEY,
+                        value      TEXT,
+                        updated_at TEXT DEFAULT (datetime('now','localtime'))
+                    );
+                """)
+                logger.info("V42: 已创建任务经历档案表（7张）")
+            except Exception as e:
+                logger.warning(f"V42 迁移失败（可忽略，不影响其他功能）: {e}")
+
+        # V43: activities 增加 workspace 列（采集时记录 DSH 当前工作区，作为项目边界）
+        if current_version < 43:
+            try:
+                cols = [r[1] for r in conn.execute("PRAGMA table_info(activities)").fetchall()]
+                if "workspace" not in cols:
+                    conn.execute("ALTER TABLE activities ADD COLUMN workspace TEXT DEFAULT ''")
+                    conn.execute("CREATE INDEX IF NOT EXISTS idx_activities_workspace ON activities(workspace)")
+                logger.info("V43: activities 已增加 workspace 列")
+            except Exception as e:
+                logger.warning(f"V43 迁移失败（可忽略，不影响其他功能）: {e}")
 
         # 更新版本号
         conn.execute(

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Building2 } from 'lucide-react'
-import { getTenantInfo, type TenantInfo } from '../api/client'
+import { getTenantInfo, setLoggerTenant, type TenantInfo } from '../api/client'
 
 /**
  * 当前租户标识：从云端 /api/tenant/me 读取。
@@ -12,7 +12,12 @@ export default function TenantBadge() {
 
   useEffect(() => {
     let alive = true
-    getTenantInfo().then(t => { if (alive && t && t.role === 'tenant') setInfo(t) })
+    getTenantInfo().then(t => {
+      if (alive && t && t.role === 'tenant') {
+        setInfo(t)
+        setLoggerTenant(t.tenant_id || t.name || '')
+      }
+    }).catch(() => { /* 静默：无租户接口时保持默认 */ })
     return () => { alive = false }
   }, [])
 

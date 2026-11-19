@@ -110,12 +110,8 @@ export default function InfoTooltip({ text, content, size = 12, title }: InfoToo
  */
 export const METRIC_EXPLANATIONS: Record<string, { title: string; text: string }> = {
   focus_min: {
-    title: '专注时长',
-    text: '当日所有非"生活"分类的活动时长之和，单位为分钟。截图采样间隔 × 活动条数累计得出。',
-  },
-  deep_work_hours: {
-    title: '深度工作时长',
-    text: '单次连续 ≥25 分钟、期间不切换分类的专注时段。基于《深度工作》一书的定义，是衡量高产出的核心指标。',
+    title: '记录时长',
+    text: '当日所有已记录活动的时长之和（含全部分类）。按采样间隔 × 活动条数累计得出，单位为分钟。',
   },
   streak_days: {
     title: '连续天数',
@@ -131,7 +127,7 @@ export const METRIC_EXPLANATIONS: Record<string, { title: string; text: string }
   },
   efficiency: {
     title: '专注效率',
-    text: '深度工作时长 / 总专注时长 × 100%。高于 60% 为优秀，低于 30% 建议审视工作节奏。',
+    text: '有效专注时长 / 总专注时长 × 100%。高于 60% 为优秀，低于 30% 建议审视工作节奏。',
   },
   cross_domain_index: {
     title: '跨域指数',

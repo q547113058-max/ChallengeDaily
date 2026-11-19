@@ -20,6 +20,8 @@ const { buildCSP, buildBaseCSP } = require('./csp.cjs')
 const updater = require('./updater.cjs')
 const backendConfig = require('./backend-config.cjs')
 const remoteProxy = require('./remote-proxy.cjs')
+const bridgeProxy = require('./bridge-proxy.cjs')
+const todoPopup = require('./todo-popup.cjs')
 
 // 后端连接模式：local = 本机跑 Python（历史行为）；remote = 本机代理转发云端；
 // direct = 渲染层直连云端（无本机监听）
@@ -146,6 +148,14 @@ app.setAppUserModelId('com.challenge.daily')
 // 参考 Electron 性能指南：https://www.electronjs.org/docs/latest/api/web-preferences
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=256 --gc-interval=100')
 
+// 本机 Chromium 沙箱/GPU 初始化会触发 STATUS_BREAKPOINT（无参数双击即崩）。
+// 在 app ready 之前追加开关，使「双击 exe / 快捷方式」也稳定，不依赖外部参数。
+// 这些开关对 Electron 无害：应用不使用 GPU 加速，contextIsolation 仍在。
+if (process.env.CD_CHROMIUM_SANDBOX !== '1') {
+  app.commandLine.appendSwitch('no-sandbox')
+}
+app.commandLine.appendSwitch('disable-gpu')
+
 // ─── 关键：在 requestSingleInstanceLock() 之前显式设置 userData 路径 ───
 // Electron 单实例锁基于 userData 路径生成命名管道/互斥体名。
 // 如果与已安装的打包版共用同一目录，两方的全局锁会互相冲突，
@@ -161,7 +171,56 @@ app.setPath('userData', _userDataPath)
 console.log('[Main] userData path:', _userDataPath)
 
 // ─── 单实例锁：禁止打开多个窗口 ────────────────────
-const gotTheLock = app.requestSingleInstanceLock()
+// 本机 Chromium 的 process_singleton_win.cc 创建锁文件持续失败
+// (Error code 5 / "Another instance is already running")，即便没有任何
+// electron 进程。CD_NO_SINGLETON=1 时完全跳过 requestSingleInstanceLock，
+// 让 Chromium 不再尝试建锁，彻底绕开这个系统级问题。
+// ─── 应用层单实例互斥（替代 Chromium 那把坏掉的单实例锁）───
+// 背景：CD_NO_SINGLETON=1 会跳过 app.requestSingleInstanceLock() 以绕开本机
+// Chromium 的 process_singleton_win.cc 建锁失败（Error code 5）。但那样每次
+// 启动都会新开一个窗口，出现"多个客户端不排重"。
+// 这里用一个 PID 锁文件：已有同 userData 目录且进程仍存活的实例 → 本次直接退出。
+// 进程崩溃/被杀后锁文件里的 PID 不再存活，下次启动自动接管，无需手工清理。
+// 默认跳过 Chromium 单实例锁：本机 process_singleton_win.cc 建锁必失败
+// (Error code 5) → 以 0x80000003 断点崩溃。排重由下面的应用层 PID 锁负责。
+// 仅在显式 CD_CHROMIUM_SINGLETON=1 时才恢复 Chromium 原生锁。
+const NO_SINGLETON = process.env.CD_CHROMIUM_SINGLETON !== '1'
+const _singletonLockFile = path.join(_userDataPath, 'app.lock')
+
+function _isPidAlive(pid) {
+  if (!pid || !Number.isInteger(pid) || pid <= 0) return false
+  try { process.kill(pid, 0); return true } catch (e) { return e.code === 'EPERM' }
+}
+
+let _alreadyRunning = false
+if (NO_SINGLETON) {
+  try {
+    if (fs.existsSync(_singletonLockFile)) {
+      const raw = fs.readFileSync(_singletonLockFile, 'utf-8').trim()
+      const prev = JSON.parse(raw || '{}')
+      // 只有「同 userData 目录 + 进程还活着」才算重复实例
+      if (prev.userData === _userDataPath && _isPidAlive(prev.pid) && prev.pid !== process.pid) {
+        _alreadyRunning = true
+      }
+    }
+    if (!_alreadyRunning) {
+      fs.writeFileSync(_singletonLockFile, JSON.stringify({
+        pid: process.pid, userData: _userDataPath, startedAt: new Date().toISOString(),
+      }), 'utf-8')
+    }
+  } catch (e) {
+    console.warn('[Main] singleton lock check failed (continuing):', e.message)
+  }
+  if (_alreadyRunning) {
+    console.log('[Main] Another instance is already running (pid lock), exiting...')
+    app.exit(0)
+  }
+}
+
+const gotTheLock = NO_SINGLETON ? true : app.requestSingleInstanceLock()
+if (NO_SINGLETON) {
+  console.log('[Main] single-instance lock DISABLED (Chromium), app-level PID lock ACTIVE')
+}
 if (!gotTheLock) {
   // 已有实例在运行，直接退出
   // 注意：必须用 app.exit() 而非 app.quit()，因为 app.quit() 是异步的，
@@ -291,6 +350,14 @@ async function _doStartBackend() {
   if (BACKEND_MODE === 'direct') {
     const cfg = backendConfig.loadConfig()
     console.log('[Main] direct backend mode, renderer will call', cfg.url, 'directly (no local proxy)')
+    // 云端只读节点没有 /api/bridge/*（返回 501），自动待办看板会静默失效。
+    // 在本机 BACKEND_PORT 起一个只接管 /api/bridge/* 的极小反代，主 API 仍直连云端。
+    // 同时它也响应本地 /api/health，止住 direct 模式每 3 分钟一次的误报重启。
+    try {
+      await bridgeProxy.start({}, BACKEND_PORT, (...a) => console.log(...a))
+    } catch (e) {
+      console.error('[Main] bridge proxy failed to start (auto-todo board disabled):', e?.message || e)
+    }
     return
   }
 
@@ -330,7 +397,7 @@ async function _doStartBackend() {
         const sp = path.join(app.getPath('home'), 'AppData', 'Local', 'Programs', 'Python', ver, 'python.exe')
         if (fs.existsSync(sp)) {
           try {
-            execFileSync(sp, ['-c', 'import mss, flask, waitress'], { stdio: 'ignore', windowsHide: true, timeout: 5000 })
+            execFileSync(sp, ['-c', 'import mss, flask, PIL'], { stdio: 'ignore', windowsHide: true, timeout: 5000 })
             pythonExe = sp
             break
           } catch (_) {}
@@ -343,18 +410,37 @@ async function _doStartBackend() {
       // 开发模式 或 start.vbs/start.bat 从源码启动
       mainScript = path.join(__dirname, '..', '..', 'main.py')
       backendDir = path.join(__dirname, '..', '..')
-      // 通用 Python 查找：优先检查标准系统 Python 安装路径，避免 PATH 被第三方 venv（如 hermes-agent）污染
-      // 然后再回退到 PATH 中的 python / python3 / py launcher
+      // 通用 Python 查找：优先使用项目自带的 venv（依赖齐全，避免系统 python 缺
+      // Pillow/mss 导致 backend 启动即 ModuleNotFoundError），再检查标准系统
+      // Python 安装路径，最后回退 PATH。
+      // 注意：探测只校验运行时真正需要的包；waitress 不在 requirements.txt 中，
+      // 且 server.py 用 Flask threaded，并不依赖它。
+      const projectVenvPythons = [
+        path.join(__dirname, '..', '..', '.venv312', 'Scripts', 'python.exe'),
+        path.join(__dirname, '..', '..', '.venv', 'Scripts', 'python.exe'),
+      ]
+      let venvFound = false
+      for (const vp of projectVenvPythons) {
+        if (fs.existsSync(vp)) {
+          try {
+            execFileSync(vp, ['-c', 'import mss, flask, PIL'], { stdio: 'ignore', windowsHide: true, timeout: 5000 })
+            pythonExe = vp
+            venvFound = true
+            break
+          } catch (_) {}
+        }
+      }
       const standardPythonPaths = [
         path.join(app.getPath('home'), 'AppData', 'Local', 'Programs', 'Python', 'Python311', 'python.exe'),
         path.join(app.getPath('home'), 'AppData', 'Local', 'Programs', 'Python', 'Python312', 'python.exe'),
         path.join(app.getPath('home'), 'AppData', 'Local', 'Programs', 'Python', 'Python310', 'python.exe'),
       ]
-      let found = false
+      let found = venvFound
       for (const sp of standardPythonPaths) {
+        if (found) break
         if (fs.existsSync(sp)) {
           try {
-            execFileSync(sp, ['-c', 'import mss, flask, waitress'], { stdio: 'ignore', windowsHide: true, timeout: 5000 })
+            execFileSync(sp, ['-c', 'import mss, flask, PIL'], { stdio: 'ignore', windowsHide: true, timeout: 5000 })
             pythonExe = sp
             found = true
             break
@@ -396,7 +482,10 @@ async function _doStartBackend() {
 
     // Clean PYTHONHOME/PYTHONPATH - they may point to broken paths with Chinese chars
     // 安全：仅向子进程传递白名单环境变量，避免泄露主进程潜在的敏感信息
-    const allowedEnvKeys = ['PORT', 'PYTHONIOENCODING', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'SystemRoot', 'TEMP', 'PATH', 'ELECTRON_IS_DEV', 'CHALLENGE_DAILY_DATA_DIR']
+    // TODO_SYNC_*：待办看板桥接（routes/bridge.py）的上游地址/写 token。
+    // 漏传会让 /api/bridge 返回 503 bridge_not_configured，看板只剩本地待办、审批弹窗永不出现。
+    const allowedEnvKeys = ['PORT', 'PYTHONIOENCODING', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'SystemRoot', 'TEMP', 'PATH', 'ELECTRON_IS_DEV', 'CHALLENGE_DAILY_DATA_DIR',
+      'TODO_SYNC_URL', 'TODO_SYNC_TOKEN', 'TODO_SYNC_TIMEOUT']
     const cleanEnv = {}
     for (const key of allowedEnvKeys) {
       if (process.env[key]) cleanEnv[key] = process.env[key]
@@ -499,8 +588,9 @@ async function _doStartBackend() {
 }
 
 function stopBackend() {
-  // remote 模式：关掉本地反向代理
+  // remote 模式：关掉本地反向代理；direct 模式：关掉自动待办桥接代理
   remoteProxy.stop()
+  bridgeProxy.stop()
   if (backendProcess) {
     console.log('[Main] Stopping backend...')
     // 先移除 exit/error 监听器，防止 taskkill /F 触发的非零退出码被
@@ -545,6 +635,95 @@ function applyCSPToSession(targetSession) {
   }
 }
 
+// ─── dist 热重载：前端重新构建后自动刷新窗口 ──────────────────────────
+// 生产模式用 loadFile(dist/index.html) 把页面读进内存，构建后不重启进程
+// 就看不到新版本。这里监听 dist 目录，构建完成后 reloadIgnoringCache()，
+// 只重载渲染层，后端/采集器/Token 完全不受影响（无需重启整个应用）。
+//
+// 说明：vite build 会先 emptyOutDir 再连续写几十个文件，因此用
+// 「800ms 无新事件」做防抖，且 reload 前校验 index.html 完整，
+// 避免构建中途加载到半成品页面。
+let _distWatcher = null
+let _distReloadTimer = null
+let _distReloadCount = 0
+
+const DIST_DIR = path.join(__dirname, '..', 'dist')
+const DIST_INDEX = path.join(DIST_DIR, 'index.html')
+
+function _isDistAssetChanged(filename) {
+  if (!filename) return false
+  const f = String(filename).replace(/\\/g, '/')
+  if (f === 'index.html') return true
+  // 只关心构建产物，忽略字体/图片等未变化资源与临时文件
+  return f.startsWith('assets/') && /\.(js|css|html)$/.test(f) && !/\.tmp|\.map$/.test(f)
+}
+
+function _distIndexReady() {
+  try {
+    const st = fs.statSync(DIST_INDEX)
+    if (!st.isFile() || st.size < 100) return false
+    const head = fs.readFileSync(DIST_INDEX, 'utf8').slice(0, 200).toLowerCase()
+    return head.includes('<!doctype html') || head.includes('<html')
+  } catch (_) {
+    return false
+  }
+}
+
+function _scheduleDistReload(reason) {
+  if (_distReloadTimer) clearTimeout(_distReloadTimer)
+  _distReloadTimer = setTimeout(() => {
+    _distReloadTimer = null
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    if (!_distIndexReady()) {
+      console.warn('[Main] dist 变化但 index.html 未就绪，跳过本次重载:', reason)
+      return
+    }
+    _distReloadCount += 1
+    console.log(`[Main] 检测到前端更新(${reason})，第 ${_distReloadCount} 次自动重载窗口`)
+    try {
+      mainWindow.webContents.reloadIgnoringCache()
+    } catch (err) {
+      console.error('[Main] dist reload failed:', err)
+    }
+  }, 800)
+}
+
+function startDistWatcher() {
+  // 开发模式有 Vite HMR；CD_AUTO_RELOAD=0 可显式关闭
+  if (isDev || process.env.CD_AUTO_RELOAD === '0') {
+    console.log('[Main] dist auto-reload disabled (dev mode or CD_AUTO_RELOAD=0)')
+    return
+  }
+  try {
+    _distWatcher = fs.watch(DIST_DIR, { recursive: true }, (_event, filename) => {
+      if (_isDistAssetChanged(filename)) _scheduleDistReload(String(filename))
+    })
+    _distWatcher.on('error', (err) => {
+      console.warn('[Main] dist watcher error, auto-reload stopped:', err && err.message)
+      try { _distWatcher.close() } catch (_) {}
+      _distWatcher = null
+    })
+    console.log('[Main] dist auto-reload enabled:', DIST_DIR)
+  } catch (err) {
+    // fs.watch recursive 在个别平台/权限下不可用，降级为只监听 index.html
+    console.warn('[Main] recursive watch unavailable, falling back to index.html:', err && err.message)
+    try {
+      _distWatcher = fs.watchFile(DIST_INDEX, { interval: 1500 }, () => {
+        _scheduleDistReload('index.html (poll)')
+      })
+      console.log('[Main] dist auto-reload enabled (poll fallback)')
+    } catch (e2) {
+      console.error('[Main] dist auto-reload unavailable:', e2)
+    }
+  }
+}
+
+function stopDistWatcher() {
+  if (_distReloadTimer) clearTimeout(_distReloadTimer)
+  try { if (_distWatcher) _distWatcher.close() } catch (_) {}
+  _distWatcher = null
+}
+
 // ─── 主窗口 ──────────────────────────────────────
 function createMainWindow() {
   mainWindow = new BrowserWindow({
@@ -569,7 +748,7 @@ function createMainWindow() {
       // 造成前端误报"后端服务断开"（参考 Electron issue #21419）
       backgroundThrottling: false,
     },
-    show: false,
+    show: true,
   })
 
   // Content Security Policy：限制资源加载来源，防止 XSS 等注入攻击
@@ -611,10 +790,12 @@ function createMainWindow() {
     mainWindow.show()
   })
 
-  // 保底：3秒后强制显示（防止 ready-to-show 未触发）
+  // 窗口初始即 show:true；这里只做一次状态记录，不再无条件 focus()
+  // （无交互桌面会话里 focus() 反而可能让窗口不可见）。
   setTimeout(() => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.show()
+      console.log('[Main] window state: visible=' + mainWindow.isVisible()
+                  + ' minimized=' + mainWindow.isMinimized())
     }
   }, 3000)
 
@@ -663,7 +844,16 @@ function createMainWindow() {
 // ─── 系统托盘 ────────────────────────────────────
 function createTray() {
   const icon = getTrayIcon()
-  tray = new Tray(icon)
+  try {
+    console.log('[Tray] icon isEmpty=', icon.isEmpty(), 'size=', JSON.stringify(icon.getSize()))
+  } catch (_) {}
+  try {
+    tray = new Tray(icon)
+    console.log('[Tray] constructed, isDestroyed=', tray.isDestroyed())
+  } catch (e) {
+    console.error('[Tray] construct FAILED:', e?.message || e)
+    return
+  }
   const contextMenu = Menu.buildFromTemplate([
     { label: '显示主窗口', click: () => { mainWindow?.show(); mainWindow?.focus() } },
     { type: 'separator' },
@@ -681,6 +871,7 @@ function createTray() {
   tray.setToolTip('ChallengeDaily')
   tray.setContextMenu(contextMenu)
   tray.on('double-click', () => { mainWindow?.show(); mainWindow?.focus() })
+  console.log('[Tray] tooltip+menu applied (icon should be visible in notification area)')
 }
 
 function sendToRenderer(channel, data) {
@@ -744,6 +935,7 @@ function setupIPC() {
     'window-minimize', 'window-maximize', 'window-close', 'window-show',
     'get-backend-port', 'get-backend-url', 'get-api-token',
     'get-app-version',
+    'get-recent-logs',
     'get-auto-start', 'set-auto-start',
     'get-windows-location', 'windows-hello',
     'show-notification',
@@ -818,6 +1010,21 @@ function setupIPC() {
   })
 
   ipcMain.handle('get-app-version', () => app.getVersion())
+
+  // 读取主进程日志尾部（最近 N 行），供渲染层批量上传服务器集中排查。
+  // 只返回文本行，不暴露任何 token；默认 200 行上限，避免大日志拖慢 IPC。
+  ipcMain.handle('get-recent-logs', (_event, maxLines) => {
+    try {
+      const limit = Math.max(0, Math.min(500, Number(maxLines) || 200))
+      if (!fs.existsSync(mainLogFile)) return []
+      const content = fs.readFileSync(mainLogFile, 'utf8')
+      const lines = content.split(/\r?\n/).filter(Boolean)
+      // 优先取最近的 error/warn 行 + 末尾上下文；简单起见返回最后 limit 行
+      return lines.slice(-limit)
+    } catch (e) {
+      return []
+    }
+  })
 
   // ─── 后端连接配置 IPC ──────────────────────────
   // 读取：不返回 token 明文给渲染层；写入：仅主窗口可操作
@@ -1263,7 +1470,8 @@ function _addNotification_dedup(title, body, type) {
 // ─── 应用生命周期 ────────────────────────────────────
 app.whenReady().then(async () => {
   // 安全守卫：即使 app.exit(0) 的时序出现异常，也不会在未获取锁的情况下启动后端
-  if (!gotTheLock) {
+  // _alreadyRunning 对应应用层 PID 锁（CD_NO_SINGLETON=1 时 Chromium 锁被跳过）
+  if (!gotTheLock || _alreadyRunning) {
     console.log('[Main] app ready but no singleton lock, exiting')
     app.exit(0)
     return
@@ -1288,7 +1496,19 @@ app.whenReady().then(async () => {
     console.error('[Main] Error stack:', err.stack)
   }
 
+  // 桌面顶层待办审批弹窗：必须在 setupIPC() 之前启动。
+  // setupIPC() 会把 ipcMain.on/handle 包成「只允许白名单通道」的代理，
+  // 弹窗用的 todo-popup:* 通道不在白名单里，晚于它注册会被拒绝。
+  // 独立 alwaysOnTop 窗口，主窗口隐藏/最小化时也照常弹出。
+  try {
+    todoPopup.start()
+  } catch (e) {
+    console.error('[Main] todo popup failed to start:', e?.message || e)
+  }
+
   createMainWindow()
+  // 前端重新构建后自动重载窗口（不重启进程，采集不中断）
+  startDistWatcher()
   // 延迟创建宠物窗口：等主窗口加载完成后由渲染进程根据 localStorage 决定是否创建
   // 这样可以避免用户关闭宠物后仍然出现白色残留窗口
   createTray()
@@ -1311,7 +1531,16 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   // 清理定时器，防止退出后定时器继续触发导致异常
   if (_healthInterval) clearInterval(_healthInterval)
+  stopDistWatcher()
   stopBackend()
+  try { todoPopup.stop() } catch (_) {}
+  // 释放应用层单实例锁（只删自己写的，避免误删别的实例刚接管的锁）
+  try {
+    if (fs.existsSync(_singletonLockFile)) {
+      const raw = JSON.parse(fs.readFileSync(_singletonLockFile, 'utf-8').trim() || '{}')
+      if (raw.pid === process.pid) fs.unlinkSync(_singletonLockFile)
+    }
+  } catch (_) {}
 })
 
 app.on('activate', () => {

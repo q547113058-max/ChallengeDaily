@@ -71,6 +71,7 @@
   "build": {
     "appId": "com.challenge.daily",
     "productName": "ChallengeDaily",
+    "electronDist": "node_modules/electron/dist",
     "directories": {
       "output": "dist-electron"
     },
@@ -83,6 +84,7 @@
       "en-US"
     ],
     "win": {
+      "signAndEditExecutable": false,
       "target": [
         {
           "target": "nsis",

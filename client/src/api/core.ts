@@ -12,8 +12,40 @@ function _isProxyPort(port: unknown): boolean {
   return port === 0 || port === '0' || port === '' || port === null || port === undefined
 }
 
+// 自动待办桥接只存在于本机（由 Electron 的 bridge-proxy 在 BACKEND_PORT 提供），
+// 云端只读节点没有 /api/bridge/*。因此 direct 模式下即使主 API 直连云端，
+// /api/bridge/* 也必须回落到本机端口，否则看板永远拿不到数据、审批弹窗不出现。
+// 用 __BACKEND_PORT__（与 CSP 白名单同源）拼接，不引入新的 origin。
+const BRIDGE_LOCAL_BASE = `http://127.0.0.1:${__BACKEND_PORT__}`
+
+// 只在 Windows 本机采集端实现的接口前缀。
+//   /api/bridge/*      自动待办桥接 —— 云端没有，必须走本机
+//   /api/ai/test       AI 连接测试 —— 云端是 no-op，必须走本机
+//
+// 注意：画像类接口（/api/profile/*, /api/deep-insight, /api/experience/*）
+// 已改为走云端：同步代理会把本机的 profile_analysis_cache 等表推到云端，
+// 云端 queries.py 能直接查到真实画像数据。而本机回环 58888 在本机环境被
+// 安全软件拦截（node.exe 连不上），走本机反而 502。因此画像统一读云端。
+const LOCAL_ONLY_PREFIXES = [
+  '/api/bridge',
+  '/api/ai/',
+]
+
+function _isLocalOnly(endpoint: string): boolean {
+  for (const p of LOCAL_ONLY_PREFIXES) {
+    if (endpoint === p || endpoint.startsWith(p + '/') || endpoint.startsWith(p + '?')) return true
+  }
+  // /api/ai/test 无斜杠子路径特例
+  return endpoint === '/api/ai/test'
+}
+
 // 把相对 endpoint（/api/xxx）解析成最终 URL。
 export function resolveApiUrl(endpoint: string): string {
+  // 只存在于本机采集端的接口：无论桌面 direct 还是浏览器外壳模式，
+  // 都必须回落本机，否则云端只读节点返回空壳/501 导致功能不可用。
+  if (_isLocalOnly(endpoint)) {
+    return `${BRIDGE_LOCAL_BASE}${endpoint}`
+  }
   if (BASE_URL === SAME_ORIGIN_PROXY) return endpoint
   return `${BASE_URL}${endpoint}`
 }
@@ -59,6 +91,17 @@ ensureBaseUrl()
 export function getBaseUrl(): string { return BASE_URL }
 export { getApiToken, ensureBaseUrl }
 
+// ── 请求日志钩子 ────────────────────────────────────────────────────────
+// 由 logger 模块注册，避免 core <-> logger 循环依赖。
+type RequestLogHook = (level: 'warn' | 'error', source: string, message: string,
+                       detail?: string, extra?: Record<string, unknown>) => void
+let _requestLogHook: RequestLogHook | null = null
+export function setRequestLogHook(hook: RequestLogHook): void { _requestLogHook = hook }
+function _reqLog(level: 'warn' | 'error', source: string, message: string,
+                 detail?: string, extra?: Record<string, unknown>): void {
+  try { _requestLogHook?.(level, source, message, detail, extra) } catch { /* ignore */ }
+}
+
 // ── 后端连接状态管理（企业级断线重连机制） ──
 type BackendState = 'connected' | 'disconnected' | 'connecting'
 let _backendState: BackendState = 'connecting'
@@ -97,6 +140,11 @@ let _tokenPromise: Promise<string> | null = null
 export function getApiTokenSync(): string { return _apiToken }
 
 async function _fetchTokenOnce(): Promise<string> {
+  // 多租户：若用户经过租户登录，优先用本地会话的 token
+  try {
+    const session = JSON.parse(localStorage.getItem('cd_tenant_session_v1') || 'null')
+    if (session && session.token) return String(session.token).trim()
+  } catch { /* ignore */ }
   if (!window.electronAPI?.getApiToken) return ''
   try {
     const t = await window.electronAPI.getApiToken()
@@ -104,6 +152,12 @@ async function _fetchTokenOnce(): Promise<string> {
   } catch {
     return ''
   }
+}
+
+/** 登录成功后注入 token 到请求层（无需重启应用）。 */
+export function setApiToken(token: string): void {
+  _apiToken = (token || '').trim()
+  _tokenPromise = null
 }
 
 async function getApiToken(): Promise<string> {
@@ -165,6 +219,8 @@ export async function request(endpoint: string, options?: RequestInit, timeoutMs
 }
 
 async function _requestImpl(endpoint: string, options?: RequestInit, timeoutMs = 10000, _retryCount = 0): Promise<unknown> {
+  const _t0 = Date.now()
+  const _method = (options?.method || 'GET').toUpperCase()
   // 确保 BASE_URL 已初始化（避免启动初期端口尚未就绪导致请求失败）
   await ensureBaseUrl()
   const token = await getApiToken()
@@ -202,12 +258,18 @@ async function _requestImpl(endpoint: string, options?: RequestInit, timeoutMs =
         }
         return request(endpoint, options, timeoutMs, _retryCount + 1)
       }
+      _reqLog('error', 'api', `${_method} ${endpoint} 401 认证失败（重试${_retryCount}次后）`,
+              undefined, { status: 401, durationMs: Date.now() - _t0, retry: _retryCount })
       throw new Error('认证失败，请重新启动应用')
     }
     if (!res.ok) {
       // 后端已响应但返回错误码（4xx/5xx）——后端在线，只是业务逻辑出错
       // 不应标记为 disconnected，否则会误报"后端服务断开"
       markRequestSuccess()
+      // 501 server_only_mode / 404 图标缺失是预期的降级，记为 warn 并限流由 logger 处理
+      const lvl = (res.status === 501 || res.status === 404) ? 'warn' : 'error'
+      _reqLog(lvl, 'api', `${_method} ${endpoint} -> ${res.status}`,
+              undefined, { status: res.status, durationMs: Date.now() - _t0 })
       throw new Error(`请求失败: ${res.status}`)
     }
     const data = await res.json()
@@ -221,10 +283,14 @@ async function _requestImpl(endpoint: string, options?: RequestInit, timeoutMs =
     // 累计连续失败次数，达到阈值才标记disconnected
     markRequestFailure()
     if (err instanceof DOMException && err.name === 'AbortError') {
+      _reqLog('warn', 'api', `${_method} ${endpoint} 请求超时（${timeoutMs}ms）`,
+              undefined, { durationMs: Date.now() - _t0, timeoutMs })
       throw new Error('请求超时，后端可能未响应')
     }
     if (err instanceof Error) {
       if (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError') || err.message?.includes('ECONNREFUSED')) {
+        _reqLog('warn', 'api', `${_method} ${endpoint} 网络不可达`, err.message,
+                { durationMs: Date.now() - _t0, baseUrl: BASE_URL })
         throw new Error('无法连接到后端服务，正在尝试自动重连...')
       }
       throw err

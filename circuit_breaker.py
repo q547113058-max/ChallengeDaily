@@ -1,8 +1,7 @@
 """
 P20-3: 通用 Circuit Breaker（熔断器）
 ai_client.py 中已有针对 AI 调用的熔断逻辑，本模块抽取出通用类，
-可应用于 calendar_sync 的网络请求、git_integration 的 git 操作、
-realtime_coach 的 DB 查询等关键外部依赖。
+可应用于 git_integration 的 git 操作、realtime_coach 的 DB 查询等关键外部依赖。
 
 模式：closed → open → half_open → closed/open
 - closed: 正常放行；累计失败 ≥ threshold 转为 open
@@ -185,24 +184,8 @@ def _is_infra_error(e: Exception) -> bool:
 
 
 # ── 预置熔断器实例（按子系统分组） ──
-_calendar_cb = None
 _git_cb = None
 _instances_lock = threading.Lock()
-
-
-def get_calendar_breaker() -> CircuitBreaker:
-    """日历订阅网络请求熔断器"""
-    global _calendar_cb
-    with _instances_lock:
-        if _calendar_cb is None:
-            _calendar_cb = CircuitBreaker(
-                name="calendar_sync",
-                failure_threshold=3,
-                cooldown_init_sec=300,  # 日历订阅失败 5 分钟冷却
-                cooldown_max_sec=3600,
-                half_open_max=1,
-            )
-        return _calendar_cb
 
 
 def get_git_breaker() -> CircuitBreaker:
@@ -223,6 +206,5 @@ def get_git_breaker() -> CircuitBreaker:
 def all_breakers_status() -> dict:
     """获取所有预置熔断器状态（供 /api/health 端点使用）"""
     return {
-        "calendar_sync": get_calendar_breaker().status(),
         "git_integration": get_git_breaker().status(),
     }

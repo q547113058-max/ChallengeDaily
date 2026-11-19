@@ -48,7 +48,7 @@ const HARDCODED_TEMPLATES: TemplateItem[] = [
   {
     value: 'deep',
     label: '深度日报',
-    desc: '深度工作分析，结合学术框架量化评估生产力',
+    desc: '多维度学术框架量化评估，生成结构化分析报告',
     icon: <Brain size={20} />,
   },
 ]

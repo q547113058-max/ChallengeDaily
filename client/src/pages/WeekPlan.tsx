@@ -325,7 +325,6 @@ export default function WeekPlan() {
         </div>
         <div className="flex-1" />
         <StatBlock label="完成率" value={`${weekStats.completion_rate}%`} color="#10b981" />
-        <StatBlock label="深度工作" value={`${Math.round(weekStats.deep_focus_min)}m`} color="#7B68EE" />
         <StatBlock label="中断次数" value={weekStats.interrupt_count} color="#ef4444" />
         <StatBlock label="连续天数" value={`${weekStats.streak_days}d`} color="#F0C040" />
       </div>

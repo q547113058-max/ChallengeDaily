@@ -25,7 +25,11 @@ let _startupTimer = null
 let _checkInFlight = false
 let _dialogOpen = false
 
-const SUPPORTED = app.isPackaged && process.platform === 'win32'
+// 源码调试版会把 electron.exe 复制成 ChallengeDaily.exe 以获得独立的
+// Windows 托盘图标身份，此时 electron 可能误判 app.isPackaged=true，
+// 进而去找不存在的 app-update.yml。CD_SOURCE_MODE=1 时强制视为 dev。
+const _sourceMode = process.env.CD_SOURCE_MODE === '1'
+const SUPPORTED = !_sourceMode && app.isPackaged && process.platform === 'win32'
 
 /** 对外暴露的更新状态（结构与前端 UpdateState 一致） */
 let _state = {

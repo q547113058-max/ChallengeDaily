@@ -13,17 +13,20 @@ import { BarChart, Bar, XAxis, YAxis, Cell } from 'recharts'
 import {
   getProfile, getDistilledProfile, getAppIconUrl, deleteCorrection,
   getDeepInsight, saveProfile, getProfileAnalyses, triggerProfileAnalysis,
+  getExperienceProfile, rebuildExperience,
   type ProfileData, type DistilledProfile, type DeepInsightFramework,
-  type DeepInsightSummary, type ProfileAnalysisItem,
+  type ProfileAnalysisItem, type ExperienceProfile,
 } from '../api/client'
 import { useAsyncData, formatDuration } from '../components/shared'
+import ExperienceGraph from '../components/ExperienceGraph'
+import { AI_REFRESH_MS } from '../config/refresh'
 import { useToast } from '../components/Toast'
 import {
   Brain, User, Briefcase, Zap, Clock, Sunrise, Activity, Monitor,
   Tag, Wrench, Trash2, RefreshCw, Loader2, AlertCircle, Sparkles,
-  BookOpen, Heart, Target, Layers, Users, Repeat, Shield,
+  BookOpen, Heart, Target, Users, Repeat, Shield,
   TrendingUp, TrendingDown, Minus, Award, Info, ChevronDown,
-  ChevronUp, Save, Fingerprint, Eye, Lightbulb,
+  ChevronUp, Save, Fingerprint, Eye, Lightbulb, FolderKanban, Scissors,
 } from 'lucide-react'
 
 const DEFAULT_ICON = import.meta.env.DEV ? '/icon.png' : './icon.png'
@@ -31,7 +34,7 @@ const DEFAULT_ICON = import.meta.env.DEV ? '/icon.png' : './icon.png'
 // ── 框架图标映射 ──
 const FW_ICONS: Record<string, React.ElementType> = {
   flow_theory: Zap, deliberate_practice: Target, bloom_taxonomy: BookOpen,
-  self_determination: Heart, ultradian_rhythm: Clock, deep_work: Layers,
+  self_determination: Heart, ultradian_rhythm: Clock,
   structural_holes: Users, zpd: TrendingUp, habit_loop: Repeat,
   psychological_capital: Shield,
   mbti_inference: Fingerprint, jungian_functions: Eye,
@@ -40,7 +43,7 @@ const FW_ICONS: Record<string, React.ElementType> = {
 
 const FW_COLORS: Record<string, string> = {
   flow_theory: '#00B894', deliberate_practice: '#6C5CE7', bloom_taxonomy: '#A29BFE',
-  self_determination: '#E54D42', ultradian_rhythm: '#00CEC9', deep_work: '#5B8DEF',
+  self_determination: '#E54D42', ultradian_rhythm: '#00CEC9',
   structural_holes: '#FD79A8', zpd: '#F0A030', habit_loop: '#55EFC4',
   psychological_capital: '#635BFF',
   mbti_inference: '#6C5CE7', jungian_functions: '#00B894',
@@ -50,7 +53,7 @@ const FW_COLORS: Record<string, string> = {
 const RADAR_METRIC_KEYS: Record<string, string> = {
   flow_theory: 'flow_index', deliberate_practice: 'deliberate_ratio',
   bloom_taxonomy: 'cognitive_depth', self_determination: 'intrinsic_motivation_index',
-  ultradian_rhythm: 'rhythm_alignment', deep_work: 'deep_work_ratio',
+  ultradian_rhythm: 'rhythm_alignment',
   structural_holes: 'tool_diversity', zpd: 'zpd_alignment',
   habit_loop: 'routine_stability', psychological_capital: 'psycap_index',
   mbti_inference: 'confidence', jungian_functions: 'dominant_score',
@@ -125,8 +128,6 @@ const METRIC_LABELS: Record<string, string> = {
   social_min: '社交时长', rhythm_alignment: '节律对齐', rest_adequacy: '休息充足度',
   afternoon_crash_risk: '午后崩溃风险', longest_streak_min: '最长连续',
   rest_periods: '休息次数', ideal_rest_periods: '理想休息',
-  deep_work_ratio: '深度工作比', shallow_work_ratio: '浅层工作比',
-  deep_work_min: '深度工作时长', shallow_work_min: '浅层工作时长',
   tool_diversity: '工具多样性', cross_domain_index: '跨域指数',
   knowledge_bridging: '知识桥接', unique_apps: '应用数', unique_categories: '分类数',
   top_app: '主要应用', top_app_pct: '主要应用%',
@@ -172,10 +173,17 @@ function formatMbtiContent(analysis?: ProfileAnalysisItem): string | null {
   if (!analysis?.result_json) return null
   const r = analysis.result_json
   const type = String(r.mbti_type || '----')
-  const ei = String(r.ei_label || '')
-  const sn = String(r.sn_label || '')
-  const tf = String(r.tf_label || '')
-  const jp = String(r.jp_label || '')
+  // 兼容 AI 只返回单字母的旧缓存：按类型字母补全中文标签
+  const norm = (val: string, fallback: string) => {
+    const v = val.trim()
+    if (v && v.includes('(')) return v
+    return fallback || v
+  }
+  const t = type.length === 4 ? type : '----'
+  const ei = norm(String(r.ei_label || ''), t[0] === 'E' ? '外向(E)' : t[0] === 'I' ? '内向(I)' : '')
+  const sn = norm(String(r.sn_label || ''), t[1] === 'S' ? '感觉(S)' : t[1] === 'N' ? '直觉(N)' : '')
+  const tf = norm(String(r.tf_label || ''), t[2] === 'T' ? '思考(T)' : t[2] === 'F' ? '情感(F)' : '')
+  const jp = norm(String(r.jp_label || ''), t[3] === 'J' ? '判断(J)' : t[3] === 'P' ? '知觉(P)' : '')
   const conf = typeof r.confidence === 'number' ? `${(r.confidence * 100).toFixed(0)}%` : ''
   return `推断类型：${type}（${ei} · ${sn} · ${tf} · ${jp}）${conf ? ` · 置信度 ${conf}` : ''}`
 }
@@ -217,25 +225,43 @@ export default function DeepProfile() {
   const [expandedFw, setExpandedFw] = useState<string | null>(null)
   const [activeSection, setActiveSection] = useState(0)
 
-  // ── 个人画像数据 ──
+  // ── 个人画像数据 ──（AI 类数据，按 AI_REFRESH_MS 慢轮询）
   const {
     data: profileData, loading: profileLoading, error: profileError, refresh: refreshProfile,
-  } = useAsyncData<ProfileData>(() => getProfile(), [])
+  } = useAsyncData<ProfileData>(() => getProfile(), [], AI_REFRESH_MS)
 
   const {
     data: distilled, loading: distilledLoading, error: distilledError, refresh: refreshDistilled,
-  } = useAsyncData<DistilledProfile>(() => getDistilledProfile(), [])
+  } = useAsyncData<DistilledProfile>(() => getDistilledProfile(), [], AI_REFRESH_MS)
 
   // ── 深度洞察数据 ──
   const { data: insight, loading: insightLoading, error: insightError, refresh: refreshInsight } = useAsyncData(
-    () => getDeepInsight(), []
+    () => getDeepInsight(), [], AI_REFRESH_MS
   )
 
   // ── AI 自我认知数据 ──
   const { data: analysesData, loading: analysesLoading, refresh: refreshAnalyses } = useAsyncData(
-    () => getProfileAnalyses(), []
+    () => getProfileAnalyses(), [], AI_REFRESH_MS
   )
   const [analysisTriggering, setAnalysisTriggering] = useState(false)
+
+  // ── 任务经历档案（采集数据聚合，多功能共享事实源）──
+  const {
+    data: experience, loading: expLoading, refresh: refreshExperience,
+  } = useAsyncData<ExperienceProfile>(() => getExperienceProfile(), [], AI_REFRESH_MS)
+  const [expRebuilding, setExpRebuilding] = useState(false)
+  const handleRebuildExperience = async () => {
+    setExpRebuilding(true)
+    try {
+      await rebuildExperience(false)
+      toast.success('经历档案已更新')
+      refreshExperience()
+    } catch {
+      toast.error('更新失败，请稍后重试')
+    } finally {
+      setExpRebuilding(false)
+    }
+  }
 
   // ── 将 analyses 数组转为 type → result 的映射 ──
   const analysisMap = useMemo(() => {
@@ -374,7 +400,7 @@ export default function DeepProfile() {
     if (key && fw.metrics) {
       const raw = fw.metrics[key]
       if (id === 'bloom_taxonomy') value = Math.round((Number(raw) / 6) * 100)
-      else if (id === 'deep_work' || id === 'deliberate_practice') value = Math.round(Number(raw) * 100)
+      else if (id === 'deliberate_practice') value = Math.round(Number(raw) * 100)
       else if (id === 'ultradian_rhythm' || id === 'habit_loop') value = Math.round(Number(raw) * 100)
       else if (id === 'structural_holes') value = Math.round(Math.min(Number(raw) / 4, 1) * 100)
       else value = Number(raw) || 0
@@ -389,6 +415,7 @@ export default function DeepProfile() {
     { label: 'AI 自我认知', icon: Fingerprint },
     { label: '学术框架', icon: Brain },
     { label: '习惯配置', icon: Wrench },
+    { label: '经历档案', icon: FolderKanban },
   ]
 
   // ── 加载态 ──
@@ -576,9 +603,10 @@ export default function DeepProfile() {
 
         {/* 分类纠正 */}
         <section className="bg-cd-card border border-cd-border rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-cd-text mb-3 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-cd-text mb-1 flex items-center gap-2">
             <Wrench size={16} className="text-cd-green" /> 分类纠正记录
           </h3>
+          <p className="text-xs text-cd-text-tertiary mb-3">纠正会作为参考写入 AI 分析上下文，帮助后续分类更准确（非强制规则，过期自动清理）</p>
           {corrections.length === 0 ? (
             <p className="text-sm text-cd-text-tertiary">暂无纠正记录</p>
           ) : (
@@ -687,7 +715,7 @@ export default function DeepProfile() {
           区块 4：学术框架分析
           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
       <div id="section-3" className="space-y-4">
-        <SectionHeader icon={Brain} title="学术框架分析" subtitle="14 大心理学/教育学/社会学框架量化指标" />
+        <SectionHeader icon={Brain} title="学术框架分析" subtitle="13 大心理学/教育学/社会学框架量化指标" />
 
         {insight?.status === 'no_data' ? (
           <div className="bg-cd-card border border-cd-border rounded-xl p-8 text-center">
@@ -919,6 +947,145 @@ export default function DeepProfile() {
              <><Save size={14} /> 保存习惯配置</>}
           </button>
         </div>
+      </div>
+
+      {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          区块 6：经历档案（采集数据聚合，多功能共享事实源）
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      <div id="section-5" className="space-y-4">
+        <SectionHeader
+          icon={FolderKanban}
+          title="经历档案"
+          subtitle={`从采集数据提炼 · ${experience?.projects?.length || 0} 个项目 · ${experience?.episodes?.length || 0} 段经历 · ${experience?.skills?.length || 0} 项技能`}
+        />
+        <div className="flex justify-end">
+          <button
+            onClick={handleRebuildExperience}
+            disabled={expRebuilding}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cd-green/10 text-cd-green text-sm hover:bg-cd-green/20 disabled:opacity-50 transition"
+          >
+            {expRebuilding ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            {expRebuilding ? '提炼中...' : '更新档案'}
+          </button>
+        </div>
+
+        {expLoading && !experience ? (
+          <p className="text-sm text-cd-text-tertiary text-center py-8">加载中...</p>
+        ) : !experience || (
+          !experience.projects.length && !experience.episodes.length && !experience.skills.length
+        ) ? (
+          <div className="bg-cd-card border border-cd-border rounded-xl p-8 text-center">
+            <FolderKanban size={36} className="text-cd-text-tertiary mx-auto mb-3" />
+            <p className="text-sm text-cd-text-secondary">还没有经历档案</p>
+            <p className="text-xs text-cd-text-tertiary mt-1">采集一段时间后自动提炼，或点「更新档案」立即生成</p>
+          </div>
+        ) : (
+          <>
+            {/* 项目卡片 */}
+            {experience.projects.length > 0 && (
+              <section className="bg-cd-card border border-cd-border rounded-xl p-5">
+                <h3 className="text-sm font-semibold text-cd-text mb-3 flex items-center gap-2">
+                  <FolderKanban size={16} className="text-cd-green" /> 重点项目
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {experience.projects.slice(0, 8).map((p) => (
+                    <div key={p.name} className="flex items-center gap-2 bg-cd-bg-secondary rounded-lg px-3 py-2">
+                      <span className="text-sm font-medium text-cd-text flex-1 truncate">{p.name}</span>
+                      <span className="text-xs text-cd-text-tertiary tabular-nums">{formatDuration(p.total_min)}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${p.status === 'active' ? 'bg-cd-green/15 text-cd-green' : 'bg-cd-bg-tertiary text-cd-text-tertiary'}`}>
+                        {p.status === 'active' ? '活跃' : '归档'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* 任务经历（可折叠） */}
+            {experience.episodes.length > 0 && (
+              <section className="bg-cd-card border border-cd-border rounded-xl overflow-hidden">
+                <h3 className="text-sm font-semibold text-cd-text p-4 pb-2 flex items-center gap-2">
+                  <Target size={16} className="text-cd-green" /> 任务经历
+                </h3>
+                <div className="divide-y divide-cd-border">
+                  {experience.episodes.slice(0, 20).map((e) => {
+                    const key = `ep-${e.id}`
+                    const expanded = expandedFw === key
+                    return (
+                      <div key={e.id}>
+                        <button
+                          onClick={() => setExpandedFw(expanded ? null : key)}
+                          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-cd-hover transition text-left"
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${e.status === 'done' ? 'bg-cd-green' : 'bg-cd-yellow'}`} />
+                          <span className="text-sm text-cd-text flex-1 truncate">{e.title}</span>
+                          {e.project && <span className="text-[11px] text-cd-text-tertiary shrink-0">[{e.project}]</span>}
+                          <span className="text-xs text-cd-text-tertiary tabular-nums shrink-0">{e.sessions}次 · {formatDuration(e.total_min)}</span>
+                          {expanded ? <ChevronUp size={14} className="text-cd-text-tertiary" /> : <ChevronDown size={14} className="text-cd-text-tertiary" />}
+                        </button>
+                        {expanded && (
+                          <div className="px-4 pb-3 space-y-2">
+                            {e.summary && <p className="text-xs text-cd-text-secondary leading-relaxed">{e.summary}</p>}
+                            {e.evidence?.length > 0 && (
+                              <div className="space-y-1">
+                                {e.evidence.slice(0, 3).map((ev, i) => (
+                                  <p key={i} className="text-[11px] text-cd-text-tertiary flex gap-1"><Scissors size={11} className="mt-0.5 shrink-0" />{ev}</p>
+                                ))}
+                              </div>
+                            )}
+                            <p className="text-[10px] text-cd-text-tertiary">来源：{e.source === 'ai' ? 'AI 归纳' : '规则提炼'}</p>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </section>
+            )}
+
+            {/* 技能图谱 */}
+            {experience.skills.length > 0 && (
+              <section className="bg-cd-card border border-cd-border rounded-xl p-5">
+                <h3 className="text-sm font-semibold text-cd-text mb-3 flex items-center gap-2">
+                  <Zap size={16} className="text-cd-green" /> 技能图谱
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {experience.skills.slice(0, 12).map((s) => (
+                    <span key={s.name} className="px-3 py-1.5 rounded-full bg-cd-green/10 text-cd-green text-xs font-medium">
+                      {s.name} · {formatDuration(s.total_min)}
+                      <span className="text-cd-text-tertiary ml-1">({s.episode_cnt}段)</span>
+                    </span>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* 项目—技能关系图 */}
+            <section className="bg-cd-card border border-cd-border rounded-xl p-5">
+              <h3 className="text-sm font-semibold text-cd-text mb-3 flex items-center gap-2">
+                <FolderKanban size={16} className="text-cd-green" /> 项目—技能关系
+              </h3>
+              <ExperienceGraph data={experience} />
+            </section>
+
+            {/* 协作画像 */}
+            {experience.collaborators.length > 0 && (
+              <section className="bg-cd-card border border-cd-border rounded-xl p-5">
+                <h3 className="text-sm font-semibold text-cd-text mb-3 flex items-center gap-2">
+                  <Users size={16} className="text-cd-green" /> 协作画像
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {experience.collaborators.slice(0, 10).map((c) => (
+                    <span key={c.name} className="px-3 py-1.5 rounded-lg bg-cd-bg-secondary text-cd-text text-xs">
+                      {c.name} <span className="text-cd-text-tertiary">· {c.interact_cnt}次</span>
+                    </span>
+                  ))}
+                </div>
+                <p className="text-[10px] text-cd-text-tertiary mt-2">仅保留称呼/角色，不记录聊天内容</p>
+              </section>
+            )}
+          </>
+        )}
       </div>
     </div>
   )

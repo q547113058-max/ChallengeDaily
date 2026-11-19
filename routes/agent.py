@@ -396,7 +396,7 @@ def overview_summary():
             f'每个标签的 emoji 要和类型匹配，不要用同一个 emoji 敷衍：mood 用心情类 emoji（如 🌸/😴/🎯），care 用关怀类 emoji（如 🧡/🍵），achievement 用成就类 emoji（如 🌿/🌟），reminder 用提醒类 emoji（如 💡/⏰）。\n'
             f'\n'
             f'【小作文写作要求】\n'
-            f'1. 必须覆盖下面全部数据点，并自然嵌入句子：总时长、最早/最晚工作、峰值时段、使用应用数量、主力应用、分类占比、开发占比、专注效率、碎片化指数、深度工作占比、平均会话时长。\n'
+            f'1. 必须覆盖下面全部数据点，并自然嵌入句子：总时长、最早/最晚工作、峰值时段、使用应用数量、主力应用、分类占比、开发占比、专注效率、碎片化指数、平均会话时长。\n'
             f'2. 句子之间要有衔接，像朋友在连续说话，不要变成"1. 2. 3."列表式总结。\n'
             f'3. {writing_rule_3}\n'
             f'4. 可以有一点小吐槽或小感叹，但要基于数据，不要凭空想象。只根据下方提供的活动详情描述，不要编造未出现的应用或行为。\n'
@@ -414,7 +414,7 @@ def overview_summary():
             f'主要分类：{top_cat}（占比{top_cat_pct}%），开发类占比{dev_pct}%\n'
             f'工具使用：{app_summary}\n'
             f'注意力碎片化：{attention["fragmentation_index"]}/100，专注效率：{attention["focus_efficiency"]}/100\n'
-            f'深度工作占比：{attention["deep_work_ratio"]}%，平均会话：{attention["avg_session_min"]}分钟\n'
+            f'平均会话：{attention["avg_session_min"]}分钟\n'
             f'{focus_text}\n'
             f'近期活动详情：\n{detail_text}'
         )
@@ -431,6 +431,14 @@ def overview_summary():
                 parts.append(f"用户画像：{_sanitize_user_input(user_ctx, 800)}")
             if weekly_ctx and len(weekly_ctx) > 50:
                 parts.append(f"近一周上下文：\n{_sanitize_user_input(weekly_ctx, 2000)}")
+            # 任务经历档案：与画像/周上下文同一事实源，措辞互证
+            try:
+                from experience_pipeline import get_experience_context
+                exp_ctx = get_experience_context(900)
+                if exp_ctx:
+                    parts.append(_sanitize_user_input(exp_ctx, 900))
+            except Exception:
+                pass
             if parts:
                 system_content += "\n\n" + "\n\n".join(parts)
         except Exception:

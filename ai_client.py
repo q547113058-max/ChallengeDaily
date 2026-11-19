@@ -313,22 +313,30 @@ def analyze_screenshot(image_path: str, app_name: str = "", window_title: str = 
     recent_context: 近期活动的简短描述，供 AI 综合分析
     visible_windows: 当前屏幕上所有可见窗口的列表
     """
+    def _fallback_detail():
+        """AI 降级时写入 ai_detail 的内容：只描述真实可见的窗口/应用，
+        不写"AI服务不可用"这类状态消息（那会被时间线当成活动内容展示）。"""
+        if window_title and app_name:
+            return f"当前窗口：{window_title}（{app_name}）"
+        return f"当前应用：{app_name or '未知应用'}"
+
     if not config.AI_API_KEY:
-        # 降级：使用窗口标题作为摘要，而非无意义占位符
+        # 降级：摘要/详情都用真实窗口信息，状态只进日志
         fallback_summary = f"{app_name} - {window_title}" if window_title else app_name or "未配置AI"
-        return {"category": "生活", "summary": fallback_summary, "detail": "AI 未配置，请在设置中配置 API Key 以启用智能摘要", "windows": []}
+        logger.debug("AI 未配置，使用窗口信息作为降级详情")
+        return {"category": "", "summary": fallback_summary, "detail": _fallback_detail(), "windows": []}
 
     # 熔断器检查
     if not _cb_check():
         logger.info("Circuit breaker OPEN，跳过 AI 请求")
-        fallback_summary = f"{app_name} - {window_title}" if window_title else app_name or "AI服务暂时不可用"
+        fallback_summary = f"{app_name} - {window_title}" if window_title else app_name or "未知应用"
         try:
             from audit_logger import log_audit
             log_audit("ai_vision", "analyze_screenshot", "skipped",
                       detail="熔断器开启，跳过 AI 请求", metadata={"app_name": app_name})
         except Exception:
             pass
-        return {"category": "生活", "summary": fallback_summary, "detail": "AI 服务暂时不可用，等待恢复中", "windows": []}
+        return {"category": "", "summary": fallback_summary, "detail": _fallback_detail(), "windows": []}
 
     # 速率限制检查
     if not _rate_limit_check("vision"):
@@ -339,14 +347,15 @@ def analyze_screenshot(image_path: str, app_name: str = "", window_title: str = 
                       detail="视觉请求速率超限", metadata={"app_name": app_name})
         except Exception:
             pass
-        return {"category": "生活", "summary": fallback_summary, "detail": "AI 请求过于频繁，稍后自动重试", "windows": []}
+        return {"category": "", "summary": fallback_summary, "detail": _fallback_detail(), "windows": []}
 
     # 预先将图片编码为 base64，避免重试时重复读取文件
     try:
         b64_image = encode_image_to_base64(image_path)
     except FileNotFoundError:
         logger.error(f"截图文件不存在: {image_path}")
-        return {"category": "生活", "summary": "截图文件缺失", "detail": "截图已被清理或路径错误", "windows": []}
+        _s = f"{app_name} - {window_title}" if window_title else app_name or "未知应用"
+        return {"category": "", "summary": _s, "detail": _fallback_detail(), "windows": []}
 
     user_text = build_user_prompt(app_name, window_title, recent_context, visible_windows)
 
@@ -364,8 +373,8 @@ def analyze_screenshot(image_path: str, app_name: str = "", window_title: str = 
         # 重试前检查熔断器，避免在熔断状态下继续浪费请求
         if attempt > 0 and not _cb_check():
             logger.info("Circuit breaker OPEN，跳过重试")
-            fallback_summary = f"{app_name} - {window_title}" if window_title else app_name or "AI服务暂时不可用"
-            return {"category": "生活", "summary": fallback_summary, "detail": "AI 服务暂时不可用，等待恢复中", "windows": []}
+            fallback_summary = f"{app_name} - {window_title}" if window_title else app_name or "未知应用"
+            return {"category": "", "summary": fallback_summary, "detail": _fallback_detail(), "windows": []}
         try:
             client = _get_client()
 
@@ -582,6 +591,12 @@ def _sanitize_analysis_result(result: dict, app_name: str, visible_windows: list
 
 def _parse_json_response(raw: str) -> dict | None:
     """从 AI 返回的文本中提取 JSON（支持嵌套结构）"""
+    # 混合思考模型(如 glm-4.7-flash)即使 thinking:disabled 也可能内联 <think> 段，
+    # 先剥离再解析，避免推理文本干扰 JSON 提取。
+    if raw and "<think>" in raw:
+        stripped = re.sub(r"<think>.*?</think>", "", raw, flags=re.S).strip()
+        if stripped:
+            raw = stripped
     # 尝试直接解析
     try:
         return json.loads(raw)
@@ -746,6 +761,11 @@ def generate_greeting(context: dict) -> str:
                 temperature=0.3,
             )
             text = response.choices[0].message.content.strip()
+            # 混合思考模型可能内联 <think> 段，剥离后再判断问候语开头
+            if "<think>" in text:
+                stripped = re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
+                if stripped:
+                    text = stripped
             _cb_record_success()
             # P11-3：审计日志 — 导语生成成功
             try:

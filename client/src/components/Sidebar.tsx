@@ -7,7 +7,6 @@ import {
   History,
   Bot,
   Settings as SettingsIcon,
-  HelpCircle,
   Pause,
   Play,
   Loader2,
@@ -16,12 +15,16 @@ import {
   Flame,
   Download,
   Target,
+  Brain,
   ChevronDown,
   type LucideIcon,
 } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { getStatus, isReadOnlySnapshot, pauseCollector, resumeCollector, getTodayStats, type CollectorStatus, type TodayStats } from '../api/client'
 import { useTheme } from './ThemeContext'
+import { DATA_REFRESH_MS } from '../config/refresh'
+import { useVisibleInterval } from '../hooks/useVisibleInterval'
+import TenantBadge from './TenantBadge'
 
 // ─── 精简后的导航结构 ──────────────────────────────
 // 设计原则：一个功能只有一个出口。报告三合一（生成/历史/导出）、
@@ -104,6 +107,12 @@ const NAV_GROUPS: { label: string; items: NavParent[] }[] = [
         label: '应用记录',
         desc: '应用时长、标签与分类规则',
       },
+      {
+        to: '/profile',
+        icon: Brain,
+        label: '深度画像',
+        desc: '用户画像、AI 自我认知与经历档案',
+      },
     ],
   },
 ]
@@ -120,26 +129,14 @@ export default function Sidebar() {
   // 记录展开的父项（按 to 唯一标识）；默认展开当前路由所属的父项
   const [expanded, setExpanded] = useState<string | null>(null)
 
-  useEffect(() => {
-    let isVisible = !document.hidden
-    const refresh = () => {
-      if (!isVisible) return
-      getStatus().then(setStatus).catch(() => setStatus(null))
-      getTodayStats().then(setTodayStats).catch(() => setTodayStats(null))
-    }
-    refresh()
-    const interval = setInterval(refresh, 30000)
-    const handleVisibility = () => {
-      const wasHidden = !isVisible
-      isVisible = !document.hidden
-      if (wasHidden && isVisible) refresh()
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
-    return () => {
-      clearInterval(interval)
-      document.removeEventListener('visibilitychange', handleVisibility)
-    }
+  const refreshStatus = useCallback(() => {
+    getStatus().then(setStatus).catch(() => setStatus(null))
+    getTodayStats().then(setTodayStats).catch(() => setTodayStats(null))
   }, [])
+
+  useEffect(() => { refreshStatus() }, [refreshStatus])
+  // 仅页面可见时轮询采集器状态；隐藏时定时器真正停止
+  useVisibleInterval(refreshStatus, DATA_REFRESH_MS)
 
   // 根据当前 hash 路由自动展开对应的父项
   useEffect(() => {
@@ -188,6 +185,9 @@ export default function Sidebar() {
         WebkitBackdropFilter: sidebarTranslucent ? 'var(--cd-sidebar-blur)' : 'none',
       }}
     >
+      {/* ─── 当前租户（多租户云端）─────────────── */}
+      <TenantBadge />
+
       {/* ─── 顶部状态 ───────────────── */}
       <div className="px-5 pt-5 pb-4">
         <button

@@ -49,6 +49,8 @@ interface Window {
     getBackendUrl?: () => Promise<string>
     getApiToken: () => Promise<string>
     getAppVersion: () => Promise<string>
+    /** 主进程日志尾部（最近 N 行），供集中日志上传 */
+    getRecentLogs?: (maxLines?: number) => Promise<string[]>
     onBackendCrash: (cb: (data: { title: string; body: string; type: string }) => void) => void
     onUpdaterState: (cb: (state: UpdateState) => void) => () => void
     updaterGetState: () => Promise<UpdateState>

@@ -215,41 +215,6 @@ frameworks:
       crash_risk: "午间工作{hours}小时后仅休息{rest_min}分钟，下午崩溃风险为{risk}。研究显示午餐后20分钟休息可恢复50%的认知能力。"
       good_rhythm: "今日工作-休息节律良好，平均每{interval}分钟有一个自然休息点，符合超日节律的90分钟周期。"
 
-  # ━━━ 6. 深度工作 (Deep Work) ━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  - id: deep_work
-    name: 深度工作
-    name_en: Deep Work
-    field: 生产力/认知科学
-    scholar: Cal Newport
-    year: 2016
-    source_book: "Deep Work: Rules for Focused Success in a Distracted World"
-    core_concept: |
-      Newport定义深度工作为：在无干扰状态下进行的专业活动，将认知能力推向极限。
-      这种努力创造新价值、提升技能，且难以复制。
-      浅层工作(Shallow Work)则是：在注意力分散中进行的非认知密集型后勤或事务性任务，
-      通常不会创造新价值，且容易复制。
-      Newport的核心公式：深度工作产出 = 深度工作时间 × 深度工作强度
-    metrics:
-      - id: deep_work_ratio
-        name: 深度工作比
-        formula: "深度工作时长(连续>30分钟专注同一高认知任务) / 总工作时长"
-        range: [0, 1]
-        interpretation:
-          high: ">=0.5: 深度工作占比优秀，符合Newport对高产者的描述"
-          medium: "0.25-0.49: 有深度工作但被浅层工作侵蚀"
-          low: "<0.25: 大部分时间在浅层工作，长期产出受限"
-      - id: shallow_work_ratio
-        name: 浅层工作比
-        formula: "浅层任务时长 / 总工作时长"
-        range: [0, 1]
-    data_signals:
-      - "连续>30分钟开发/设计/数据分析 → 深度工作"
-      - "频繁切换邮件/聊天/审批 → 浅层工作"
-      - "会议>2h/天 → 浅层工作为主的信号"
-    insights_templates:
-      deep_work_good: "深度工作比{ratio:.0%}，Newport(2016)指出，顶尖专家(如Carl Jung在塔楼写作)通常保持50%以上的深度工作时间。"
-      too_shallow: "今日浅层工作占比{ratio:.0%}，如果长期如此，Newport警告会导致'永久性注意力损害'——大脑失去长时间专注的能力。建议每天至少保留2小时不被打断的深度时间块。"
-
   # ━━━ 7. 结构洞/社会资本理论 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
   - id: structural_holes
     name: 结构洞与社会资本
@@ -414,7 +379,7 @@ frameworks:
       S/N — 感觉(Sensing) vs 直觉(iNtuition)：信息获取方式
       T/F — 思考(Thinking) vs 情感(Feeling)：决策方式
       J/P — 判断(Judging) vs 知觉(Perceiving)：生活方式
-      工作行为数据可间接反映偏好：如持续深度工作→I偏好，频繁沟通→E偏好，
+      工作行为数据可间接反映偏好：如长时间独立专注→I偏好，频繁沟通→E偏好，
       多工具探索→N偏好，重复稳定操作→S偏好。
     metrics:
       - id: ei_score
@@ -442,7 +407,7 @@ frameworks:
         formula: "组合四维度偏好方向的4字母代码"
         range: 16 types
     data_signals:
-      - "长时间独立深度工作 → I偏好"
+      - "长时间独立专注 → I偏好"
       - "频繁会议+主动沟通 → E偏好"
       - "持续使用新工具/新方法 → N偏好"
       - "稳定重复同一工作流 → S偏好"
@@ -452,7 +417,7 @@ frameworks:
       - "灵活切换+多线程探索 → P偏好"
     insights_templates:
       type_inferred: "基于工作行为数据推断你的MBTI类型倾向为{mbti_type}，四维度偏好：E/I={ei}，S/N={sn}，T/F={tf}，J/P={jp}。注意：MBTI应作为理解偏好的框架，而非刻板标签。"
-      introvert_deep: "独立工作占比{pct:.0%}，符合内向(I)偏好特征。Myers指出I偏好者通过独处恢复能量，在深度工作中表现更优。"
+      introvert_deep: "独立工作占比{pct:.0%}，符合内向(I)偏好特征。Myers指出I偏好者通过独处恢复能量，在长时间专注中表现更优。"
       intuitive_explore: "工具多样性指数{diversity}，新工具探索频繁，符合直觉(N)偏好。N偏好者倾向于关注可能性和模式，而非仅关注当下事实。"
 
   # ━━━ 12. 荣格八维认知功能 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -622,73 +587,61 @@ category_profiles:
   开发:
     bloom_levels: [3, 6]  # 应用到创造
     flow_relevant: true
-    deep_work_eligible: true
     deliberate_practice_zone: learning  # 新项目=学习区, 重复=舒适区
     sdt_nature: autonomous  # 通常是自主选择
   会议:
     bloom_levels: [2, 4]
     flow_relevant: false
-    deep_work_eligible: false
     deliberate_practice_zone: comfort
     sdt_nature: relatedness
   沟通:
     bloom_levels: [2, 5]
     flow_relevant: false
-    deep_work_eligible: false
     deliberate_practice_zone: comfort
     sdt_nature: relatedness
   文档:
     bloom_levels: [2, 5]
     flow_relevant: true
-    deep_work_eligible: true
     deliberate_practice_zone: comfort
     sdt_nature: mixed
   测试:
     bloom_levels: [3, 4]
     flow_relevant: true
-    deep_work_eligible: true
     deliberate_practice_zone: learning
     sdt_nature: mixed
   设计:
     bloom_levels: [5, 6]
     flow_relevant: true
-    deep_work_eligible: true
     deliberate_practice_zone: learning
     sdt_nature: autonomous
   运维:
     bloom_levels: [3, 4]
     flow_relevant: true
-    deep_work_eligible: true
     deliberate_practice_zone: comfort
     sdt_nature: controlled
   数据分析:
     bloom_levels: [4, 5]
     flow_relevant: true
-    deep_work_eligible: true
     deliberate_practice_zone: learning
     sdt_nature: autonomous
   学习:
     bloom_levels: [2, 3]
     flow_relevant: true
-    deep_work_eligible: true
     deliberate_practice_zone: learning
     sdt_nature: autonomous
   管理:
     bloom_levels: [2, 5]
     flow_relevant: false
-    deep_work_eligible: false
     deliberate_practice_zone: comfort
     sdt_nature: mixed
   产品:
     bloom_levels: [5, 6]
     flow_relevant: true
-    deep_work_eligible: true
     deliberate_practice_zone: learning
     sdt_nature: autonomous
   生活:
     bloom_levels: [1, 2]
     flow_relevant: false
-    deep_work_eligible: false
     deliberate_practice_zone: none
     sdt_nature: autonomous
 
@@ -702,8 +655,6 @@ references:
     citation: "Anderson, L. W., & Krathwohl, D. R. (Eds.). (2001). A Taxonomy for Learning, Teaching, and Assessing: A Revision of Bloom's Taxonomy of Educational Objectives. Longman."
   - id: deci_ryan1985
     citation: "Deci, E. L., & Ryan, R. M. (1985). Intrinsic Motivation and Self-Determination in Human Behavior. Plenum Press."
-  - id: newport2016
-    citation: "Newport, C. (2016). Deep Work: Rules for Focused Success in a Distracted World. Grand Central Publishing."
   - id: burt1992
     citation: "Burt, R. S. (1992). Structural Holes: The Social Structure of Competition. Harvard University Press."
   - id: granovetter1973

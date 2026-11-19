@@ -252,7 +252,9 @@ def build_weekly_context(days: int = 7) -> str:
     _flush_pending_commits()
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT report_date, content FROM reports WHERE report_date >= ? ORDER BY report_date DESC",
+            "SELECT report_date, content FROM reports "
+            "WHERE report_date >= ? AND report_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' "
+            "ORDER BY report_date DESC",
             (cutoff,),
         ).fetchall()
     if rows:

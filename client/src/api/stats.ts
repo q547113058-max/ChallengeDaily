@@ -7,7 +7,7 @@ export async function getHourlyStats(date: string): Promise<{ date: string; hour
   return data as { date: string; hours: Array<{ hour: number; count: number; categories: string[] }> }
 }
 
-/** 获取最近 N 天效率趋势 */
+/** 获取最近 N 天时长趋势（每日记录时长） */
 export async function getTrendStats(days = 7): Promise<{ days: number; trend: Array<{ date: string; count: number; category_count: number; duration_min: number }> }> {
   const data = await request(`/api/stats/trend?days=${days}`)
   return data as { days: number; trend: Array<{ date: string; count: number; category_count: number; duration_min: number }> }
@@ -32,17 +32,6 @@ export interface RecentHeatmapDay {
 export async function getRecentHeatmap(days = 3): Promise<{ days: number; data: RecentHeatmapDay[] }> {
   const data = await request(`/api/stats/recent-heatmap?days=${days}`)
   return data as { days: number; data: RecentHeatmapDay[] }
-}
-
-// 分心热点图：24小时分心次数分布
-export interface DistractionHeatmapEntry {
-  hour: number
-  count: number
-  duration_min: number
-}
-export async function getDistractionHeatmap(days = 7): Promise<{ heatmap: DistractionHeatmapEntry[]; days: number }> {
-  const data = await request(`/api/stats/distraction-heatmap?days=${days}`)
-  return data as { heatmap: DistractionHeatmapEntry[]; days: number }
 }
 
 // ── P9-4：日历视图 ──

@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Sparkles, Heart, PartyPopper, Coffee, Quote, Sunrise } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Sparkles, Heart, PartyPopper, Coffee, Quote } from 'lucide-react'
 import { getQuote, getTodayStats, getTrendStats } from '../api/client'
+import { AI_REFRESH_MS } from '../config/refresh'
+import { useVisibleInterval } from '../hooks/useVisibleInterval'
 
 /**
  * P8-2：情感化设计组件
  * 集成三块能力：
  *  1. 每日一句（带渐变背景与图标）
- *  2. 里程碑庆祝（连续打卡 N 天 / 累计 N 小时 / 今日首段专注等触发庆祝条幅）
+ *  2. 里程碑庆祝（连续打卡 N 天 / 累计活跃 N 天触发庆祝条幅）
  *  3. 低谷关怀（当前时长过短或纯摸鱼时显示温馨提示，避免"效率低"等负面表述）
  *
  * 用户偏好：活泼可爱温馨，不肉麻；上午必须鼓励性；不出现"效率低/有点散"等词。
@@ -48,12 +50,7 @@ function pickMilestone(opts: {
   if (totalActiveDays >= 100) {
     return { icon: PartyPopper, text: `累计活跃 ${totalActiveDays} 天，每一笔记录都在塑造更好的你`, color: 'rgba(251,146,60,0.18)' }
   }
-  if (todayMin >= 240) {
-    return { icon: Sparkles, text: `今天已专注 ${Math.floor(todayMin / 60)} 小时，深度工作满分！`, color: 'rgba(34,197,94,0.18)' }
-  }
-  if (todayMin >= 120 && captureCount >= 30) {
-    return { icon: Heart, text: `今天的节奏很稳，继续这样的好状态~`, color: 'rgba(236,72,153,0.18)' }
-  }
+  // 当日时长类鼓励文案已移除（"今天已专注N小时，状态很棒"/"节奏很稳"等）
   return null
 }
 
@@ -73,38 +70,41 @@ export default function EmotionalCare() {
   const [showCelebration, setShowCelebration] = useState(false)
   const prevMilestoneKey = useRef<string>('')
 
-  useEffect(() => {
-    let cancelled = false
-    const fetchAll = async () => {
-      try {
-        const [q, stats, trend] = await Promise.all([
-          getQuote().catch(() => ({ quote: '' })),
-          getTodayStats().catch(() => null),
-          getTrendStats(30).catch(() => ({ trend: [] as any[] })),
-        ])
-        if (cancelled) return
-        setQuote((q as any)?.quote || '')
-        if (stats) {
-          setTodayMin(Math.round(stats.total_duration_min || 0))
-          setCaptureCount(stats.total_activities || 0)
-        }
-        // 计算连续打卡天数（最近 30 天内末端连续有数据的长度）
-        const trendArr = (trend as any)?.trend || []
-        let streak = 0
-        for (let i = trendArr.length - 1; i >= 0; i--) {
-          if ((trendArr[i]?.duration_min || 0) > 0) streak++
-          else break
-        }
-        setStreakDays(streak)
-        const activeDays = trendArr.filter((d: any) => (d?.duration_min || 0) > 0).length
-        setTotalActiveDays(activeDays)
-      } catch {}
-    }
-    fetchAll()
-    // 每 5 分钟刷新一次
-    const id = window.setInterval(fetchAll, 300000)
-    return () => { cancelled = true; window.clearInterval(id) }
+  const aliveRef = useRef(true)
+  const fetchAll = useCallback(async () => {
+    try {
+      const [q, stats, trend] = await Promise.all([
+        getQuote().catch(() => ({ quote: '' })),
+        getTodayStats().catch(() => null),
+        getTrendStats(30).catch(() => ({ trend: [] as any[] })),
+      ])
+      if (!aliveRef.current) return
+      setQuote((q as any)?.quote || '')
+      if (stats) {
+        setTodayMin(Math.round(stats.total_duration_min || 0))
+        setCaptureCount(stats.total_activities || 0)
+      }
+      // 计算连续打卡天数（最近 30 天内末端连续有数据的长度）
+      const trendArr = (trend as any)?.trend || []
+      let streak = 0
+      for (let i = trendArr.length - 1; i >= 0; i--) {
+        if ((trendArr[i]?.duration_min || 0) > 0) streak++
+        else break
+      }
+      setStreakDays(streak)
+      const activeDays = trendArr.filter((d: any) => (d?.duration_min || 0) > 0).length
+      setTotalActiveDays(activeDays)
+    } catch {}
   }, [])
+
+  useEffect(() => {
+    aliveRef.current = true
+    fetchAll()
+    return () => { aliveRef.current = false }
+  }, [fetchAll])
+
+  // 每 5 分钟刷新一次；仅页面可见时运行，隐藏时定时器真正停止
+  useVisibleInterval(fetchAll, AI_REFRESH_MS)
 
   const milestone = useMemo(
     () => pickMilestone({ todayMin, streakDays, totalActiveDays, captureCount }),

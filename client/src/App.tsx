@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, lazy, Suspense, type ReactNode } from 'react'
+import { useState, useEffect, useRef, useCallback, lazy, Suspense, startTransition, type ReactNode } from 'react'
 import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import Sidebar from './components/Sidebar'
 import TitleBar from './components/TitleBar'
@@ -6,11 +6,16 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { ToastProvider } from './components/Toast'
 import { ThemeProvider } from './components/ThemeContext'
 import { BackendStatusBar } from './components/shared'
-import { getNotifications, startupHealthCheck } from './api/client'
+import { getNotifications, markNotificationsRead, startupHealthCheck, getTenantInfo, isTenantLoginRequired } from './api/client'
+import TenantLogin from './components/TenantLogin'
+import { loadTenantSession } from './api/tenantSession'
 import { serverStorage, loadServerState, isServerStorageLoaded, initServerStorageLifecycle } from './api/clientState'
 import { useAppLock, LockScreen } from './components/AppLock'
 import { CommandPalette, useCommandPaletteShortcut } from './components/CommandPalette'
 import { ShortcutHelp, useShortcutHelpShortcut } from './components/ShortcutHelp'
+import TodoDock from './components/TodoDock'
+import { DATA_REFRESH_MS } from './config/refresh'
+import { useVisibleInterval } from './hooks/useVisibleInterval'
 
 // 懒加载页面组件 — 减少首屏加载体积
 // 精简后只保留 4 个一级入口 + 设置里的两个分析页
@@ -38,6 +43,8 @@ export default function App() {
   // 避免同步读取拿到空值导致主题/首启/应用锁状态错乱。
   const [stateLoaded, setStateLoaded] = useState(() => isServerStorageLoaded())
   const [firstLaunchPhase, setFirstLaunchPhase] = useState<FirstLaunchPhase>('done')
+  // 租户登录：checking=探测中 / need-login=需登录 / ok=已登录或非多租户
+  const [tenantAuth, setTenantAuth] = useState<'checking' | 'need-login' | 'ok'>('checking')
   const { locked, unlock } = useAppLock()
   const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false)
   useCommandPaletteShortcut(() => setCmdPaletteOpen(true))
@@ -64,8 +71,10 @@ export default function App() {
           const ok = await startupHealthCheck()
           if (isCancelled) return
           if (ok) {
-            setBackendReady(true)
-            setChecking(false)
+            startTransition(() => {
+              setBackendReady(true)
+              setChecking(false)
+            })
             return
           }
         } catch {
@@ -96,15 +105,28 @@ export default function App() {
     }
   }, [])
 
-  // 后端就绪后，把服务器上的客户端状态一次性拉到内存缓存（含旧 localStorage 迁移）
+  // 后端就绪后探测是否需要租户登录（必须在 loadServerState 之前，
+  // 因为读取 client-state 本身需要 token）
   useEffect(() => {
-    if (!backendReady || stateLoaded) return
+    if (!backendReady || tenantAuth !== 'checking') return
+    let cancelled = false
+    isTenantLoginRequired().then(required => {
+      if (!cancelled) setTenantAuth(required ? 'need-login' : 'ok')
+    })
+    return () => { cancelled = true }
+  }, [backendReady, tenantAuth])
+
+  // 后端就绪 + 租户已认证后，把服务器上的客户端状态一次性拉到内存缓存
+  useEffect(() => {
+    if (!backendReady || tenantAuth !== 'ok' || stateLoaded) return
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | null = null
     const attempt = async () => {
       try {
         await loadServerState()
-        if (!cancelled) setStateLoaded(true)
+        // 用 transition 标记：这次更新会挂载大量 lazy() 页面，若作为同步
+        // 紧急更新处理，React 18 会抛 error #426 并把整个 UI 换成错误态。
+        if (!cancelled) startTransition(() => setStateLoaded(true))
       } catch {
         // 加载失败（如 token 尚未就绪）：1 秒后重试，最多约 30 秒
         if (!cancelled) timer = setTimeout(attempt, 1000)
@@ -113,84 +135,97 @@ export default function App() {
     initServerStorageLifecycle()
     void attempt()
     return () => { cancelled = true; if (timer) clearTimeout(timer) }
-  }, [backendReady, stateLoaded])
+  }, [backendReady, tenantAuth, stateLoaded])
 
   // 状态加载完成后再判定首启流程（全部读服务器缓存，同步）
   useEffect(() => {
-    if (backendReady && stateLoaded) {
+    if (backendReady && tenantAuth === 'ok' && stateLoaded) {
       const legalDone = serverStorage.getItem('cd_legal_accepted')
       const onboardingDone = serverStorage.getItem('cd_onboarding_done')
-      if (!legalDone) {
-        setFirstLaunchPhase('legal')
-      } else if (!onboardingDone) {
-        setFirstLaunchPhase('onboarding')
-      } else {
-        setFirstLaunchPhase('done')
-      }
+      // 同样用 transition：从 LoadingScreen 切到 HashRouter + lazy 页面时，
+      // 避免同步更新期间挂起触发 React #426。
+      startTransition(() => {
+        if (!legalDone) {
+          setFirstLaunchPhase('legal')
+        } else if (!onboardingDone) {
+          setFirstLaunchPhase('onboarding')
+        } else {
+          setFirstLaunchPhase('done')
+        }
+      })
     }
-  }, [backendReady, stateLoaded])
+  }, [backendReady, tenantAuth, stateLoaded])
 
   const handleLegalAccepted = () => {
     serverStorage.setItem('cd_legal_accepted', '1')
     const onboardingDone = serverStorage.getItem('cd_onboarding_done')
-    if (!onboardingDone) {
-      setFirstLaunchPhase('onboarding')
-    } else {
-      setFirstLaunchPhase('done')
-    }
+    // 点击是同步输入，切到 lazy 页面必须走 transition，否则 React #426
+    startTransition(() => {
+      if (!onboardingDone) {
+        setFirstLaunchPhase('onboarding')
+      } else {
+        setFirstLaunchPhase('done')
+      }
+    })
   }
 
   const handleOnboardingComplete = () => {
     serverStorage.setItem('cd_onboarding_done', '1')
-    setFirstLaunchPhase('done')
+    startTransition(() => setFirstLaunchPhase('done'))
   }
 
-  // ── 桌面通知轮询 ──
-  const notifiedIds = useRef(new Set<number>())
+  // ── 桌面通知轮询（仅页面可见时运行；隐藏时真正停止定时器）──
+  // 改为增量拉取：只弹 sinceId 之后的新通知，不再依赖"一读即已读"的旧语义。
+  const lastNotifIdRef = useRef(0)
+  const pollNotifications = useCallback(async () => {
+    if (!backendReady) return
+    try {
+      const { notifications } = await getNotifications({ sinceId: lastNotifIdRef.current, unreadOnly: true })
+      for (const n of notifications) {
+        lastNotifIdRef.current = Math.max(lastNotifIdRef.current, n.id)
+        // 通过 Electron / 浏览器 Notification 弹出系统通知
+        if (window.electronAPI?.showNotification) {
+          window.electronAPI.showNotification({ title: n.title, body: n.body })
+        }
+      }
+      // 弹过的标记已读；不影响其它客户端（它们各自按 sinceId 拉）
+      if (notifications.length) {
+        markNotificationsRead({ ids: notifications.map(n => n.id) }).catch(() => {})
+      }
+    } catch {
+      // 通知轮询失败不影响主流程
+    }
+  }, [backendReady])
+  useVisibleInterval(pollNotifications, backendReady ? DATA_REFRESH_MS : undefined)
+
+  // 首次进入时请求系统通知权限（浏览器模式必需，Electron 模式忽略）
   useEffect(() => {
     if (!backendReady) return
-    const poll = async () => {
-      try {
-        const { notifications } = await getNotifications()
-        for (const n of notifications) {
-          if (!notifiedIds.current.has(n.id)) {
-            notifiedIds.current.add(n.id)
-            // 通过 Electron 弹出系统通知
-            if (window.electronAPI?.showNotification) {
-              window.electronAPI.showNotification({ title: n.title, body: n.body })
-            }
-          }
-        }
-      } catch {
-        // 通知轮询失败不影响主流程
+    try {
+      if (typeof Notification !== 'undefined' && Notification.permission === 'default' && !window.electronAPI) {
+        Notification.requestPermission().catch(() => {})
       }
-    }
-    // 优化：从 30 秒调整为 60 秒，窗口隐藏时暂停轮询
-    poll()
-    const interval = setInterval(() => {
-      if (!document.hidden) poll()
-    }, 60000)
-    // 窗口恢复可见时立即检查一次
-    const onVisible = () => { if (!document.hidden) poll() }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => {
-      clearInterval(interval)
-      document.removeEventListener('visibilitychange', onVisible)
-    }
+    } catch { /* 不支持则忽略 */ }
   }, [backendReady])
 
   return (
     <ThemeProvider>
       <ToastProvider>
         <ErrorBoundary>
+          {/* 租户登录：启动最前面，未登录不可用（优先于应用锁） */}
+          {tenantAuth === 'need-login' && (
+            <TenantLogin onLogin={() => setTenantAuth('ok')} />
+          )}
           {/* 应用级隐私锁：启动锁 + 闲置锁 */}
-          {locked && <LockScreen onUnlock={unlock} />}
+          {locked && tenantAuth === 'ok' && <LockScreen onUnlock={unlock} />}
           <div className="flex flex-col h-screen bg-cd-bg">
             <TitleBar />
           <BackendStatusBar />
           <div className="flex flex-1 overflow-hidden">
-            {checking || (backendReady && !stateLoaded) ? (
+            {checking || (backendReady && tenantAuth === 'checking') || (backendReady && tenantAuth === 'ok' && !stateLoaded) ? (
               <LoadingScreen />
+            ) : tenantAuth === 'need-login' ? (
+              null
             ) : !backendReady ? (
               <ErrorScreen />
             ) : firstLaunchPhase === 'legal' ? (
@@ -236,6 +271,7 @@ export default function App() {
                     </Suspense>
                   </RouteErrorBoundary>
                 </main>
+                <TodoDock />
               </HashRouter>
             )}
           </div>

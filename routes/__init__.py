@@ -24,11 +24,12 @@ from routes.data_import import bp as data_import_bp
 from routes.imports import bp as imports_bp
 from routes.preferences import bp as preferences_bp
 from routes.audit import bp as audit_bp
-from routes.calendar_routes import bp as calendar_bp
 from routes.git_routes import bp as git_integration_bp
 from routes.platform_routes import bp as platform_bp
 from routes.scheduler import bp as scheduler_bp
 from routes.client_state import bp as client_state_bp
+from routes.bridge import bp as bridge_bp
+from routes.experience import logger_bp as experience_bp
 
 ALL_BLUEPRINTS = [
     health_bp,
@@ -57,9 +58,10 @@ ALL_BLUEPRINTS = [
     imports_bp,
     preferences_bp,
     audit_bp,
-    calendar_bp,
     git_integration_bp,
     platform_bp,
     scheduler_bp,
     client_state_bp,
+    bridge_bp,
+    experience_bp,
 ]

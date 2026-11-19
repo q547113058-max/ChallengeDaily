@@ -94,7 +94,7 @@ def trigger_auto_report():
         add_notification(
             "日报推送完成",
             f"日报已生成并推送至 {pushed} 个 Webhook",
-            "success",
+            "success", category="report", dedup_key="auto_report_done",
         )
         return jsonify({"status": "ok", "report_generated": True, "webhooks_pushed": pushed})
     except Exception as e:
@@ -152,9 +152,18 @@ def check_auto_report():
         add_notification(
             "日报已自动生成",
             f"今日日报已自动生成完成，已推送至 {pushed} 个 Webhook",
-            "success",
+            "success", category="report", dedup_key="auto_report_done",
         )
         return {"generated": True, "pushed": pushed}
     except Exception as e:
         logger.error(f"自动日报生成失败: {e}")
+        # 原先失败是静默的，用户完全不知道日报没生成
+        try:
+            add_notification(
+                "自动日报失败",
+                f"今日日报生成失败：{str(e)[:120]}",
+                "error", category="report", dedup_key="auto_report_failed",
+            )
+        except Exception:
+            pass
         return None

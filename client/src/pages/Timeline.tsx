@@ -7,6 +7,7 @@ import ActivityCreateModal from '../components/ActivityCreateModal'
 import ActivityEditModal from '../components/ActivityEditModal'
 import { Search, Pencil, X, Plus, Trash2, Loader2, CalendarDays, List } from 'lucide-react'
 import dayjs from 'dayjs'
+import { DATA_REFRESH_MS } from '../config/refresh'
 
 // 日历视图并入时间线，作为一个显示模式而不是独立页面
 const CalendarView = lazy(() => import('./CalendarView'))
@@ -34,7 +35,7 @@ export default function Timeline() {
   const { data: activitiesData, loading, error, refresh: refreshList, refreshing } = useAsyncData(
     () => getActivities(selectedDate),
     [selectedDate],
-    60000, // T6: 从 30s 调整为 60s，配合 SSE 事件驱动增量更新
+    DATA_REFRESH_MS, // 统一刷新节奏；另有 SSE 事件驱动增量更新
   )
   const activities = activitiesData?.activities ?? []
   const newIds = useNewIds(activities, (a) => a.id)

@@ -1,5 +1,6 @@
 import { Component, type ReactNode, type ErrorInfo } from 'react'
 import { AlertTriangle, RotateCcw } from 'lucide-react'
+import { logError } from '../api/logger'
 
 interface Props {
   children: ReactNode
@@ -23,6 +24,8 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('[ErrorBoundary]', error, info.componentStack)
+    logError('ErrorBoundary', error?.message || String(error),
+             [error?.stack, info?.componentStack].filter(Boolean).join('\n\n--- component stack ---\n'))
   }
 
   componentDidUpdate(prevProps: Props) {

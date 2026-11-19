@@ -191,3 +191,32 @@ export async function triggerProfileAnalysis(types?: string[]): Promise<TriggerA
     body: JSON.stringify({ types: types || ['mbti_inference', 'jungian_functions', 'big_five', 'cognitive_style'] }),
   }, 30000) as TriggerAnalysisResponse
 }
+
+// ─── 任务经历档案 ──────────────────────────────────
+
+export interface ExpProject { name: string; total_min: number; status: string; confidence: number; last_seen: string }
+export interface ExpEpisode { id: number; title: string; summary: string; status: string; category: string; total_min: number; sessions: number; end_ts: string; project: string | null; evidence: string[]; skills: string[]; source: string }
+export interface ExpSkill { name: string; category: string; level: string; total_min: number; episode_cnt: number }
+export interface ExpCollaborator { name: string; kind: string; interact_cnt: number; total_min: number }
+export interface ExpHabit { habit_key: string; habit_type: string; value_json: Record<string, unknown>; confidence: number }
+export interface ExperienceProfile {
+  projects: ExpProject[]
+  episodes: ExpEpisode[]
+  skills: ExpSkill[]
+  collaborators: ExpCollaborator[]
+  habits: ExpHabit[]
+  generated_at: string
+}
+
+/** 获取任务经历档案（项目/任务/技能/协作/习惯） */
+export async function getExperienceProfile(days = 90): Promise<ExperienceProfile> {
+  const r = await request(`/api/experience/profile?days=${days}`) as { ok: boolean; profile: ExperienceProfile }
+  return r.profile
+}
+
+/** 手动触发经历档案增量提炼；full=true 全量回扫 */
+export async function rebuildExperience(full = false): Promise<{ ok: boolean; stats: Record<string, number> }> {
+  return await request(`/api/experience/rebuild${full ? '?full=1' : ''}`, {
+    method: 'POST',
+  }, 120000) as { ok: boolean; stats: Record<string, number> }
+}

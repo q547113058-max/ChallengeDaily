@@ -1,0 +1,13 @@
+{
+  "_comment": "自动待办的「项目主体」配置。生产者不再靠模型猜测项目名（屏幕里没有结构化项目字段，猜必飘）。改这里即可切换当前主项目。",
+  "active_project": "ChallengeDaily",
+  "focus": "自动待办审批弹窗 / 桥接代理",
+  "features": [
+    "自动待办审批弹窗",
+    "bridge-proxy 桥接代理 58889",
+    "auto_todo_producer 候选归纳",
+    "app.asar 重打包与版本锁定",
+    "TodoDock 待办看板"
+  ],
+  "_note": "active_project 是固定的项目主体，不随窗口标题变化（实测让程序猜项目会在 DeepSeek/dsh-enhance 之间乱跳）。切换项目直接改这里的 active_project 和 features，改完下一条候选生效。"
+}

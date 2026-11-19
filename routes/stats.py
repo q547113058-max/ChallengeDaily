@@ -43,26 +43,7 @@ def _build_stats(target_date: str):
         categories[cat] = dur_min
         total_duration_min += dur_min
 
-    focus_sessions = 0
-    longest_focus_min = 0
     act_rows = get_activities(target_date, target_date)
-    if act_rows:
-        current_cat = None
-        current_count = 0
-        max_count = 0
-        for act in act_rows:
-            if act["category"] == current_cat:
-                current_count += 1
-            else:
-                if current_count * config.SCREENSHOT_INTERVAL_SEC >= 900:
-                    focus_sessions += 1
-                current_cat = act["category"]
-                current_count = 1
-            max_count = max(max_count, current_count)
-        if current_count * config.SCREENSHOT_INTERVAL_SEC >= 900:
-            focus_sessions += 1
-        longest_focus_min = round(max_count * config.SCREENSHOT_INTERVAL_SEC / 60, 1)
-
     from app_tracker import get_display_name as _gdn2
     top_apps = [
         {"app_name": _gdn2(a["app_name"]), "app_name_raw": a["app_name"], "duration_min": a["duration_min"]}
@@ -99,8 +80,6 @@ def _build_stats(target_date: str):
         "total_duration_min": round(total_duration_min, 1),
         "categories": categories,
         "top_apps": top_apps,
-        "focus_sessions": focus_sessions,
-        "longest_focus_min": longest_focus_min,
         "total_activities": len(act_rows) if act_rows else 0,
         "current_activity": current_activity,
     })
@@ -414,32 +393,11 @@ def heatmap_by_range():
 
 
 @bp.route('/api/stats/distraction-heatmap')
-def distraction_heatmap():
-    """分心热点图：24小时分心次数分布
-
-    基于 activities 快照表（timestamp 列），统计 category='生活' 的记录按小时聚合。
-    duration_min 由 count * SCREENSHOT_INTERVAL_SEC 估算（activities 无 end_time）。
-    """
-    days = request.args.get('days', 7, type=int)
-    try:
-        with get_conn() as conn:
-            rows = conn.execute(
-                "SELECT CAST(strftime('%H', timestamp) AS INTEGER) AS hour, "
-                "       COUNT(*) AS count "
-                "FROM activities "
-                "WHERE category = '生活' AND date(timestamp) >= date('now', ?) "
-                "GROUP BY hour ORDER BY hour",
-                (f'-{days} days',),
-            ).fetchall()
-            result = [{
-                "hour": r["hour"],
-                "count": r["count"],
-                "duration_min": int(round(r["count"] * config.SCREENSHOT_INTERVAL_SEC / 60)),
-            } for r in rows]
-            return jsonify({"heatmap": result, "days": days})
-    except Exception as e:
-        logger.error(f"分心热点图查询失败: {e}", exc_info=True)
-        return jsonify({"error": "查询失败"}), 500
+def distraction_heatmap_gone():
+    """分心热点图已下线（2026-11-12）：分类定义失真、度量不可比、无行动闭环。
+    保留 410 响应，避免旧前端调用时得到含义不明的 404。"""
+    return jsonify({"error": "gone",
+                    "detail": "分心热点图已下线，请使用「个人节奏」或「3天热力图」"}), 410
 
 
 @bp.route('/api/stats/sankey')

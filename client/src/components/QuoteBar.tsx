@@ -1,21 +1,27 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Quote } from 'lucide-react'
 import { getQuote } from '../api/client'
+import { DATA_REFRESH_MS } from '../config/refresh'
+import { useVisibleInterval } from '../hooks/useVisibleInterval'
 
 export default function QuoteBar() {
   const [quote, setQuote] = useState('')
+  const aliveRef = useRef(true)
 
   useEffect(() => {
-    let cancelled = false
-    const fetchQuote = () => {
-      getQuote()
-        .then(data => { if (!cancelled) setQuote(data.quote) })
-        .catch(() => {})
-    }
-    fetchQuote()
-    const interval = setInterval(fetchQuote, 60000)
-    return () => { cancelled = true; clearInterval(interval) }
+    aliveRef.current = true
+    getQuote()
+      .then(data => { if (aliveRef.current) setQuote(data.quote) })
+      .catch(() => {})
+    return () => { aliveRef.current = false }
   }, [])
+
+  // 仅页面可见时刷新语录（隐藏时定时器真正停止）
+  useVisibleInterval(() => {
+    getQuote()
+      .then(data => { if (aliveRef.current) setQuote(data.quote) })
+      .catch(() => {})
+  }, DATA_REFRESH_MS)
 
   if (!quote) return null
 

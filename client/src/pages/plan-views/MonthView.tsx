@@ -153,7 +153,6 @@ export default function MonthView({
           <div className="flex flex-col gap-1.5 text-xs">
             <div className="flex justify-between"><span className="text-cd-text-tertiary">任务总数</span><span className="tabular-nums text-cd-text">{monthStats.total_tasks}</span></div>
             <div className="flex justify-between"><span className="text-cd-text-tertiary">已完成</span><span className="tabular-nums text-green-400">{monthStats.completed_tasks}</span></div>
-            <div className="flex justify-between"><span className="text-cd-text-tertiary">深度专注</span><span className="tabular-nums text-cd-accent">{Math.round(monthStats.deep_focus_min)}m</span></div>
             <div className="flex justify-between"><span className="text-cd-text-tertiary">中断次数</span><span className="tabular-nums text-red-400">{monthStats.interrupt_count}</span></div>
             <div className="flex justify-between"><span className="text-cd-text-tertiary">总专注</span><span className="tabular-nums text-cd-text">{Math.round(monthStats.total_focus_min)}m</span></div>
           </div>

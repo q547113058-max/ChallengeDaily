@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 # 行业基准数据（程序员/知识工作者的平均水平）
 # 来源：综合 RescueTime、Toggl 公开统计与 WakaTime 数据
 INDUSTRY_BENCHMARKS = {
-    "deep_work_hours_per_day": 3.2,      # 日均深度工作时长
     "meeting_pct": 25,                    # 会议时间占比
     "communication_pct": 18,             # 沟通时间占比
     "focus_session_avg_min": 25,         # 平均专注时长
@@ -143,18 +142,6 @@ def _compare_with_benchmark(weekly_stats: list[dict], patterns: dict) -> list[di
         return comparisons
     latest = weekly_stats[-1]
     total_min = latest["total_min"]
-    # 日均深度工作时长（假设开发+文档+学习+设计算深度工作）
-    deep_cats = {"开发", "文档", "学习", "设计", "数据分析"}
-    deep_min = sum(v for k, v in latest["categories"].items() if k in deep_cats)
-    deep_hours_per_day = (deep_min / 7) / 60
-    comparisons.append({
-        "metric": "日均深度工作时长",
-        "user_value": round(deep_hours_per_day, 1),
-        "benchmark": INDUSTRY_BENCHMARKS["deep_work_hours_per_day"],
-        "unit": "小时",
-        "status": "above" if deep_hours_per_day > INDUSTRY_BENCHMARKS["deep_work_hours_per_day"] else "below",
-        "diff": round(deep_hours_per_day - INDUSTRY_BENCHMARKS["deep_work_hours_per_day"], 1),
-    })
     # 会议占比
     meeting_pct = latest["percentages"].get("会议", 0)
     comparisons.append({

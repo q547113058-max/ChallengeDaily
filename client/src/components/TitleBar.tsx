@@ -1,3 +1,5 @@
+import NotificationCenter from './NotificationCenter'
+
 export default function TitleBar() {
   return (
     <div className="titlebar h-9 flex items-center justify-between bg-cd-bg border-b border-cd-border px-4 shrink-0">
@@ -6,6 +8,7 @@ export default function TitleBar() {
         <span className="text-xs text-cd-text-tertiary">AI 智能工作日报助手</span>
       </div>
       <div className="flex items-center gap-0.5">
+        <NotificationCenter />
         <button
           onClick={() => window.electronAPI?.minimize()}
           className="w-8 h-6 flex items-center justify-center rounded hover:bg-cd-hover text-cd-text-tertiary transition-colors"

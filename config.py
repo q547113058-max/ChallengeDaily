@@ -45,16 +45,18 @@ for d in [DATA_DIR, SCREENSHOT_DIR, REPORT_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
 # ── 截图间隔（秒）──
-SCREENSHOT_INTERVAL_SEC = int(os.getenv("SCREENSHOT_INTERVAL_SEC", "60"))
+# 统一高频采集：与独立采集器 screen_activity_tracker.py 的 20s 对齐。
+# 依据压测：单张截图识别约 4.7s、账户免费模型并发上限约 4 路，20s 在安全区且不易漏短时窗口切换。
+# 画面重复时由 pHash 判重跳过 AI 调用（省 token），但仍写活动行以维持时间连续性。
+SCREENSHOT_INTERVAL_SEC = int(os.getenv("SCREENSHOT_INTERVAL_SEC", "20"))
 
 # ── P8-3：自适应采样 ──
-# 启用后采集器会根据近期分类变化频率动态调整下次采样间隔：
-#   - 分类频繁切换 → 缩短到下限（捕捉细节）
-#   - 分类长时间稳定 → 拉长到上限（节省资源）
-# 仅在工作时间生效，非工作时间仍维持 5 分钟一次
-ADAPTIVE_SAMPLING_ENABLED = os.getenv("ADAPTIVE_SAMPLING_ENABLED", "1") == "1"
-ADAPTIVE_SAMPLING_MIN_SEC = int(os.getenv("ADAPTIVE_SAMPLING_MIN_SEC", "30"))   # 下限
-ADAPTIVE_SAMPLING_MAX_SEC = int(os.getenv("ADAPTIVE_SAMPLING_MAX_SEC", "120"))  # 上限
+# 默认关闭：目标就是固定 20s 高频，自适应会把间隔拉到 30–120s，与高频意图冲突。
+# 如需省资源可手动开启（ADAPTIVE_SAMPLING_ENABLED=1），此时下限也降到 20s 对齐。
+# 仅在工作时间生效，非工作时间仍维持 5 分钟一次。
+ADAPTIVE_SAMPLING_ENABLED = os.getenv("ADAPTIVE_SAMPLING_ENABLED", "0") == "1"
+ADAPTIVE_SAMPLING_MIN_SEC = int(os.getenv("ADAPTIVE_SAMPLING_MIN_SEC", "20"))   # 下限（对齐高频）
+ADAPTIVE_SAMPLING_MAX_SEC = int(os.getenv("ADAPTIVE_SAMPLING_MAX_SEC", "60"))   # 上限（不再拉到120s）
 ADAPTIVE_SAMPLING_WINDOW = int(os.getenv("ADAPTIVE_SAMPLING_WINDOW", "6"))      # 观察窗口大小（最近N次采样）
 
 # ── 截图压缩质量（1-100）──
@@ -78,12 +80,12 @@ AI_BASE_URL = os.getenv("AI_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
 # 向后兼容：旧的 AI_MODEL 同时作为 vision/text 的兜底
 _legacy_model = os.getenv("AI_MODEL", "")
 AI_VISION_MODEL = os.getenv("AI_VISION_MODEL", _legacy_model or "glm-4.1v-thinking-flash")
-AI_TEXT_MODEL = os.getenv("AI_TEXT_MODEL", _legacy_model or "glm-4-flash")
+AI_TEXT_MODEL = os.getenv("AI_TEXT_MODEL", _legacy_model or "glm-4.7-flash")
 
-# 429 限流时的自动降级备用模型(环境变量可覆盖)。智谱新 flash 模型上线期负载大, 间歇性 429;
-# 旧版 glm-4v-flash / glm-4-flash 同账号可用且稳定, 作默认降级目标。
+# 429 限流时的自动降级备用模型(环境变量可覆盖)。glm-4.1v-thinking-flash 为免费备用视觉模型；
+# 注意旧版 glm-4v-flash 的 max_tokens 上限仅 1024，易截断 JSON，不再作为默认降级目标。
 AI_VISION_MODEL_FALLBACK = os.getenv("AI_VISION_MODEL_FALLBACK", "glm-4v-flash")
-AI_TEXT_MODEL_FALLBACK = os.getenv("AI_TEXT_MODEL_FALLBACK", "glm-4-flash")
+AI_TEXT_MODEL_FALLBACK = os.getenv("AI_TEXT_MODEL_FALLBACK", "glm-4-flash-250414")
 
 # API Key 优先级：环境变量（非空）> 加密 vault > 默认值
 _raw_api_key = os.getenv("AI_API_KEY", "").strip()
@@ -166,12 +168,10 @@ _DEFAULT_SETTINGS = {
     "ai_enabled": True,
     "ai_base_url": "https://open.bigmodel.cn/api/paas/v4",
     "ai_vision_model": "glm-4.1v-thinking-flash",
-    "ai_text_model": "glm-4-flash",
+    "ai_text_model": "glm-4.7-flash",
     "diary_auto_link_workdata": True,
     "white_noise_default": "none",
     "focus_blocking_mode": False,
-    "birthday": "",
-    "life_expectancy": 80,
     "auto_daily_report": False,
     "auto_daily_report_hour": 18,
     "auto_daily_report_template": "standard",

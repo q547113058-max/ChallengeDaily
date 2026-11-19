@@ -1,5 +1,6 @@
 // ── 活动采集、状态、设置、健康检查 ──
-import { request, getApiToken, resolveApiUrl, ensureBaseUrl, _triggerDownload } from './core'
+import { request, getApiToken, resolveApiUrl, ensureBaseUrl, _triggerDownload, setApiToken } from './core'
+import { saveTenantSession, clearTenantSession } from './tenantSession'
 import type { CollectorStatus, TodayStats, Activity, ActivityPage, ActivitiesResponse, AppUsage, AppCategoryRule, BackendSettings, DailyCredibility, ReportContent } from './types-activity'
 
 /** 获取采集器状态 */
@@ -25,6 +26,107 @@ export async function getSyncStatus(): Promise<{ last_push: string | null; last_
 /** 是否为「云端只读快照」模式（无本地采集器，不能开始/暂停记录） */
 export function isReadOnlySnapshot(status: CollectorStatus | null): boolean {
   return status?.mode === 'synced-snapshot' || status?.mode === 'server-only'
+}
+
+/** 当前租户信息（多租户云端；旧版服务端无此接口时返回 null） */
+export interface TenantInfo {
+  role: 'tenant' | 'admin' | string
+  tenant_id?: string
+  name?: string
+  enabled?: boolean
+  created_at?: string
+  token_hint?: string
+}
+export async function getTenantInfo(): Promise<TenantInfo | null> {
+  try {
+    const data = await request('/api/tenant/me', {}, 8000)
+    return data as TenantInfo
+  } catch {
+    return null
+  }
+}
+
+/** 租户登录结果 */
+export interface TenantLoginResult {
+  ok: boolean
+  error?: string
+  tenant_id?: string
+  name?: string
+}
+
+/**
+ * 租户登录：租户 ID + 密码。
+ * 登录接口本身不需要 token，用裸 fetch 避免触发后端连接状态机。
+ * 成功后把 token 注入请求层并持久化到本地会话。
+ */
+export async function tenantLogin(tenantId: string, password: string): Promise<TenantLoginResult> {
+  try {
+    await ensureBaseUrl()
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 10000)
+    let res: Response
+    try {
+      res = await fetch(resolveApiUrl('/api/auth/login'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenant_id: tenantId.trim(), password }),
+        signal: controller.signal,
+      })
+    } finally {
+      clearTimeout(timer)
+    }
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.token) {
+      return { ok: false, error: data.error || '登录失败，请检查租户 ID 与密码' }
+    }
+    // 注入 token + 持久化登录态
+    setApiToken(data.token)
+    saveTenantSession({ tenant_id: data.tenant_id, token: data.token, loginAt: new Date().toISOString() })
+    return { ok: true, tenant_id: data.tenant_id }
+  } catch (e: any) {
+    return { ok: false, error: e?.message || '无法连接服务器，请稍后重试' }
+  }
+}
+
+/** 退出租户登录 */
+export function tenantLogout(): void {
+  clearTenantSession()
+  setApiToken('')
+}
+
+/**
+ * 探测服务端是否要求租户登录。
+ * 用裸 fetch（带当前 session token，若有）：
+ *  - 服务端无 /api/tenant/me（旧版单租户）→ false
+ *  - 已登录（role=tenant/admin）→ false
+ *  - 未登录（401）→ true
+ */
+export async function isTenantLoginRequired(): Promise<boolean> {
+  try {
+    await ensureBaseUrl()
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 8000)
+    let res: Response
+    try {
+      const token = await getApiToken()
+      res = await fetch(resolveApiUrl('/api/tenant/me'), {
+        headers: token ? { 'X-API-Token': token } : {},
+        signal: controller.signal,
+      })
+    } finally {
+      clearTimeout(timer)
+    }
+    if (res.status === 404) return false   // 旧服务端无此接口
+    if (res.ok) {
+      const j = await res.json().catch(() => ({}))
+      // admin 或已登录租户都算通过
+      return !(j.role === 'tenant' || j.role === 'admin')
+    }
+    if (res.status === 401) return true     // 需要登录
+    return false
+  } catch {
+    return false   // 网络异常不拦截，交给健康检查处理
+  }
 }
 
 /** 获取今日统计 */
@@ -113,8 +215,6 @@ export async function getSettings(): Promise<BackendSettings> {
     ai_base_url: s.ai_base_url || 'https://open.bigmodel.cn/api/paas/v4',
     ai_vision_model: s.ai_vision_model || (s as any).ai_model || 'glm-4.1v-thinking-flash',
     ai_text_model: s.ai_text_model || (s as any).ai_model || 'glm-4-flash',
-    birthday: s.birthday || '',
-    life_expectancy: typeof s.life_expectancy === 'number' ? s.life_expectancy : 80,
     ...(s as any),  // 保留后端返回的其他字段（如 ai_api_key_set）
   } as BackendSettings
 }
@@ -288,9 +388,46 @@ export async function restoreBackup(file: File): Promise<{ status: string; resto
   return res.json()
 }
 
-/** 获取未读通知列表 */
-export async function getNotifications(): Promise<{ notifications: Array<{ id: number; title: string; body: string; type: string; timestamp: string }> }> {
-  return request('/api/notifications') as Promise<{ notifications: Array<{ id: number; title: string; body: string; type: string; timestamp: string }> }>
+/** 通知类型：info | success | warning | error */
+export type NotifyType = 'info' | 'success' | 'warning' | 'error'
+/** 通知分类：report | collector | ai | disk | sync | todo | system */
+export type NotifyCategory = 'report' | 'collector' | 'ai' | 'disk' | 'sync' | 'todo' | 'system'
+
+export interface AppNotification {
+  id: number
+  title: string
+  body: string
+  type: NotifyType
+  category: NotifyCategory
+  created_at: string
+  read_at: string | null
+}
+
+/**
+ * 获取通知列表（**不修改已读状态**）。
+ * @param opts.sinceId 只取 id 大于该值的（增量轮询）
+ * @param opts.unreadOnly 只要未读
+ */
+export async function getNotifications(opts: { sinceId?: number; unreadOnly?: boolean; limit?: number } = {}): Promise<{ notifications: AppNotification[]; count: number }> {
+  const p = new URLSearchParams()
+  if (opts.sinceId) p.set('since_id', String(opts.sinceId))
+  if (opts.unreadOnly) p.set('unread_only', '1')
+  if (opts.limit) p.set('limit', String(opts.limit))
+  const qs = p.toString()
+  return request(`/api/notifications${qs ? `?${qs}` : ''}`) as Promise<{ notifications: AppNotification[]; count: number }>
+}
+
+/** 标记已读：传 ids 或 all */
+export async function markNotificationsRead(opts: { ids?: number[]; all?: boolean }): Promise<{ status: string }> {
+  return request('/api/notifications/read', {
+    method: 'POST',
+    body: JSON.stringify(opts),
+  }) as Promise<{ status: string }>
+}
+
+/** 未读数量（侧边栏/悬浮球红点用） */
+export async function getUnreadNotificationCount(): Promise<{ count: number }> {
+  return request('/api/notifications/unread_count') as Promise<{ count: number }>
 }
 
 // ── 应用分类规则 ──

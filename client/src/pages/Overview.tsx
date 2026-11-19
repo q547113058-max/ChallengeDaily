@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ResponsiveContainer, Tooltip,
@@ -23,13 +23,13 @@ import {
   type RecentHeatmapDay,
 } from '../api/client'
 import {
-  Clock, Monitor, Zap, TrendingUp, Camera, CalendarDays,
+  TrendingUp, CalendarDays,
   Activity as ActivityIcon, Play, ArrowRight,
 } from 'lucide-react'
 import dayjs from 'dayjs'
-import { RefreshIndicator } from '../components/shared'
+import { DATA_REFRESH_MS } from '../config/refresh'
+import { useVisibleInterval } from '../hooks/useVisibleInterval'
 import HeroInfo from '../components/HeroInfo'
-import DistractionHeatmap from '../components/DistractionHeatmap'
 import EmotionalCare from '../components/EmotionalCare'
 import InfoTooltip, { METRIC_EXPLANATIONS } from '../components/InfoTooltip'
 
@@ -83,6 +83,8 @@ export default function Overview() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [iconUrls, setIconUrls] = useState<Record<string, string>>({})
+  // 供可见性轮询调用最新的 refresh（避免把大函数提出 effect）
+  const refreshRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     let isFirst = true
@@ -127,19 +129,10 @@ export default function Overview() {
       }
     }
     refresh()
-    // 优化：从 30 秒调整为 60 秒
-    // 配合 visibilitychange 事件，窗口隐藏时暂停轮询
-    const interval = setInterval(() => {
-      if (!document.hidden) refresh()
-    }, 60000)
-    // 窗口恢复可见时立即刷新
-    const onVisible = () => { if (!document.hidden) refresh() }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => {
-      clearInterval(interval)
-      document.removeEventListener('visibilitychange', onVisible)
-    }
+    refreshRef.current = refresh
   }, [])
+  // 统一刷新节奏；仅页面可见时轮询，隐藏时定时器真正停止
+  useVisibleInterval(() => refreshRef.current?.(), DATA_REFRESH_MS)
 
   const topAppsKey = useMemo(() => stats?.top_apps?.map((a) => a.app_name).join('|'), [stats?.top_apps])
 
@@ -174,8 +167,6 @@ export default function Overview() {
   const mins = Math.round(totalMin % 60)
   const timeStr = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`
   const captureCount = status?.total_captures || 0
-  const focusSessions = stats?.focus_sessions || 0
-  const longestFocus = stats?.longest_focus_min || 0
   const isRecording = status?.running && !status?.paused
   const isPaused = status !== null && !status.running
   // 云端只读快照：本机没有采集器，开始/暂停按钮无意义，改为展示同步状态
@@ -315,24 +306,17 @@ export default function Overview() {
           )}
         </div>
 
-        {/* 三个核心指标：大号衬线数字 */}
-        <div className="grid grid-cols-3 gap-6 mt-6">
+        {/* 两个核心指标：大号衬线数字 */}
+        <div className="grid grid-cols-2 gap-6 mt-6">
           <div>
             <p className="text-xs text-cd-text-tertiary uppercase tracking-widest mb-1 flex items-center gap-1">
-              专注时长 <InfoTooltip {...METRIC_EXPLANATIONS.focus_min} />
+              记录时长 <InfoTooltip {...METRIC_EXPLANATIONS.focus_min} />
             </p>
             <p className="text-3xl font-bold text-cd-text font-brand tracking-tight">{timeStr}</p>
             <p className="text-xs text-cd-text-tertiary mt-0.5"><span className="font-brand font-semibold">{captureCount}</span> 次活动捕捉</p>
           </div>
           <div>
-            <p className="text-xs text-cd-text-tertiary uppercase tracking-widest mb-1 flex items-center gap-1">
-              深度工作 <InfoTooltip {...METRIC_EXPLANATIONS.deep_work_hours} />
-            </p>
-            <p className="text-3xl font-bold text-cd-text font-brand tracking-tight">{focusSessions} <span className="text-lg font-normal text-cd-text-tertiary">次</span></p>
-            <p className="text-xs text-cd-text-tertiary mt-0.5">{longestFocus > 0 ? `最长 ${formatDur(longestFocus)}` : '今日暂无'}</p>
-          </div>
-          <div>
-            <p className="text-xs text-cd-text-tertiary uppercase tracking-widest mb-1">高效时段</p>
+            <p className="text-xs text-cd-text-tertiary uppercase tracking-widest mb-1">最活跃时段</p>
             <p className="text-3xl font-bold text-cd-text font-display tracking-tight">{peakPeriod ? rhythmShort[peakPeriod] || peakPeriod.split(' ')[0] : '-'}</p>
             <p className="text-xs text-cd-text-tertiary mt-0.5">主要分类 · {topCategory}</p>
           </div>
@@ -453,7 +437,7 @@ export default function Overview() {
         </div>
       </div>
 
-      {/* ─── 下方区域：应用 Top 5 + 效率趋势 + 个人节奏 ──── */}
+      {/* ─── 下方区域：应用 Top 5 + 时长趋势 + 个人节奏 ──── */}
       <div className="grid grid-cols-3 gap-6">
         {/* 左：应用使用 */}
         <div className="col-span-1 flex flex-col">
@@ -490,9 +474,9 @@ export default function Overview() {
           </div>
         </div>
 
-        {/* 中：效率趋势 */}
+        {/* 中：时长趋势 */}
         <div className="col-span-1 flex flex-col">
-          <CardHeader title="效率趋势" subtitle="7d" linkTo="/timeline" onNavigate={navigate} />
+          <CardHeader title="时长趋势" subtitle="7d" linkTo="/timeline" onNavigate={navigate} />
           <div className="flex-1 bg-cd-card border border-cd-border rounded-xl p-5 min-h-[220px]">
             {validTrend.length > 0 ? (
               <div className="h-full min-h-[180px]">
@@ -561,11 +545,6 @@ export default function Overview() {
             )}
           </div>
         </div>
-      </div>
-
-      {/* ─── 分心热点图（AI 视觉专注教练） ──── */}
-      <div className="mt-6">
-        <DistractionHeatmap />
       </div>
 
       {/* ─── 最近活动（底部，更轻量的展示） ──── */}

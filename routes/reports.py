@@ -20,6 +20,17 @@ logger = logging.getLogger(__name__)
 _VALID_TEMPLATES = ('standard', 'simple', 'technical', 'okr', 'ai', 'deep')
 
 
+def _persist_period_report(kind: str, key: str, content: str):
+    """把周报/月报落库到 reports 表（同步器会推送到云端只读节点）。
+    key: WEEK:<周一> / MONTH:<YYYY-MM>；失败不影响请求返回。
+    """
+    try:
+        db.save_report(key, content)
+        logger.info(f"{kind}报告已落库: {key} ({len(content)} 字符)")
+    except Exception as se:
+        logger.warning(f"{kind}报告落库失败(非致命): {se}")
+
+
 def _validate_template(template: str) -> str:
     """校验模板参数，非法值回退 standard"""
     return template if template in _VALID_TEMPLATES else 'standard'
@@ -33,6 +44,12 @@ def report_daily():
         return jsonify({"error": f"Invalid date format: {target_date}"}), 400
     try:
         content = generate_daily_report(target_date, template=template)
+        # 反证闭环：日报里明确写「已完成 XX」的经历 → 标记档案中对应经历为 done
+        try:
+            from experience_pipeline import mark_episodes_done_from_text
+            mark_episodes_done_from_text(content)
+        except Exception:
+            pass
         return jsonify({"date": target_date, "content": content, "template": template})
     except Exception as e:
         return jsonify({"error": safe_error(e, "日报生成失败")}), 500
@@ -179,6 +196,9 @@ def report_weekly():
                 content += milestone
         except Exception as ee:
             logger.warning(f"情感化文案生成失败(非致命): {ee}")
+        # 落库到 reports 表：同步器会把该表推到云端只读节点，
+        # 云端 /api/report/weekly 优先读此处生成的完整 AI 周报（键 WEEK:<周一>）。
+        _persist_period_report("周", f"WEEK:{monday.isoformat()}", content)
         return jsonify({"date": start_date, "content": content, "type": "weekly"})
     except Exception as e:
         return jsonify({"error": safe_error(e, "周报生成失败")}), 500
@@ -220,6 +240,8 @@ def report_monthly():
                 content += milestone
         except Exception as ee:
             logger.warning(f"情感化文案生成失败(非致命): {ee}")
+        # 落库到 reports 表，供同步器推送到云端（键 MONTH:<YYYY-MM>）。
+        _persist_period_report("月", f"MONTH:{year_month}", content)
         return jsonify({"month": year_month, "content": content, "type": "monthly"})
     except Exception as e:
         return jsonify({"error": safe_error(e, "月报生成失败")}), 500

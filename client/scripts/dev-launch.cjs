@@ -20,7 +20,19 @@ const path = require('path')
 const CLIENT = path.join(__dirname, '..')
 const TOKEN_FILE = path.join(__dirname, '..', '..', '..', 'deploy', 'sync_agent.json')
 const DIST_INDEX = path.join(CLIENT, 'dist', 'index.html')
-const ELECTRON = path.join(CLIENT, 'node_modules', 'electron', 'dist', 'electron.exe')
+// Windows 11 的任务栏通知区域按 exe 路径识别托盘图标。
+// 实测只有 D:\Program Files\ChallengeDaily\ChallengeDaily.exe 在该系统上
+// 有通知区记录（IsPromoted=1），node_modules / runtime 路径均不会被系统接纳。
+// 因此优先使用 Program Files 下的 exe（内容是 electron 运行时，加载源码 app 目录）。
+const ELECTRON_PF = 'D:\\Program Files\\ChallengeDaily\\ChallengeDaily.exe'
+const ELECTRON_RUNTIME = path.join(CLIENT, '..', 'runtime', 'ChallengeDaily.exe')
+const ELECTRON_NAMED = path.join(CLIENT, 'node_modules', 'electron', 'dist', 'ChallengeDaily.exe')
+const ELECTRON_DEFAULT = path.join(CLIENT, 'node_modules', 'electron', 'dist', 'electron.exe')
+const ELECTRON = fs.existsSync(ELECTRON_PF)
+  ? ELECTRON_PF
+  : (fs.existsSync(ELECTRON_RUNTIME)
+    ? ELECTRON_RUNTIME
+    : (fs.existsSync(ELECTRON_NAMED) ? ELECTRON_NAMED : ELECTRON_DEFAULT))
 
 const args = process.argv.slice(2)
 const dryRun = args.includes('--dry-run')
@@ -54,11 +66,22 @@ env.TMP = BUILD_TMP
 env.ESBUILD_BINARY_PATH = path.join(CLIENT, 'node_modules', '@esbuild', 'win32-x64', 'esbuild.exe')
 
 env.ELECTRON_IS_DEV = '0'                // 加载 dist/index.html（非 dev server）
+// 用改名的 ChallengeDaily.exe 后 electron 可能误判 isPackaged，禁用更新检查
+env.CD_SOURCE_MODE = '1'
 // 源码调试用独立 userData，避免与已安装的打包版争抢单实例锁
 // （否则会报 "Lock file can not be created! Error code: 5" 并立即退出）
-const DEV_USER_DATA = path.join(CLIENT, '.temp', 'dev-userdata')
+// Business state dir (app.setPath) + separate native --user-data-dir for
+// Chromium's cache/Network. The native switch is applied earliest so Chromium
+// creates those subdirs itself (avoids cache/Network creation FATAL).
+const DEV_USER_DATA = path.join(CLIENT, '..', 'data', 'electron-profile')
+const CHROME_USER_DATA = path.join(CLIENT, '..', 'data', 'chrome-profile')
 try { fs.mkdirSync(DEV_USER_DATA, { recursive: true }) } catch (_) {}
+try { fs.mkdirSync(CHROME_USER_DATA, { recursive: true }) } catch (_) {}
 env.CHALLENGE_DAILY_USER_DATA_DIR = DEV_USER_DATA
+env.CD_CHROME_USER_DATA = CHROME_USER_DATA
+// Chromium singleton lock creation fails on this machine even with no
+// electron process; main.cjs skips requestSingleInstanceLock when set.
+env.CD_NO_SINGLETON = '1'
 env.CHALLENGE_DAILY_BACKEND_MODE = 'direct'
 env.CHALLENGE_DAILY_BACKEND_URL = 'http://193.112.246.85'
 env.CHALLENGE_DAILY_BACKEND_TOKEN = readToken()
@@ -108,11 +131,13 @@ if (!fs.existsSync(DIST_INDEX)) {
 }
 
 // 2) 启动源码 Electron
-// --no-sandbox：本机 Chromium 沙箱初始化会触发 STATUS_BREAKPOINT(0x80000003)，
-//   实测只有带该开关才能启动（见 probe-electron 结果）。仅用于本地源码调试，
-//   打包版不受影响（安装版由 electron-builder 正常启动）。
+// --no-sandbox：本机 Chromium 沙箱初始化会触发 STATUS_BREAKPOINT。
+// --user-data-dir：显式指向干净目录，让 Chromium 自行创建 Cache/Network，
+//   避免缓存目录创建失败导致的断点崩溃。
+// 不用 --single-process：渲染进程独立，崩溃不会拖死整个应用（黑屏后自退）。
+// 用 CLIENT 绝对路径作 app 参数，避免依赖 cwd 解析到项目根（无 package.json）。
 console.log('[dev] 启动源码 Electron（direct 模式，不监听 58889）...')
-const child = spawn(ELECTRON, ['.', '--no-sandbox'], {
+const child = spawn(ELECTRON, [CLIENT, '--no-sandbox', '--disable-gpu', '--user-data-dir=' + CHROME_USER_DATA], {
   cwd: CLIENT, env, stdio: 'inherit', windowsHide: false,
 })
 child.on('exit', (code) => {

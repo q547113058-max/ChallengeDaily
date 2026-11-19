@@ -35,6 +35,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getApiToken: () => ipcRenderer.invoke('get-api-token'),
 
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  // 主进程日志尾部（供集中日志上传）
+  getRecentLogs: (maxLines) => ipcRenderer.invoke('get-recent-logs', maxLines),
   onBackendCrash: _makeManagedListener('backend-crash'),
 
   // 在线更新（electron-updater）：状态订阅 + 只读状态 + 触发操作

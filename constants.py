@@ -4,7 +4,6 @@
 """
 
 # ── 专注与效率阈值 ──
-DEEP_WORK_MIN_MINUTES = 25          # 深度工作最小分钟数
 FOCUS_SESSION_MIN_MINUTES = 15      # 专注会话最小分钟数
 FLOW_PROTECT_THRESHOLD_MIN = 25     # 心流保护阈值（分钟）
 SMART_BREAK_FLOW_MIN = 25           # 心流后建议休息阈值

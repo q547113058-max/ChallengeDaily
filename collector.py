@@ -26,7 +26,10 @@ logger = logging.getLogger(__name__)
 _FLUSH_APP_USAGE_SEC = 300  # 5分钟
 
 # 闲置检测：超过此时间无键盘/鼠标活动则暂停记录
-_IDLE_THRESHOLD_SEC = 180  # 3分钟无操作判定为闲置
+_IDLE_THRESHOLD_SEC = 180  # 3分钟无操作判定为闲置（跳过常规采集）
+# 连续空闲多少轮写一条「离开」记录：软空闲阈值 45s 起算，连续 3 轮（约 85s）写一条
+_IDLE_LEAVE_ROUNDS = 3
+_IDLE_SOFT_SEC = 45  # 键鼠超过此秒数视为「可能离开」，开始累计轮次
 
 # 图标提取线程限流：避免每分钟都启动新线程提取同一应用的图标
 _icon_extract_lock = threading.Lock()
@@ -209,6 +212,10 @@ class Collector:
         self._last_ai_summary = ""
         self._last_ai_category = ""
         self._AI_REANALYZE_INTERVAL_SEC = 180  # 3分钟
+        # 连续失败计数：达到阈值才发“采集器异常”通知，避免偶发失败刷屏
+        self._consecutive_failures = 0
+        self._FAILURE_ALERT_THRESHOLD = 5
+        self._disk_check_tick = 0
         # 近期活动上下文缓存：避免每次采集都查 DB
         self._recent_context_cache = None
         self._recent_context_cache_time = 0
@@ -216,9 +223,123 @@ class Collector:
         # 上一次非闲置采集的时间戳（字符串 "YYYY-MM-DD HH:MM:SS"），
         # 闲置时段 flush 时用它作为 end_time，避免把闲置时长算入应用使用时长
         self._last_active_time: str | None = None
+        # 空闲「离开」行：连续空闲达阈值写一条，恢复后重置（避免刷屏）
+        self._idle_rounds = 0
+        self._idle_written = False
+        self._idle_started: datetime | None = None
+        self._idle_first_reason = ""
+        # 跨设备同步：把结构化活动上传到 todo-sync(18766)，与独立采集器共用 client_id 命名空间外的独立 id
+        self._sync_client_id = ""
+        self._sync_host = ""
+        self._sync_enabled = False
         # P8-3：自适应采样 — 最近 N 次采集的分类记录，用于动态调整下次采样间隔
         self._recent_categories: list[str] = []
         self._adaptive_next_interval: int | None = None  # 缓存下次建议间隔（秒）
+
+    # ── 连续失败监控（用于"采集器异常"通知）──
+    def _note_failure(self, reason: str) -> None:
+        """记录一次采集失败；连续达到阈值时发通知（同类 10 分钟内去重）。"""
+        self._consecutive_failures += 1
+        if self._consecutive_failures >= self._FAILURE_ALERT_THRESHOLD:
+            try:
+                from routes.notifications import add_notification
+                add_notification(
+                    "采集异常",
+                    f"已连续 {self._consecutive_failures} 次采集失败，最近原因：{reason[:80]}",
+                    "error", category="collector", dedup_key="collector_failure",
+                )
+            except Exception as e:
+                logger.debug(f"发送采集异常通知失败: {e}")
+
+    def _note_success(self) -> None:
+        """采集成功：重置连续失败计数；若之前已告警，发一条恢复通知。"""
+        if self._consecutive_failures >= self._FAILURE_ALERT_THRESHOLD:
+            try:
+                from routes.notifications import add_notification
+                add_notification(
+                    "采集已恢复",
+                    f"采集恢复正常（此前连续失败 {self._consecutive_failures} 次）",
+                    "success", category="collector", dedup_key="collector_recovered",
+                )
+            except Exception as e:
+                logger.debug(f"发送采集恢复通知失败: {e}")
+        self._consecutive_failures = 0
+
+    def _upload_sync(self, rec: dict) -> None:
+        """把主应用的一条活动转换成 todo-sync 结构化格式并入队上传（失败不影响采集）。"""
+        if not self._sync_enabled:
+            return
+        try:
+            import activity_sync
+            # 主应用 category（12类）→ 时间线 activity 展示；直接透传即可，服务端按文本存
+            payload = {
+                "ts": rec.get("timestamp", ""),
+                "app": rec.get("app_name", ""),
+                "activity": rec.get("category", "其他") or "其他",
+                "task": (rec.get("summary") or "")[:120],
+                "project": rec.get("workspace") or "未知",
+                "evidence": (rec.get("ai_detail") or "")[:120],
+                "confidence": 0.9,
+                "idle": bool(rec.get("idle")),
+                "idle_reason": rec.get("idle_reason", ""),
+                "switched_to_others": False,
+            }
+            activity_sync.upload(payload)
+        except Exception as e:
+            logger.debug(f"跨设备活动上传入队失败（不影响采集）: {e}")
+
+    def _record_idle_episode(self, timestamp: str, idle_sec: float, reason: str) -> None:
+        """连续空闲达阈值时写一条「离开」活动行（本地+跨设备），一个空闲段只写一次。"""
+        if self._idle_written:
+            return
+        rec = {
+            "timestamp": timestamp,
+            "screenshot": "",
+            "app_name": "—",
+            "window_title": "",
+            "category": "离开",
+            "summary": f"空闲（{reason}）",
+            "source": "auto",
+            "interval_sec": config.SCREENSHOT_INTERVAL_SEC,
+            "ai_detail": f"键鼠空闲 {int(idle_sec)} 秒，判定离开（{reason}）",
+            "windows_json": "[]",
+            "workspace": "",
+            "idle": True,
+            "idle_reason": reason,
+        }
+        try:
+            insert_activity(
+                timestamp=rec["timestamp"], screenshot=rec["screenshot"],
+                app_name=rec["app_name"], window_title=rec["window_title"],
+                category=rec["category"], summary=rec["summary"],
+                interval_sec=rec["interval_sec"], ai_detail=rec["ai_detail"],
+                windows_json=rec["windows_json"], workspace=rec["workspace"],
+            )
+            self._upload_sync(rec)
+            logger.info(f"空闲 {int(idle_sec)}s（{reason}）→ 记录一条「离开」")
+        except Exception as e:
+            logger.debug(f"写「离开」记录失败: {e}")
+        self._idle_written = True
+
+    # ── 磁盘空间监控 ──
+    def _check_disk_space(self) -> None:
+        """剩余空间低于阈值时发通知（同类 10 分钟内去重，避免刷屏）。"""
+        try:
+            import shutil
+            from config import DATA_DIR
+            usage = shutil.disk_usage(str(DATA_DIR))
+            free_pct = (usage.free / usage.total) * 100
+            free_gb = usage.free / (1024 ** 3)
+            if free_pct < 10:
+                from routes.notifications import add_notification
+                add_notification(
+                    "磁盘空间不足",
+                    f"数据盘剩余 {free_gb:.1f} GB（{free_pct:.1f}%），低于 10% 阈值，"
+                    f"建议清理旧截图或调低保留天数",
+                    "warning", category="disk", dedup_key="disk_low",
+                )
+        except Exception as e:
+            logger.debug(f"磁盘空间检查失败: {e}")
 
     def _record_category_for_adaptive(self, category: str) -> None:
         """P8-3：记录本次采集分类到滑动窗口"""
@@ -301,18 +422,34 @@ class Collector:
         now = datetime.now()
         timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
 
-        # 0. 闲置检测 — 超过阈值则跳过本次采集
+        # 0. 闲置检测 — 软空闲累计轮次，连续 N 轮写一条「离开」；硬空闲跳过采集
         try:
             idle_sec = get_idle_seconds()
+        except Exception:
+            idle_sec = 0
+        if idle_sec >= _IDLE_SOFT_SEC:
+            # 进入/持续空闲
+            if self._idle_rounds == 0:
+                self._idle_started = now
+                self._idle_first_reason = "no_input"
+                self._idle_written = False
+            self._idle_rounds += 1
+            if self._idle_rounds >= _IDLE_LEAVE_ROUNDS:
+                self._record_idle_episode(
+                    timestamp, (now - self._idle_started).total_seconds() if self._idle_started else idle_sec,
+                    self._idle_first_reason or "no_input",
+                )
             if idle_sec >= _IDLE_THRESHOLD_SEC:
-                logger.debug(f"用户已闲置 {idle_sec}s，跳过本次采集")
-                # 闲置时 flush 的 end_time 应为上一次活动时间，而非当前时间，
+                # 长时间无操作：跳过常规采集；flush 的 end_time 用上一次活动时间，
                 # 避免把闲置时长算入应用使用时长
+                logger.debug(f"用户已闲置 {idle_sec}s，跳过本次采集")
                 self._flush_segment(self._last_active_time or timestamp)
                 return None
-        except Exception:
-            pass  # 闲置检测失败时不阻断采集
-
+        else:
+            # 有操作：重置空闲状态
+            self._idle_rounds = 0
+            self._idle_written = False
+            self._idle_started = None
         # 非闲置时记录本次活动时间，供闲置时段 flush 用作 end_time
         self._last_active_time = timestamp
 
@@ -329,6 +466,7 @@ class Collector:
             logger.info(f"截图完成: {filename}{' (画面重复)' if is_duplicate else ''}")
         except Exception as e:
             logger.error(f"截图失败: {e}")
+            self._note_failure(f"截图失败: {e}")
             return None
 
         # 2. 获取前台应用 + 所有可见窗口
@@ -529,7 +667,12 @@ class Collector:
         except Exception as e:
             logger.debug(f"分类平滑失败（不影响采集）: {e}")
 
-        # 6. 存储
+        # 6. 存储；附带 DSH 当前工作区（项目边界信号，探测失败为空不影响采集）
+        try:
+            from dsh_workspace import project_name_from_workspace
+            _workspace = project_name_from_workspace()
+        except Exception:
+            _workspace = ""
         try:
             insert_activity(
                 timestamp=timestamp,
@@ -541,7 +684,17 @@ class Collector:
                 interval_sec=config.SCREENSHOT_INTERVAL_SEC,
                 ai_detail=ai_detail,
                 windows_json=json.dumps(windows_data, ensure_ascii=False) if windows_data else "[]",
+                workspace=_workspace,
             )
+            # 跨设备时间线：上传结构化活动到 todo-sync(18766)（只文字、失败不影响采集）
+            self._upload_sync({
+                "timestamp": timestamp,
+                "app_name": app_name,
+                "category": category,
+                "summary": summary or "",
+                "ai_detail": ai_detail,
+                "workspace": _workspace,
+            })
             # 推送 SSE 事件（活动变化通知前端实时刷新）
             try:
                 from event_bus import push_event
@@ -557,6 +710,7 @@ class Collector:
             logger.error(f"insert_activity 失败: {e}", exc_info=True)
 
         logger.info(f"[{category}] {summary} ({display_name})")
+        self._note_success()
 
         # 7. AI分析完成后自动删除截图文件（隐私保护）
         try:
@@ -600,6 +754,23 @@ class Collector:
         self._running = True
         logger.info(f"ChallengeDaily采集器启动，截图间隔 {config.SCREENSHOT_INTERVAL_SEC}s")
 
+        # 跨设备时间线：把结构化活动上传到 todo-sync(18766)。
+        # 用独立 client_id（与独立采集器的 hostname+user hash 不同），避免幂等键冲突/互相覆盖。
+        try:
+            import activity_sync
+            import hashlib
+            import platform
+            import getpass
+            if activity_sync.enabled():
+                raw = f"challengedaily-main|{platform.node()}|{getpass.getuser()}"
+                self._sync_client_id = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+                self._sync_host = f"{platform.node()}·主应用"
+                activity_sync.start(self._sync_client_id, self._sync_host, log=lambda m: logger.debug(f"[activity-sync] {m}"))
+                self._sync_enabled = True
+                logger.info(f"跨设备活动上传已启动 client_id={self._sync_client_id}")
+        except Exception as e:
+            logger.debug(f"跨设备活动上传初始化失败（不影响采集）: {e}")
+
         # 启动时清理过期数据
         try:
             cleanup_old_data(RETENTION_DAYS)
@@ -608,6 +779,9 @@ class Collector:
             logger.info(f"已清理 {RETENTION_DAYS} 天前的数据，截图占用 {ss_size}MB")
         except Exception as e:
             logger.error(f"清理过期数据失败: {e}")
+
+        # 启动时检查磁盘空间
+        self._check_disk_space()
 
         # P9-1：启动剪贴板监听线程（失败安全）
         try:
@@ -642,6 +816,13 @@ class Collector:
                 self.capture_once()
             except Exception as e:
                 logger.error(f"采集循环异常: {e}")
+                self._note_failure(f"采集循环异常: {e}")
+
+            # 周期性磁盘检查（约每 60 轮 ≈ 1 小时，避免每次 stat 磁盘）
+            self._disk_check_tick += 1
+            if self._disk_check_tick >= 60:
+                self._disk_check_tick = 0
+                self._check_disk_space()
 
             # 可被 stop.set() 打断
             stop.wait(timeout=config.SCREENSHOT_INTERVAL_SEC)

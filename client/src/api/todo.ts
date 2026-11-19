@@ -79,7 +79,6 @@ export interface WeekPlanStats {
   dates: string[]
   daily_focus: Array<{ date: string; focus_min: number }>
   total_focus_min: number
-  deep_focus_min: number
   interrupt_count: number
   total_tasks: number
   completed_tasks: number
@@ -90,7 +89,6 @@ export interface WeekPlanStats {
 export interface MonthPlanStats {
   month_key: string
   total_focus_min: number
-  deep_focus_min: number
   interrupt_count: number
   total_tasks: number
   completed_tasks: number

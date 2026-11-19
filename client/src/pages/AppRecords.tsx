@@ -1,9 +1,9 @@
 import { useEffect, useState, useMemo, lazy, Suspense } from 'react'
-import { Link } from 'react-router-dom'
 import { X, Tags } from 'lucide-react'
 import { getAppUsage, getTodayStats, getAppIconUrl, CATEGORY_COLORS, type AppUsage, type TodayStats } from '../api/client'
 import { CategoryFilter, formatDuration, useAsyncData, ApiErrorDisplay } from '../components/shared'
 import dayjs from 'dayjs'
+import { DATA_REFRESH_MS } from '../config/refresh'
 
 // 应用标签从独立页面收进「应用记录」的弹窗里
 const AppTags = lazy(() => import('./AppTags'))
@@ -23,6 +23,7 @@ export default function AppRecords() {
       return { apps: appData, stats: s }
     },
     [selectedDate],
+    DATA_REFRESH_MS, // 统一刷新节奏，避免改完分类规则后页面不自动更新
   )
 
   const apps = data?.apps || []

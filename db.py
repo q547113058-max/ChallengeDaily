@@ -198,15 +198,15 @@ _write_lock = threading.Lock()  # 保护 _pending_commits 和写操作
 def insert_activity(timestamp: str, screenshot: str, app_name: str,
                     window_title: str, category: str, summary: str,
                     interval_sec: int = 60, ai_detail: str = "",
-                    windows_json: str = "[]"):
+                    windows_json: str = "[]", workspace: str = ""):
     """写入一条活动记录（批量提交优化，线程安全）"""
     global _pending_commits
     with _write_lock:
         with get_conn() as conn:
             _execute_with_retry(conn,
-                "INSERT INTO activities (timestamp, screenshot, app_name, window_title, category, summary, interval_sec, ai_detail, windows_json) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (timestamp, screenshot, app_name, window_title, category, summary, interval_sec, ai_detail, windows_json),
+                "INSERT INTO activities (timestamp, screenshot, app_name, window_title, category, summary, interval_sec, ai_detail, windows_json, workspace) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (timestamp, screenshot, app_name, window_title, category, summary, interval_sec, ai_detail, windows_json, workspace),
             )
             _pending_commits += 1
             if _pending_commits >= _COMMIT_BATCH_SIZE:
@@ -281,15 +281,16 @@ def get_daily_summary(start_date: str, end_date: str):
     """聚合统计"""
     _flush_pending_commits()
     with get_conn() as conn:
+        # cnt 保留兼容；SUM(interval_sec) 给真实时长秒数（兼容历史60s与新20s混合数据）
         rows = conn.execute(
-            "SELECT category, COUNT(*) as cnt FROM activities "
-            "WHERE timestamp >= ? AND timestamp <= ? "
+            "SELECT category, COUNT(*) as cnt, COALESCE(SUM(interval_sec), COUNT(*)*60) as sec "
+            "FROM activities WHERE timestamp >= ? AND timestamp <= ? "
             "GROUP BY category ORDER BY cnt DESC",
             (f"{start_date} 00:00:00", f"{end_date} 23:59:59"),
         ).fetchall()
         total = conn.execute(
-            "SELECT COUNT(*) as total FROM activities "
-            "WHERE timestamp >= ? AND timestamp <= ?",
+            "SELECT COUNT(*) as total, COALESCE(SUM(interval_sec), COUNT(*)*60) as sec "
+            "FROM activities WHERE timestamp >= ? AND timestamp <= ?",
             (f"{start_date} 00:00:00", f"{end_date} 23:59:59"),
         ).fetchone()
         time_range = conn.execute(
@@ -298,12 +299,17 @@ def get_daily_summary(start_date: str, end_date: str):
             (f"{start_date} 00:00:00", f"{end_date} 23:59:59"),
         ).fetchone()
 
+    tr = dict(time_range) if time_range else {}
+    tt = dict(total) if total else {}
     categories = {dict(r)["category"]: dict(r)["cnt"] for r in rows}
+    category_min = {dict(r)["category"]: round(dict(r)["sec"] / 60, 1) for r in rows}
     return {
-        "total": dict(total)["total"] if total else 0,
+        "total": tt.get("total", 0),
+        "total_min": round(tt.get("sec", 0) / 60, 1),  # 真实时长（分钟）
         "categories": categories,
-        "first_ts": dict(time_range)["first_ts"] if time_range else None,
-        "last_ts": dict(time_range)["last_ts"] if time_range else None,
+        "category_min": category_min,                   # 按分类真实时长（分钟）
+        "first_ts": tr.get("first_ts"),
+        "last_ts": tr.get("last_ts"),
     }
 
 
@@ -1111,14 +1117,6 @@ def check_and_unlock_achievements():
     except Exception:
         pass
 
-    # 深度工作时长（分钟）：活动数 × 采样间隔 / 60
-    deep_min = 0
-    try:
-        from config import SCREENSHOT_INTERVAL_SEC
-        deep_min = len(today_acts) * SCREENSHOT_INTERVAL_SEC / 60
-    except Exception:
-        pass
-
     # 今日待办完成情况
     today_total_todos = 0
     today_completed_todos = 0
@@ -1170,7 +1168,6 @@ def check_and_unlock_achievements():
 
     checks = [
         # ── 补全5个缺失成就 ──
-        ("deep_master", "深度大师", "单日深度工作≥4小时", "🧠", False, deep_min >= 240),
         ("early_bird", "早起鸟", "6:00前开始专注", "🐦", False, earliest_hour < 6),
         ("night_owl", "夜猫子", "23:00后仍在专注", "🦉", False, latest_hour >= 23),
         ("full_clear", "全勤奖", "一天完成所有待办", "✨", False,
@@ -1653,7 +1650,6 @@ def get_week_plan_stats(week_start: str) -> dict:
             ).fetchone()
             daily_focus.append({'date': d, 'focus_min': row['total'] or 0})
         total_focus = sum(f['focus_min'] for f in daily_focus)
-        deep_focus = total_focus
         interrupts = 0
         # 完成率（本周日任务）
         completed_row = conn.execute(
@@ -1684,7 +1680,6 @@ def get_week_plan_stats(week_start: str) -> dict:
             'dates': dates,
             'daily_focus': daily_focus,
             'total_focus_min': total_focus,
-            'deep_focus_min': deep_focus,
             'interrupt_count': interrupts,
             'total_tasks': total_tasks,
             'completed_tasks': completed_tasks,
@@ -1712,7 +1707,6 @@ def get_month_plan_stats(month_key: str) -> dict:
         return {
             'month_key': month_key,
             'total_focus_min': total_row['total'] or 0,
-            'deep_focus_min': total_row['total'] or 0,
             'interrupt_count': 0,
             'total_tasks': total_tasks,
             'completed_tasks': completed_tasks,

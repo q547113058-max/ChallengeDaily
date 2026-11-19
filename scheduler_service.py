@@ -1,4 +1,4 @@
-"""
+﻿"""
 日程调度服务 — V35
 精力曲线分析、AI 日程生成、fallback 排程
 """
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 def compute_energy_curve(days: int = 14) -> list:
-    """从 activities 统计12时段（每2小时一段）深度工作占比"""
+    """从 activities 统计12时段（每2小时一段）专注类占比"""
     curve = []
     try:
         cutoff = (date.today() - timedelta(days=days)).isoformat()
@@ -24,7 +24,7 @@ def compute_energy_curve(days: int = 14) -> list:
                 "GROUP BY hour, category",
                 (cutoff,)
             ).fetchall()
-        deep_cats = {'编程', '写作', '设计', '开发'}
+        focus_cats = {'编程', '写作', '设计', '开发'}
         slots = {}
         for r in rows:
             try:
@@ -33,18 +33,18 @@ def compute_energy_curve(days: int = 14) -> list:
                 continue
             slot_idx = h // 2
             if slot_idx not in slots:
-                slots[slot_idx] = {'deep': 0, 'total': 0}
+                slots[slot_idx] = {'focus': 0, 'total': 0}
             slots[slot_idx]['total'] += r['total']
-            if r['category'] in deep_cats:
-                slots[slot_idx]['deep'] += r['total']
+            if r['category'] in focus_cats:
+                slots[slot_idx]['focus'] += r['total']
         for i in range(12):
             start_h = (i * 2) % 24
             end_h = (start_h + 2) % 24
-            s = slots.get(i, {'deep': 0, 'total': 0})
-            ratio = round(s['deep'] / s['total'], 2) if s['total'] > 0 else 0
+            s = slots.get(i, {'focus': 0, 'total': 0})
+            ratio = round(s['focus'] / s['total'], 2) if s['total'] > 0 else 0
             curve.append({
                 'slot': f"{start_h:02d}:00-{end_h:02d}:00",
-                'deep_ratio': ratio,
+                'focus_ratio': ratio,
                 'total_min': s['total'],
             })
     except Exception as e:
@@ -60,8 +60,8 @@ def fallback_schedule(tasks: list, energy: list) -> list:
     # 按优先级排序（数字越小优先级越高）
     sorted_tasks = sorted(tasks, key=lambda t: t.get('priority', 3))
 
-    # 找出精力高峰时段（deep_ratio 最高的时段）
-    peak_slots = sorted(energy, key=lambda s: s.get('deep_ratio', 0), reverse=True) if energy else []
+    # 找出精力高峰时段（focus_ratio 最高的时段）
+    peak_slots = sorted(energy, key=lambda s: s.get('focus_ratio', 0), reverse=True) if energy else []
 
     schedule = []
     # 默认工作时间从 9:00 开始
@@ -79,7 +79,7 @@ def fallback_schedule(tasks: list, energy: list) -> list:
         slot_idx = (task_start // 60) // 2
         is_peak = False
         if peak_slots and slot_idx < len(peak_slots):
-            is_peak = peak_slots[0].get('deep_ratio', 0) > 0.3 and slot_idx == int(peak_slots[0].get('slot', '00:00-02:00')[:2]) // 2
+            is_peak = peak_slots[0].get('focus_ratio', 0) > 0.3 and slot_idx == int(peak_slots[0].get('slot', '00:00-02:00')[:2]) // 2
 
         schedule.append({
             'task_title': task.get('title', ''),
@@ -88,7 +88,7 @@ def fallback_schedule(tasks: list, energy: list) -> list:
             'end': end_str,
             'duration_min': 90,
             'is_peak_energy': is_peak,
-            'type': 'deep_work' if task.get('priority', 3) <= 2 else 'normal',
+            'type': 'focus' if task.get('priority', 3) <= 2 else 'normal',
         })
 
         # 添加休息块
@@ -174,19 +174,19 @@ def _try_ai_schedule(tasks: list, energy: list, target_date: str) -> list | None
             for t in tasks
         ])
         energy_desc = "\n".join([
-            f"- {s['slot']}: 深度工作占比 {s['deep_ratio']*100:.0f}%"
+            f"- {s['slot']}: 专注类占比 {s['focus_ratio']*100:.0f}%"
             for s in energy if s['total_min'] > 0
         ])
 
         prompt = (
             f"请为 {target_date} 生成一个高效的日程安排。\n\n"
             f"待完成任务：\n{task_desc}\n\n"
-            f"历史精力曲线（深度工作占比）：\n{energy_desc}\n\n"
+            f"历史精力曲线（专注类占比）：\n{energy_desc}\n\n"
             f"要求：\n"
             f"1. 高优先级任务安排在精力高峰时段\n"
             f"2. 每个工作块90分钟，之间休息15分钟\n"
             f"3. 从9:00开始安排\n"
-            f"4. 返回JSON数组，每项包含: task_title, start(HH:MM), end(HH:MM), duration_min, type(deep_work/normal/break)\n"
+            f"4. 返回JSON数组，每项包含: task_title, start(HH:MM), end(HH:MM), duration_min, type(focus/normal/break)\n"
             f"只返回JSON数组，不要其他文字。"
         )
 

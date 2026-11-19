@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState, useCallback, useRef, type ReactNode } from 'react'
 import dayjs from 'dayjs'
 import { Solar } from 'lunar-javascript'
-import { MapPin, Navigation, CloudSun, Cloud, CloudRain, Snowflake, Wind, Zap, Brain, RefreshCw, Lightbulb, AlertTriangle, Trophy, Sparkles, Eye, Compass } from 'lucide-react'
+import { MapPin, Navigation, CloudSun, Cloud, CloudRain, Snowflake, Wind, Zap, Brain, RefreshCw, Sparkles } from 'lucide-react'
 import { request } from '../api/client'
+import { AI_REFRESH_MS } from '../config/refresh'
+import { useVisibleInterval } from '../hooks/useVisibleInterval'
 
 interface HeroInfoProps {
   todayDurationMin: number
@@ -456,13 +458,11 @@ export default function HeroInfo({ todayDurationMin }: HeroInfoProps) {
       // 通过 ref 读取最新值，避免闭包陈旧导致重复拉取
       if (!insightRef.current) fetchInsight(false, true)
     }, 3000)
-    // 5 分钟刷新一次（与后端缓存 TTL 对齐），静默轮询不闪loading
-    const timer = setInterval(() => fetchInsight(false, true), 300000)
-    return () => {
-      clearTimeout(retryTimer)
-      clearInterval(timer)
-    }
+    return () => { clearTimeout(retryTimer) }
   }, [fetchInsight])
+
+  // 5 分钟刷新一次（与后端缓存 TTL 对齐）；仅页面可见时运行，隐藏时定时器真正停止
+  useVisibleInterval(() => fetchInsight(false, true), AI_REFRESH_MS)
 
   // 日/周/月进度
   const progressData = useMemo(() => {

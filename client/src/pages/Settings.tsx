@@ -7,9 +7,8 @@ import { useTheme, ACCENT_PRESETS, FONT_PRESETS, RADIUS_PRESETS, SHADOW_PRESETS,
 import { AppLockSettings } from '../components/AppLock'
 import UpdateChecker from '../components/UpdateChecker'
 import BackendConnectionSettings from '../components/BackendConnectionSettings'
-import { Shield, Bot, Eye, EyeOff, Server, FileText, ListFilter, Download, Loader2, CheckCircle, XCircle, RotateCcw, Database, Upload, HardDrive, Info, Palette, Type, GlassWater, Moon, Rocket, Search, Calendar, GitBranch, Heart, Activity, Brain } from 'lucide-react'
+import { Shield, Bot, Eye, EyeOff, Server, FileText, ListFilter, Download, Loader2, CheckCircle, XCircle, RotateCcw, Database, Upload, HardDrive, Info, Palette, Type, GlassWater, Moon, Rocket, Search, GitBranch, Activity, Brain } from 'lucide-react'
 import dayjs from 'dayjs'
-import CalendarSubscriptionManager from '../components/CalendarSubscriptionManager'
 import GitRepoManager from '../components/GitRepoManager'
 
 export default function Settings() {
@@ -57,15 +56,12 @@ export default function Settings() {
   // 设置搜索
   const [searchQuery, setSearchQuery] = useState('')
   const [highlightedSection, setHighlightedSection] = useState<string>('')
-  // 人生配置
-  const [birthday, setBirthday] = useState('')
-  const [lifeExpectancy, setLifeExpectancy] = useState(80)
 
   const handleSearch = (query: string) => {
     setSearchQuery(query)
     if (!query.trim()) { setHighlightedSection(''); return }
     // 简单匹配：遍历设置分区标题
-    const sections = ['外观', '采集', 'AI', '日报', '数据', '日历', '人生', 'Git', '备份', '导入', '隐私', '关于']
+    const sections = ['外观', '采集', 'AI', '日报', '数据', 'Git', '备份', '导入', '隐私', '关于']
     const match = sections.find(s => s.toLowerCase().includes(query.toLowerCase()))
     if (match) {
       setHighlightedSection(match)
@@ -125,9 +121,6 @@ export default function Settings() {
     const legacyModel = (settings as any).ai_model
     setApiVisionModel(settings.ai_vision_model || legacyModel || 'glm-4.1v-thinking-flash')
     setApiTextModel(settings.ai_text_model || legacyModel || 'glm-4-flash')
-    // 人生配置
-    setBirthday(settings.birthday || '')
-    setLifeExpectancy(settings.life_expectancy || 80)
   }, [initialData])
 
   // 获取应用版本 & 开机自启动状态
@@ -174,8 +167,6 @@ export default function Settings() {
         ai_vision_model: apiVisionModel,
         ai_text_model: apiTextModel,
         ai_enabled: aiEnabled,
-        birthday: birthday,
-        life_expectancy: lifeExpectancy,
       }
       // 仅当用户实际输入了 API Key 时才发送（避免清空已保存的 key）
       if (apiKey.trim()) {
@@ -315,7 +306,7 @@ export default function Settings() {
           type="text"
           value={searchQuery}
           onChange={(e) => handleSearch(e.target.value)}
-          placeholder="搜索设置项...（外观/采集/AI/日报/数据/日历/人生/Git/备份/导入/隐私/关于）"
+          placeholder="搜索设置项...（外观/采集/AI/日报/数据/Git/备份/导入/隐私/关于）"
           className="w-full px-3 py-2 pl-9 bg-cd-bg-secondary border border-cd-border rounded-lg text-sm text-cd-text focus:outline-none focus:ring-1 focus:ring-cd-green"
         />
         <Search className="absolute left-3 top-2.5 w-4 h-4 text-cd-text-tertiary" />
@@ -954,57 +945,6 @@ export default function Settings() {
         </div>
         <div className="text-xs text-cd-text-tertiary">
           导出为 CSV 格式，可用 Excel 打开。BOM 编码确保中文兼容。
-        </div>
-      </section>
-
-      {/* ─── 外部日历集成（P19-1） ──────────────────────────── */}
-      <section
-        id="settings-section-日历"
-        className={`card space-y-4 ${highlightedSection === '日历' ? 'ring-2 ring-cd-green' : ''}`}
-      >
-        <div className="flex items-center gap-2">
-          <Calendar size={16} className="text-cd-green" />
-          <h2 className="text-sm font-semibold text-cd-text">外部日历集成</h2>
-        </div>
-        <div className="text-xs text-cd-text-tertiary">
-          订阅 ICS 日历源（Google Calendar / Outlook / 飞书等），自动识别会议时段，避免在会议期间触发专注提醒。
-        </div>
-        <CalendarSubscriptionManager />
-      </section>
-
-      {/* ─── 人生配置（QuantLife 灵感） ──────────────────────────── */}
-      <section className="card space-y-4">
-        <div className="flex items-center gap-2">
-          <Heart size={16} className="text-cd-green" />
-          <h2 className="text-sm font-semibold text-cd-text">人生配置</h2>
-        </div>
-        <div className="text-xs text-cd-text-tertiary">
-          设置生日和预期寿命，开启「人生进度」可视化 — 让每一天都有坐标感。
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="text-xs text-cd-text-secondary block mb-1">生日</label>
-            <input
-              type="date"
-              value={birthday}
-              onChange={(e) => setBirthday(e.target.value)}
-              className="w-full bg-cd-bg-secondary text-cd-text border border-cd-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-cd-green transition-colors"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-cd-text-secondary block mb-1">预期寿命（岁）</label>
-            <input
-              type="number"
-              value={lifeExpectancy}
-              onChange={(e) => setLifeExpectancy(Number(e.target.value))}
-              min={1}
-              max={150}
-              className="w-full bg-cd-bg-secondary text-cd-text border border-cd-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-cd-green transition-colors"
-            />
-          </div>
-        </div>
-        <div className="text-xs text-cd-text-tertiary">
-          人生进度条将显示在首页顶部信息栏，让你直观感受时间流逝。
         </div>
       </section>
 

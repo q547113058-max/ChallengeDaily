@@ -41,7 +41,6 @@ def update_settings():
     for key in ["exclude_apps", "screenshot_interval_sec", "work_start_hour",
                 "work_end_hour", "custom_report_instructions",
                 "ai_base_url", "ai_vision_model", "ai_text_model", "ai_enabled",
-                "birthday", "life_expectancy",
                 "auto_daily_report", "auto_daily_report_hour",
                 "auto_daily_report_template"]:
         if key in data:

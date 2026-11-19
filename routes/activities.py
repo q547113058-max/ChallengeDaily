@@ -417,10 +417,20 @@ def app_usage():
             }
             for c in contents
         ]
+        # 当天没有 activities 记录的应用（只有 app_usage 时长）无法从历史取分类，
+        # 直接用规则现场判定，避免一律落到「其他」。
+        cat = app_primary_cat.get(raw_name)
+        if not cat:
+            try:
+                from classifier import classify
+                top_title = contents[0]["title"] if contents else ""
+                cat = classify(raw_name, "", top_title)
+            except Exception:
+                cat = "其他"
         result.append({
             "app_name": _gdn3(raw_name),
             "app_name_raw": raw_name,
-            "category": app_primary_cat.get(raw_name, "其他"),
+            "category": cat or "其他",
             "duration_min": a["duration_min"],
             "percentage": round(a["duration_min"] / total_min * 100, 1) if total_min > 0 else 0,
             "contents": contents_payload,

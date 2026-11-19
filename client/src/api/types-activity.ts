@@ -16,8 +16,6 @@ export interface TodayStats {
   total_duration_min: number
   categories: Record<string, number>
   top_apps: Array<{ app_name: string; app_name_raw?: string; duration_min: number }>
-  focus_sessions: number
-  longest_focus_min: number
   total_activities?: number
   current_activity?: string | null
 }
@@ -101,8 +99,6 @@ export interface BackendSettings {
   ai_vision_model?: string
   ai_text_model?: string
   ai_enabled?: boolean
-  birthday?: string
-  life_expectancy?: number
   /** 每日定时生成日报开关（backend config.py 有对应默认值） */
   auto_daily_report?: boolean
   /** 每日定时生成日报的小时（0-23） */

@@ -1,4 +1,4 @@
-"""
+﻿"""
 ChallengeDaily Windows 版 — Markdown 日报生成
 支持六种报告模板：standard / simple / technical / okr / ai / deep
 核心思路：按分类聚合并生成高质量摘要，而非逐条罗列活动日志
@@ -41,33 +41,14 @@ def _estimate_focus_hours(activities: list, app_usage: list = None) -> str:
         total_seconds = sum((au.get("duration_min", 0) or 0) * 60 for au in app_usage)
         if total_seconds > 0:
             return _format_duration(total_seconds)
-    # 回退：按活动条数 × 采样间隔估算
+    # 回退：优先按每条活动记录的真实 interval_sec 求和（兼容历史60s与新20s混合数据），
+    # 记录缺该字段时才用全局间隔兜底。
     if not activities:
         return "0s"
-    total_seconds = len(activities) * config.SCREENSHOT_INTERVAL_SEC
+    total_seconds = sum(
+        (a.get("interval_sec") or config.SCREENSHOT_INTERVAL_SEC) for a in activities
+    )
     return _format_duration(total_seconds)
-
-
-def _count_focus_sessions(activities: list) -> int:
-    """统计专注次数（同一分类持续 >= 15min 算一次）"""
-    if not activities:
-        return 0
-    # 确保按时间升序排列（get_activities 返回 DESC）
-    sorted_acts = sorted(activities, key=lambda a: a.get("timestamp", ""))
-    sessions = 0
-    current_cat = None
-    current_count = 0
-    for act in sorted_acts:
-        if act["category"] == current_cat:
-            current_count += 1
-        else:
-            if current_count * config.SCREENSHOT_INTERVAL_SEC >= 900:
-                sessions += 1
-            current_cat = act["category"]
-            current_count = 1
-    if current_count * config.SCREENSHOT_INTERVAL_SEC >= 900:
-        sessions += 1
-    return sessions
 
 
 def _save(content: str, target_date: str):
@@ -285,7 +266,7 @@ def _time_period(hour: int) -> str:
     return "深夜"
 
 
-def _natural_overview(activities, cat_narratives, first_ts, last_ts, focus_hours, focus_sessions) -> str:
+def _natural_overview(activities, cat_narratives, first_ts, last_ts, focus_hours) -> str:
     """生成自然语言的今日概要段落，避免公文化表述"""
     if not cat_narratives:
         return "今天暂无工作记录。"
@@ -308,8 +289,6 @@ def _natural_overview(activities, cat_narratives, first_ts, last_ts, focus_hours
 
     # 专注时长
     focus_desc = f"，累计专注{focus_hours}"
-    if focus_sessions > 0:
-        focus_desc += f"，进入深度状态{focus_sessions}次"
 
     # 分类数量
     cat_desc = f"涉及{len(cat_narratives)}个工作类别"
@@ -328,8 +307,6 @@ def _template_standard(target_date: str, activities, summary_data, app_usage) ->
     first_ts = summary_data.get("first_ts", "")
     last_ts = summary_data.get("last_ts", "")
     focus_hours = _estimate_focus_hours(activities, app_usage)
-    focus_sessions = _count_focus_sessions(activities)
-
     blocks = _group_into_blocks(activities)
     cat_narratives = _build_category_narrative(blocks)
 
@@ -340,7 +317,7 @@ def _template_standard(target_date: str, activities, summary_data, app_usage) ->
     ]
 
     # 自然语言概要
-    overview = _natural_overview(activities, cat_narratives, first_ts, last_ts, focus_hours, focus_sessions)
+    overview = _natural_overview(activities, cat_narratives, first_ts, last_ts, focus_hours)
     lines.append(overview)
     lines.append("")
 
@@ -363,7 +340,7 @@ def _template_standard(target_date: str, activities, summary_data, app_usage) ->
     lines.append("|------|------|------|")
     total_act_count = sum(summary_data["categories"].values()) or 1  # avoid ZeroDivision
     for cat, cnt in summary_data["categories"].items():
-        total_seconds = cnt * config.SCREENSHOT_INTERVAL_SEC
+        total_seconds = summary_data.get("category_min", {}).get(cat, cnt * config.SCREENSHOT_INTERVAL_SEC) * 60
         time_str = _format_duration(total_seconds)
         pct = f"{round(cnt / total_act_count * 100)}%"
         lines.append(f"| {cat} | {time_str} | {pct} |")
@@ -423,7 +400,7 @@ def _template_simple(target_date: str, activities, summary_data, app_usage) -> s
     total_activity_count = sum(summary_data["categories"].values())
     for cat, cnt in summary_data["categories"].items():
         pct = round(cnt / total_activity_count * 100) if total_activity_count > 0 else 0
-        total_seconds = cnt * config.SCREENSHOT_INTERVAL_SEC
+        total_seconds = summary_data.get("category_min", {}).get(cat, cnt * config.SCREENSHOT_INTERVAL_SEC) * 60
         time_str = _format_duration(total_seconds)
         lines.append(f"- **{cat}**：{time_str}（{pct}%）")
     lines.append("")
@@ -448,13 +425,12 @@ def _template_technical(target_date: str, activities, summary_data, app_usage) -
 
     total = summary_data["total"]
     focus_hours = _estimate_focus_hours(activities, app_usage)
-    focus_sessions = _count_focus_sessions(activities)
     first_ts = summary_data.get("first_ts", "")
     last_ts = summary_data.get("last_ts", "")
 
     tech_cats = {"开发", "测试", "运维", "数据分析"}
     tech_count = sum(summary_data["categories"].get(c, 0) for c in tech_cats)
-    tech_seconds = tech_count * config.SCREENSHOT_INTERVAL_SEC
+    tech_seconds = sum(summary_data.get("category_min", {}).get(c, tech_count * config.SCREENSHOT_INTERVAL_SEC / max(len(tech_cats),1)) for c in tech_cats) * 60
 
     blocks = _group_into_blocks(activities)
     cat_narratives = _build_category_narrative(blocks)
@@ -463,7 +439,7 @@ def _template_technical(target_date: str, activities, summary_data, app_usage) -
         f"# {target_date} 技术日报",
         "",
         "## 技术概览",
-        f"- 专注时长：{focus_hours}，深度工作 {focus_sessions} 次",
+        f"- 专注时长：{focus_hours}",
     ]
     time_span = _natural_time_span(first_ts, last_ts) if first_ts and last_ts else ""
     if time_span:
@@ -531,7 +507,6 @@ def _template_okr(target_date: str, activities, summary_data, app_usage) -> str:
 
     total = summary_data["total"]
     focus_hours = _estimate_focus_hours(activities, app_usage)
-    focus_sessions = _count_focus_sessions(activities)
     first_ts = summary_data.get("first_ts", "")
     last_ts = summary_data.get("last_ts", "")
 
@@ -548,7 +523,7 @@ def _template_okr(target_date: str, activities, summary_data, app_usage) -> str:
         f"# {target_date} OKR 日报",
         "",
         "## 今日概览",
-        f"- 专注：{focus_hours}，深度工作 {focus_sessions} 次",
+        f"- 专注：{focus_hours}",
     ]
     time_span = _natural_time_span(first_ts, last_ts) if first_ts and last_ts else ""
     if time_span:
@@ -598,7 +573,7 @@ def _template_okr(target_date: str, activities, summary_data, app_usage) -> str:
     lines.append("|------|------|------|")
     total_act_count = sum(summary_data["categories"].values()) or 1  # avoid ZeroDivision
     for cat, cnt in summary_data["categories"].items():
-        total_seconds = cnt * config.SCREENSHOT_INTERVAL_SEC
+        total_seconds = summary_data.get("category_min", {}).get(cat, cnt * config.SCREENSHOT_INTERVAL_SEC) * 60
         time_str = _format_duration(total_seconds)
         pct = f"{round(cnt / total_act_count * 100)}%"
         lines.append(f"| {cat} | {time_str} | {pct} |")
@@ -647,7 +622,6 @@ _WEEKDAYS_DEEP = ["周一", "周二", "周三", "周四", "周五", "周六", "�
 _CREATIVE_CATS = {"开发", "设计", "学习"}
 _FOCUS_CATS_DEEP = {"开发", "设计", "文档", "测试", "数据分析", "学习"}
 _MEETING_CATS_DEEP = {"会议", "沟通"}
-_DEEP_WORK_THRESHOLD_MIN = 25
 
 
 def _safe_get(d, key, default=None):
@@ -774,7 +748,7 @@ def _get_yesterday_comparison(target_date: str) -> dict:
 
 def _compute_attention_index(activities: list) -> dict:
     result = {
-        "fragmentation_index": 0, "focus_efficiency": 0, "deep_work_ratio": 0.0,
+        "fragmentation_index": 0, "focus_efficiency": 0,
         "avg_session_min": 0.0, "longest_streak_min": 0, "switch_frequency": 0.0,
     }
     if not activities:
@@ -810,15 +784,14 @@ def _compute_attention_index(activities: list) -> dict:
     frag_short = short_ratio * 40
     frag_avg = min(1.0, 30.0 / max(avg_session_min, 1)) * 20
     fragmentation_index = min(100, round(frag_switch + frag_short + frag_avg))
-    deep_sessions = sum(1 for _, cnt in sessions if cnt * interval >= _DEEP_WORK_THRESHOLD_MIN * 60)
-    focus_efficiency = round(min(100, deep_sessions / max(total_sessions, 1) * 100 * 2))
-    deep_records = sum(cnt for _, cnt in sessions if cnt * interval >= _DEEP_WORK_THRESHOLD_MIN * 60)
-    deep_work_ratio = round(deep_records / total_records * 100, 1) if total_records > 0 else 0
+    # 专注效率：长时段（≥10 分钟）占比
+    long_sessions = sum(1 for _, cnt in sessions if cnt * interval >= 600)
+    focus_efficiency = round(min(100, long_sessions / max(total_sessions, 1) * 100 * 2))
     longest_cnt = max(cnt for _, cnt in sessions) if sessions else 0
     longest_streak_min = round(longest_cnt * interval / 60)
     result.update({
         "fragmentation_index": fragmentation_index, "focus_efficiency": focus_efficiency,
-        "deep_work_ratio": deep_work_ratio, "avg_session_min": avg_session_min,
+        "avg_session_min": avg_session_min,
         "longest_streak_min": longest_streak_min, "switch_frequency": switch_frequency,
     })
     return result
@@ -1038,8 +1011,6 @@ def _build_rich_data_context(target_date, summary_data, app_usage, activities) -
     last_ts = summary_data.get("last_ts", "") if summary_data else ""
     time_span = _natural_time_span(first_ts, last_ts) if first_ts and last_ts else ""
     focus_hours = _estimate_focus_hours(activities, app_usage)
-    focus_sessions = _count_focus_sessions(activities)
-
     lines = []
 
     # 日期与天气
@@ -1068,11 +1039,10 @@ def _build_rich_data_context(target_date, summary_data, app_usage, activities) -
     lines.append("═══ 核心指标 ═══")
     lines.append(f"注意力碎片化指数：{attention['fragmentation_index']}/100（越高越碎片）")
     lines.append(f"专注效率：{attention['focus_efficiency']}/100")
-    lines.append(f"深度工作占比：{attention['deep_work_ratio']}%")
     lines.append(f"平均会话时长：{attention['avg_session_min']} 分钟")
     lines.append(f"最长连续同分类：{attention['longest_streak_min']} 分钟")
     lines.append(f"每小时切换次数：{attention['switch_frequency']}")
-    lines.append(f"专注时长：{focus_hours}，深度会话 {focus_sessions} 次")
+    lines.append(f"专注时长：{focus_hours}")
     lines.append("")
 
     # 心流与专注
@@ -1084,8 +1054,6 @@ def _build_rich_data_context(target_date, summary_data, app_usage, activities) -
     lf = patterns.get("longest_focus")
     if lf:
         lines.append(f"最长专注：{lf['category']}，{lf['duration_min']} 分钟")
-    deep_count = sum(1 for fs in focus_ses if fs["duration_min"] >= _DEEP_WORK_THRESHOLD_MIN)
-    lines.append(f"深度工作（≥{_DEEP_WORK_THRESHOLD_MIN}分钟）次数：{deep_count}")
     lines.append("")
 
     # 工作场景流
@@ -1160,7 +1128,7 @@ def _build_rich_data_context(target_date, summary_data, app_usage, activities) -
     cats = summary_data.get("categories", {}) if summary_data else {}
     total_act_count = sum(cats.values()) if cats else 1  # avoid ZeroDivision
     for cat, cnt in cats.items():
-        total_seconds = cnt * config.SCREENSHOT_INTERVAL_SEC
+        total_seconds = summary_data.get("category_min", {}).get(cat, cnt * config.SCREENSHOT_INTERVAL_SEC) * 60
         lines.append(f"- {cat}：{_format_duration(total_seconds)}（{round(cnt / total_act_count * 100)}%）")
     if app_usage:
         lines.append("")
@@ -1218,6 +1186,16 @@ def _build_rich_data_context(target_date, summary_data, app_usage, activities) -
             lines.append("")
             lines.append("═══ 近一周工作上下文 ═══")
             lines.append(_sanitize_user_input(weekly_ctx, 3000))
+        # 任务经历档案：用项目/任务语言叙述，与首页/画像互证
+        try:
+            from experience_pipeline import get_experience_context
+            exp_ctx = get_experience_context(1200)
+            if exp_ctx:
+                lines.append("")
+                lines.append("═══ 任务经历档案 ═══")
+                lines.append(_sanitize_user_input(exp_ctx, 1200))
+        except Exception:
+            pass
     except Exception:
         pass
 
@@ -1311,7 +1289,7 @@ def _template_deep(target_date: str, activities, summary_data, app_usage) -> str
                 "你不必死板地套用固定小节，但必须在行文中**自然覆盖**以下维度：\n"
                 "1. 开篇场景——基于数据中第一条活动的真实时间、真实应用、真实窗口标题开场，如'早上8:59，当你打开 TRAE SOLO CN 开始新一天的开发任务时...'，绝对禁止编造天气、编造未发生的场景\n"
                 "2. 工作纪实——沿时间线叙事，必须引用具体细节：文件名、工具名、窗口标题、操作内容（从叙事时间线和 ai_detail 提取），不要泛泛而谈\n"
-                "3. 心流与专注——引用数据中的注意力碎片化指数、专注效率、深度工作占比、最长专注时间等具体数字，分析深度工作时段、被打断的瞬间\n"
+                "3. 心流与专注——引用数据中的注意力碎片化指数、专注效率、最长连续专注时间等具体数字，分析持续专注时段、被打断的瞬间\n"
                 "4. 情绪与能量——引用情绪曲线中的峰值/低谷时段、能量模式（如'午后型'），结合切换频率推断心理状态\n"
                 "5. 技能成长——引用技能雷达中的具体小时数，今日最强技能和成长空间\n"
                 "6. 人际与协作——从沟通类活动、会议记录推断协作模式，列举具体沟通对象和工具\n"
@@ -1398,7 +1376,7 @@ def _analyze_work_patterns(activities: list) -> dict:
     patterns = {
         "time_gaps": [],           # 时间间隔异常（>5min 无记录 = 休息/离开）
         "category_switches": 0,    # 分类切换次数
-        "focus_sessions": [],      # 深度专注会话（同分类持续>=15min）
+        "focus_sessions": [],      # 连续专注段（同分类持续>=15min）
         "intensity_curve": [],     # 工作强度曲线（每小时活动密度）
         "longest_focus": None,     # 最长专注段
         "interrupted_sessions": 0, # 被打断的专注段（<10min 就切换）
@@ -1532,7 +1510,6 @@ def _build_ai_report_prompt(target_date: str, activities, summary_data, app_usag
     cat_narratives = _build_category_narrative(blocks)
 
     focus_hours = _estimate_focus_hours(activities, app_usage)
-    focus_sessions = _count_focus_sessions(activities)
     total = summary_data.get("total", 0)
 
     lines = [
@@ -1547,7 +1524,7 @@ def _build_ai_report_prompt(target_date: str, activities, summary_data, app_usag
         "",
         f"总活动数：{total}",
         f"估算专注时长：{focus_hours}",
-        f"深度工作次数：{focus_sessions}",
+        
         "",
         "分类统计：",
     ]
@@ -1741,7 +1718,6 @@ def generate_weekly_report(start_date: str = None, template: str = "standard") -
     blocks = _group_into_blocks(activities)
     cat_narratives = _build_category_narrative(blocks)
     focus_hours = _estimate_focus_hours(activities, app_usage)
-    focus_sessions = _count_focus_sessions(activities)
     total_act_count = sum(summary_data["categories"].values()) or 1  # avoid ZeroDivision
 
     lines = [
@@ -1750,7 +1726,7 @@ def generate_weekly_report(start_date: str = None, template: str = "standard") -
         "## 本周概览",
         f"- 工作天数：{len(days_data)} 天",
         f"- 总专注时长：{focus_hours}",
-        f"- 深度工作：{focus_sessions} 次",
+        
         f"- 工作类别：{len(cat_narratives)} 个",
         "",
     ]
@@ -1786,7 +1762,7 @@ def generate_weekly_report(start_date: str = None, template: str = "standard") -
     lines.append("| 分类 | 时长 | 占比 |")
     lines.append("|------|------|------|")
     for cat, cnt in summary_data["categories"].items():
-        total_seconds = cnt * config.SCREENSHOT_INTERVAL_SEC
+        total_seconds = summary_data.get("category_min", {}).get(cat, cnt * config.SCREENSHOT_INTERVAL_SEC) * 60
         time_str = _format_duration(total_seconds)
         pct = f"{round(cnt / total_act_count * 100)}%"
         lines.append(f"| {cat} | {time_str} | {pct} |")
@@ -1847,7 +1823,6 @@ def generate_monthly_report(year_month: str = None, template: str = "standard") 
     blocks = _group_into_blocks(activities)
     cat_narratives = _build_category_narrative(blocks)
     focus_hours = _estimate_focus_hours(activities, app_usage)
-    focus_sessions = _count_focus_sessions(activities)
     total_act_count = sum(summary_data["categories"].values()) or 1  # avoid ZeroDivision
 
     lines = [
@@ -1856,7 +1831,7 @@ def generate_monthly_report(year_month: str = None, template: str = "standard") 
         "## 本月概览",
         f"- 工作天数：{len(days_data)} 天",
         f"- 总专注时长：{focus_hours}",
-        f"- 深度工作：{focus_sessions} 次",
+        
         f"- 工作类别：{len(cat_narratives)} 个",
         "",
     ]
@@ -1897,7 +1872,7 @@ def generate_monthly_report(year_month: str = None, template: str = "standard") 
     lines.append("| 分类 | 时长 | 占比 |")
     lines.append("|------|------|------|")
     for cat, cnt in summary_data["categories"].items():
-        total_seconds = cnt * config.SCREENSHOT_INTERVAL_SEC
+        total_seconds = summary_data.get("category_min", {}).get(cat, cnt * config.SCREENSHOT_INTERVAL_SEC) * 60
         time_str = _format_duration(total_seconds)
         pct = f"{round(cnt / total_act_count * 100)}%"
         lines.append(f"| {cat} | {time_str} | {pct} |")
@@ -1929,18 +1904,17 @@ def _generate_ai_deep_analysis(period_type: str, period_label: str,
 
     # 行业基准数据（程序员/知识工作者）
     BENCHMARKS = {
-        "deep_work_avg": 3.2 * 60,  # 程序员日均深度工作 3.2 小时
         "meeting_ratio_max": 0.25,   # 会议时间占比不超过 25%
         "distraction_ratio_max": 0.15,  # 摸鱼占比不超过 15%
     }
 
-    deep_cats = ["开发", "测试", "设计", "文档", "数据分析"]
-    deep_min = sum(categories_data.get(c, 0) for c in deep_cats)
+    focus_cats = ["开发", "测试", "设计", "文档", "数据分析"]
+    focus_min = sum(categories_data.get(c, 0) for c in focus_cats)
     meeting_min = categories_data.get("会议", 0) + categories_data.get("沟通", 0)
     distraction_min = categories_data.get("生活", 0)
 
     days = 7 if period_type == "weekly" else 30
-    avg_daily_deep = deep_min / days
+    avg_daily_focus = focus_min / days
     meeting_ratio = meeting_min / total_min if total_min else 0
     distraction_ratio = distraction_min / total_min if total_min else 0
 
@@ -1953,12 +1927,11 @@ def _generate_ai_deep_analysis(period_type: str, period_label: str,
         f"- 周期：{period_label}（{days}天）\n"
         f"- 总活跃时长：{total_min:.0f} 分钟（{total_min/60:.1f} 小时）\n"
         f"- 日均活跃：{total_min/days:.0f} 分钟\n"
-        f"- 深度工作（开发/测试/设计/文档/数据分析）：{deep_min:.0f} 分钟，日均 {avg_daily_deep:.0f} 分钟\n"
+        f"- 专注类时长（开发/测试/设计/文档/数据分析）：{focus_min:.0f} 分钟，日均 {avg_daily_focus:.0f} 分钟\n"
         f"- 会议沟通：{meeting_min:.0f} 分钟（占比 {meeting_ratio*100:.0f}%）\n"
         f"- 生活摸鱼：{distraction_min:.0f} 分钟（占比 {distraction_ratio*100:.0f}%）\n"
         f"- 分类明细：{cat_summary}\n\n"
         f"## 行业基准（程序员/知识工作者）\n"
-        f"- 日均深度工作：{BENCHMARKS['deep_work_avg']:.0f} 分钟\n"
         f"- 会议占比警戒线：{BENCHMARKS['meeting_ratio_max']*100:.0f}%\n"
         f"- 摸鱼占比警戒线：{BENCHMARKS['distraction_ratio_max']*100:.0f}%\n\n"
         f"## 分析要求\n"
@@ -1971,14 +1944,14 @@ def _generate_ai_deep_analysis(period_type: str, period_label: str,
 
     # 尝试调用 AI
     if not config.AI_API_KEY:
-        return _fallback_analysis(period_type, avg_daily_deep, meeting_ratio, distraction_ratio, BENCHMARKS)
+        return _fallback_analysis(period_type, avg_daily_focus, meeting_ratio, distraction_ratio, BENCHMARKS)
 
     try:
         from ai_client import _cb_check, _rate_limit_check, _get_client, _cb_record_success, _cb_record_failure
         if not _cb_check():
-            return _fallback_analysis(period_type, avg_daily_deep, meeting_ratio, distraction_ratio, BENCHMARKS)
+            return _fallback_analysis(period_type, avg_daily_focus, meeting_ratio, distraction_ratio, BENCHMARKS)
         if not _rate_limit_check("text"):
-            return _fallback_analysis(period_type, avg_daily_deep, meeting_ratio, distraction_ratio, BENCHMARKS)
+            return _fallback_analysis(period_type, avg_daily_focus, meeting_ratio, distraction_ratio, BENCHMARKS)
 
         client = _get_client()
         response = client.chat.completions.create(
@@ -2000,20 +1973,17 @@ def _generate_ai_deep_analysis(period_type: str, period_label: str,
             _cb_record_failure()
         except Exception:
             pass
-        return _fallback_analysis(period_type, avg_daily_deep, meeting_ratio, distraction_ratio, BENCHMARKS)
+        return _fallback_analysis(period_type, avg_daily_focus, meeting_ratio, distraction_ratio, BENCHMARKS)
 
 
-def _fallback_analysis(period_type: str, avg_daily_deep: float,
+def _fallback_analysis(period_type: str, avg_daily_focus: float,
                         meeting_ratio: float, distraction_ratio: float, benchmarks: dict) -> str:
     """AI 不可用时的规则引擎兜底分析"""
     lines = ["\n\n## AI 深度分析\n"]
-    deep_benchmark = benchmarks["deep_work_avg"]
-    deep_status = "超过行业基准" if avg_daily_deep > deep_benchmark else "低于行业基准" if avg_daily_deep < deep_benchmark * 0.7 else "接近行业基准"
-
-    lines.append(f"**深度工作**：日均 {avg_daily_deep:.0f} 分钟，{deep_status}（{deep_benchmark:.0f}min）。\n")
+    lines.append(f"**专注类时长**：日均 {avg_daily_focus:.0f} 分钟（开发/测试/设计/文档/数据分析合计）。\n")
 
     if meeting_ratio > benchmarks["meeting_ratio_max"]:
-        lines.append(f"**会议占比偏高**：{meeting_ratio*100:.0f}%，建议审视会议必要性，超过 {benchmarks['meeting_ratio_max']*100:.0f}% 会挤压深度工作时间。\n")
+        lines.append(f"**会议占比偏高**：{meeting_ratio*100:.0f}%，建议审视会议必要性，超过 {benchmarks['meeting_ratio_max']*100:.0f}% 会挤压整块专注时间。\n")
     else:
         lines.append(f"**会议占比健康**：{meeting_ratio*100:.0f}%，在合理范围内。\n")
 
@@ -2023,15 +1993,13 @@ def _fallback_analysis(period_type: str, avg_daily_deep: float,
         lines.append(f"**摸鱼控制良好**：{distraction_ratio*100:.0f}%，专注力不错。\n")
 
     lines.append("\n**建议**：")
-    if avg_daily_deep < deep_benchmark * 0.7:
-        lines.append("- 尝试每天安排 2 个不受打扰的深度工作时段（上午 9-11 点、下午 14-16 点）")
     if meeting_ratio > benchmarks["meeting_ratio_max"]:
         lines.append("- 将部分会议转为异步沟通（文档/评论），保留同步会议给真正需要讨论的话题")
     if distraction_ratio > benchmarks["distraction_ratio_max"]:
         lines.append("- 启用专注模式屏蔽干扰应用，或设置'摸鱼预算'（每天不超过 X 分钟）")
-    if not (avg_daily_deep < deep_benchmark * 0.7 or meeting_ratio > benchmarks["meeting_ratio_max"]
+    if not (meeting_ratio > benchmarks["meeting_ratio_max"]
             or distraction_ratio > benchmarks["distraction_ratio_max"]):
-        lines.append("- 保持当前节奏！可尝试挑战更高的深度工作目标，或引入学习时段提升技能")
+        lines.append("- 保持当前节奏！可尝试延长连续专注时长，或引入学习时段提升技能")
 
     return "\n".join(lines) + "\n"
 

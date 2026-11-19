@@ -290,24 +290,43 @@ export function useAsyncData<T>(
     let cancelled = false
     let isVisible = !document.hidden
 
-    // 页面可见性检测：窗口隐藏时暂停轮询，可见时恢复
+    // ── 定时刷新的启停控制 ──
+    // 关键：不可见时**真正清除定时器**（不只是跳过回调），避免后台空转。
+    const startInterval = () => {
+      if (!refreshInterval || cancelled || intervalId) return
+      intervalId = setInterval(() => {
+        if (cancelled || document.hidden) return
+        load(true, true)
+      }, refreshInterval)
+    }
+    const stopInterval = () => {
+      if (intervalId) { clearInterval(intervalId); intervalId = undefined }
+    }
+
+    // 页面可见性检测：可见才刷新，不可见时停掉定时器并停掉重试
     // 参考 Page Visibility API：https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API
     const handleVisibilityChange = () => {
       const wasVisible = isVisible
       isVisible = !document.hidden
-      if (!wasVisible && isVisible) {
-        // 从隐藏恢复到可见，立即刷新一次数据
-        load(true, true)
+      if (isVisible) {
+        // 恢复可见：立即拉一次，再重建定时器
+        if (!wasVisible) load(true, true)
+        startInterval()
+        retryCountRef.current = 0
+      } else {
+        // 转为不可见：停掉轮询与重试，不再产生任何请求
+        stopInterval()
+        if (retryTimerRef.current) {
+          clearTimeout(retryTimerRef.current)
+          retryTimerRef.current = null
+        }
       }
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
 
     if (refreshInterval) {
-      // 正常定时刷新（窗口可见时才执行）
-      intervalId = setInterval(() => {
-        if (cancelled || !isVisible) return
-        load(true, true)
-      }, refreshInterval)
+      // 仅在可见时启动定时刷新
+      if (isVisible) startInterval()
 
       // 断线自动重连：指数退避（1s → 2s → 5s → 10s → 10s...）
       const scheduleRetry = () => {

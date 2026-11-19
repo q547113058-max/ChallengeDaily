@@ -413,69 +413,6 @@ export async function cleanupAuditLogs(): Promise<{ status: string; deleted: num
   return request('/api/audit/cleanup', { method: 'POST' }) as Promise<{ status: string; deleted: number }>
 }
 
-// ─── P18-1: 日历集成 ──────────────────────────────
-
-export interface CalendarSubscription {
-  id: string
-  name: string
-  url: string
-  color: string
-  enabled: boolean
-  last_sync: string | null
-  last_error: string | null
-}
-
-export interface CalendarEvent {
-  summary: string
-  start: string
-  end: string
-  start_timestamp: number
-  end_timestamp: number
-  location?: string
-  description?: string
-  calendar_id: string
-  calendar_name: string
-  calendar_color: string
-}
-
-export async function listCalendarSubscriptions(): Promise<{ subscriptions: CalendarSubscription[] }> {
-  return request('/api/calendar/subscriptions') as Promise<{ subscriptions: CalendarSubscription[] }>
-}
-
-export async function addCalendarSubscription(data: { name: string; url: string; color?: string }): Promise<{ subscription: CalendarSubscription }> {
-  return request('/api/calendar/subscriptions', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  }) as Promise<{ subscription: CalendarSubscription }>
-}
-
-export async function updateCalendarSubscription(subId: string, data: Partial<CalendarSubscription>): Promise<{ subscription: CalendarSubscription }> {
-  return request(`/api/calendar/subscriptions/${subId}`, {
-    method: 'PUT',
-    body: JSON.stringify(data),
-  }) as Promise<{ subscription: CalendarSubscription }>
-}
-
-export async function removeCalendarSubscription(subId: string): Promise<{ ok: boolean }> {
-  return request(`/api/calendar/subscriptions/${subId}`, { method: 'DELETE' }) as Promise<{ ok: boolean }>
-}
-
-export async function refreshCalendarAll(): Promise<{ refreshed: number; failed: number; total: number }> {
-  return request('/api/calendar/refresh', { method: 'POST' }) as Promise<{ refreshed: number; failed: number; total: number }>
-}
-
-export async function getCalendarTodayEvents(): Promise<{ events: CalendarEvent[] }> {
-  return request('/api/calendar/today') as Promise<{ events: CalendarEvent[] }>
-}
-
-export async function getCalendarUpcomingEvents(hours = 24): Promise<{ events: CalendarEvent[] }> {
-  return request(`/api/calendar/upcoming?hours=${hours}`) as Promise<{ events: CalendarEvent[] }>
-}
-
-export async function getCalendarCurrentMeeting(): Promise<{ meeting: CalendarEvent | null; in_meeting: boolean }> {
-  return request('/api/calendar/current-meeting') as Promise<{ meeting: CalendarEvent | null; in_meeting: boolean }>
-}
-
 // ─── P18-2: Git 集成 ───────────────────────────────
 
 export interface GitRepository {

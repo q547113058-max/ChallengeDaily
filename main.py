@@ -258,12 +258,6 @@ def main():
     collector.on_start()
     # P21: 延迟非关键启动任务到后台线程，加速主循环启动
     def _deferred_startup():
-        try:
-            import calendar_sync
-            calendar_sync.start_background_refresh()
-            logger.info("日历订阅后台刷新已启动")
-        except Exception as e:
-            logger.debug(f"日历后台刷新启动失败（不影响主流程）: {e}")
         # P21: 预热日报缓存（低优先级）
         try:
             from context_manager import build_weekly_context
