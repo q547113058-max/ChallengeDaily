@@ -68,16 +68,43 @@ let _server = null
 
 /**
  * 解析 TODO_SYNC 写令牌（不写死在源码里，仓库是公开的）。
- * 优先级：环境变量 → deploy/sync_agent.json（仓库外，不入库）。
+ * 打包后 __dirname 在 app.asar 内，相对路径推算不到 deploy/，
+ * 因此优先读 userData/backend-config.json 与 resources/backend-default.json。
  */
 let _cachedFileToken = null
 function _readFileToken() {
   if (_cachedFileToken !== null) return _cachedFileToken
   _cachedFileToken = ''
+  const fs = require('fs')
+  const path = require('path')
+  const pick = (obj) => (obj && typeof obj.token === 'string' && obj.token.trim() ? obj.token.trim() : '')
+
+  // 1) userData/backend-config.json
   try {
-    const path = require('path')
-    const fs = require('fs')
-    // __dirname = <repo>/client/electron  →  上三级 = D:\project\daily
+    const electron = require('electron')
+    if (electron.app && electron.app.getPath) {
+      const p = path.join(electron.app.getPath('userData'), 'backend-config.json')
+      if (fs.existsSync(p)) {
+        const t = pick(JSON.parse(fs.readFileSync(p, 'utf8')))
+        if (t) { _cachedFileToken = t; return _cachedFileToken }
+      }
+    }
+  } catch (_) { /* 独立 node 进程无 electron 模块 */ }
+
+  // 2) resources/backend-default.json（随包注入）
+  try {
+    const rp = process.resourcesPath
+    if (rp) {
+      const p = path.join(rp, 'backend-default.json')
+      if (fs.existsSync(p)) {
+        const t = pick(JSON.parse(fs.readFileSync(p, 'utf8')))
+        if (t) { _cachedFileToken = t; return _cachedFileToken }
+      }
+    }
+  } catch (_) { /* ignore */ }
+
+  // 3) 源码/开发环境：仓库外 deploy/sync_agent.json
+  try {
     const candidates = [
       process.env.CD_SYNC_CONFIG || '',
       path.join(__dirname, '..', '..', '..', 'deploy', 'sync_agent.json'),
@@ -85,11 +112,8 @@ function _readFileToken() {
     ].filter(Boolean)
     for (const p of candidates) {
       if (!fs.existsSync(p)) continue
-      const j = JSON.parse(fs.readFileSync(p, 'utf8'))
-      if (j && typeof j.token === 'string' && j.token.trim()) {
-        _cachedFileToken = j.token.trim()
-        break
-      }
+      const t = pick(JSON.parse(fs.readFileSync(p, 'utf8')))
+      if (t) { _cachedFileToken = t; break }
     }
   } catch (_) { /* 读不到就留空，由调用方决定降级 */ }
   return _cachedFileToken

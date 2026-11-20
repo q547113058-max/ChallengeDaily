@@ -28,23 +28,36 @@ const { exec } = require('child_process')
 // 云端不可达时才回退到本机桥接。
 const UPSTREAM_HOST = process.env.TODO_SYNC_HOST || '193.112.246.85'
 const UPSTREAM_PORT = Number(process.env.TODO_SYNC_PORT || 18766)
-// 写令牌不写死在源码里（仓库公开）；由环境变量或 deploy/sync_agent.json 注入
+// todo-sync write token (port 18766) is NOT the cloud tenant token.
+// Priority: env var -> deploy/todo_sync.json -> TodoSyncToken in settings.
 function _readSyncToken() {
   if (process.env.TODO_SYNC_TOKEN) return process.env.TODO_SYNC_TOKEN.trim()
+  var fs = require('fs')
+  var path = require('path')
+  function pick(o) { return (o && typeof o.token === 'string' && o.token.trim()) ? o.token.trim() : '' }
+  // candidate config files: dev checkout, next to the exe, userData
+  var cands = []
   try {
-    const path = require('path')
-    const fs = require('fs')
-    const cands = [
-      process.env.CD_SYNC_CONFIG || '',
-      path.join(__dirname, '..', '..', '..', 'deploy', 'sync_agent.json'),
-      path.join(__dirname, '..', '..', 'deploy', 'sync_agent.json'),
-    ].filter(Boolean)
-    for (const p of cands) {
-      if (!fs.existsSync(p)) continue
-      const j = JSON.parse(fs.readFileSync(p, 'utf8'))
-      if (j && typeof j.token === 'string' && j.token.trim()) return j.token.trim()
+    var electron = require('electron')
+    if (electron.app && electron.app.getPath) {
+      cands.push(path.join(electron.app.getPath('userData'), 'todo_sync.json'))
+    }
+    if (process.resourcesPath) {
+      cands.push(path.join(path.dirname(process.resourcesPath), 'deploy', 'todo_sync.json'))
+      cands.push(path.join(process.resourcesPath, 'todo_sync.json'))
     }
   } catch (_) { /* ignore */ }
+  cands.push(process.env.CD_TODO_CONFIG || '')
+  cands.push(path.join(__dirname, '..', '..', '..', 'deploy', 'todo_sync.json'))
+  cands.push(path.join(__dirname, '..', '..', 'deploy', 'todo_sync.json'))
+  cands = cands.filter(Boolean)
+  for (var i = 0; i < cands.length; i++) {
+    try {
+      if (!fs.existsSync(cands[i])) continue
+      var t = pick(JSON.parse(fs.readFileSync(cands[i], 'utf8')))
+      if (t) return t
+    } catch (_) { /* ignore */ }
+  }
   return ''
 }
 const UPSTREAM_TOKEN = _readSyncToken()

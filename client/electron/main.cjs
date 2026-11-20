@@ -10,6 +10,11 @@ if (!app) {
   process.exit(1)
 }
 
+// 忽略失效的系统代理：Windows 代理可能指向已关闭的本地端口（127.0.0.1:3067），
+// 会让渲染层 fetch 与 electron-updater 全部走死代理而超时/ERR_PROXY_CONNECTION_FAILED。
+// 客户端只连已知的云端地址，直接绕过系统代理最稳妥。
+try { app.commandLine.appendSwitch('no-proxy-server') } catch (_) {}
+
 const path = require('path')
 const { spawn, exec } = require('child_process')
 const http = require('http')
@@ -1469,6 +1474,15 @@ function _addNotification_dedup(title, body, type) {
 
 // ─── 应用生命周期 ────────────────────────────────────
 app.whenReady().then(async () => {
+  // 绕过失效的系统代理：Windows 代理设置可能指向一个已关闭的本地端口
+  // （如 127.0.0.1:3067），Electron 默认继承它会导致所有 API 请求超时、
+  // 在线更新报 ERR_PROXY_CONNECTION_FAILED。客户端只连已知云端地址，强制直连。
+  try {
+    await session.defaultSession.setProxy({ mode: 'direct' })
+    console.log('[Main] proxy forced to direct (ignore stale system proxy)')
+  } catch (e) {
+    console.warn('[Main] setProxy direct failed:', e?.message || e)
+  }
   // 安全守卫：即使 app.exit(0) 的时序出现异常，也不会在未获取锁的情况下启动后端
   // _alreadyRunning 对应应用层 PID 锁（CD_NO_SINGLETON=1 时 Chromium 锁被跳过）
   if (!gotTheLock || _alreadyRunning) {
