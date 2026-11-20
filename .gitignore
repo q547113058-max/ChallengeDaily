@@ -89,3 +89,7 @@ vite.config.js.timestamp-*
 .coverage
 htmlcov/
 coverage.xml
+
+# Local electron runtime copy (for Windows tray icon identity)
+runtime/
+
