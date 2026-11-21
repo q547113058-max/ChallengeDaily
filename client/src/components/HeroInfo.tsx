@@ -1,10 +1,7 @@
-import { useEffect, useMemo, useState, useCallback, useRef, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import dayjs from 'dayjs'
 import { Solar } from 'lunar-javascript'
-import { MapPin, Navigation, CloudSun, Cloud, CloudRain, Snowflake, Wind, Zap, Brain, RefreshCw, Sparkles } from 'lucide-react'
-import { request } from '../api/client'
-import { AI_REFRESH_MS } from '../config/refresh'
-import { useVisibleInterval } from '../hooks/useVisibleInterval'
+import { MapPin, Navigation, CloudSun, Cloud, CloudRain, Snowflake, Wind, Zap } from 'lucide-react'
 
 interface HeroInfoProps {
   todayDurationMin: number
@@ -14,22 +11,6 @@ interface WeatherInfo {
   temp: number
   code: number
   city?: string
-}
-
-interface InsightTag {
-  type: 'mood' | 'care' | 'achievement' | 'reminder'
-  text: string
-}
-
-interface InsightData {
-  summary: string
-  structured?: {
-    headline: string
-    mood: string
-    story: string
-    tags: InsightTag[]
-    tips: string[]
-  }
 }
 
 const WEEKDAYS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
@@ -85,42 +66,12 @@ const tzCity = (() => {
   }
 })()
 
-/** 把故事里的数字、时间、百分比高亮，方便一眼看到重点 */
-function highlightStory(text: string): ReactNode[] {
-  const result: ReactNode[] = []
-  const regex = /(\d{1,2}:\d{2})|(\d+\.?\d*)\s*(小时|分钟|条|%|\/100|h|min)/g
-  let lastIndex = 0
-  let match: RegExpExecArray | null
-  let key = 0
-  while ((match = regex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      result.push(<span key={key++}>{text.slice(lastIndex, match.index)}</span>)
-    }
-    if (match[1]) {
-      result.push(<span key={key++} className="text-purple-300 font-semibold">{match[1]}</span>)
-    } else {
-      result.push(<span key={key++} className="text-cd-green font-semibold">{match[2]}{match[3]}</span>)
-    }
-    lastIndex = match.index + match[0].length
-  }
-  if (lastIndex < text.length) {
-    result.push(<span key={key++}>{text.slice(lastIndex)}</span>)
-  }
-  return result
-}
-
 export default function HeroInfo({ todayDurationMin }: HeroInfoProps) {
   const [now, setNow] = useState(dayjs())
   const [weather, setWeather] = useState<WeatherInfo | null>(null)
   const [city, setCity] = useState<string>(tzCity)
   const [preciseLocation, setPreciseLocation] = useState<string>('')
   const [loadingWeather, setLoadingWeather] = useState(false)
-  const [insight, setInsight] = useState<InsightData | null>(null)
-  const [loadingInsight, setLoadingInsight] = useState(false)
-  // 用于在 setTimeout/setInterval 闭包中读取最新的 insight，避免陈旧闭包
-  const insightRef = useRef<InsightData | null>(null)
-  useEffect(() => { insightRef.current = insight }, [insight])
-
   // 实时更新时间 — 每秒刷新，显示 HH:mm:ss
   useEffect(() => {
     const timer = setInterval(() => {
@@ -434,36 +385,6 @@ export default function HeroInfo({ todayDurationMin }: HeroInfoProps) {
     return () => { cancelled = true }
   }, [])
 
-  // 获取 AI 洞察（基于真实活动数据的分析，非空话寄语）
-  // silent=true 时为后台轮询，不显示loading闪烁；silent=false 为用户主动刷新或首次加载
-  const fetchInsight = useCallback((force = false, silent = false) => {
-    if (!silent) setLoadingInsight(true)
-    const url = force ? '/api/ai/overview-summary?refresh=1' : '/api/ai/overview-summary'
-    // AI 生成可能耗时较长，给 30 秒超时
-    request(url, {}, 30000)
-      .then((raw) => {
-        const data = raw as InsightData
-        if (data.summary || data.structured) setInsight(data)
-      })
-      .catch((err) => {
-        console.error('[AI洞察] 获取失败:', err)
-      })
-      .finally(() => { if (!silent) setLoadingInsight(false) })
-  }, [])
-
-  useEffect(() => {
-    fetchInsight()
-    // 启动后 3 秒再拉一次，避免后端初始化未完成导致空数据
-    const retryTimer = setTimeout(() => {
-      // 通过 ref 读取最新值，避免闭包陈旧导致重复拉取
-      if (!insightRef.current) fetchInsight(false, true)
-    }, 3000)
-    return () => { clearTimeout(retryTimer) }
-  }, [fetchInsight])
-
-  // 5 分钟刷新一次（与后端缓存 TTL 对齐）；仅页面可见时运行，隐藏时定时器真正停止
-  useVisibleInterval(() => fetchInsight(false, true), AI_REFRESH_MS)
-
   // 日/周/月进度
   const progressData = useMemo(() => {
     const nowMin = now.hour() * 60 + now.minute()
@@ -556,80 +477,7 @@ export default function HeroInfo({ todayDurationMin }: HeroInfoProps) {
         <div className="h-10 w-px bg-cd-border shrink-0 hidden sm:block" />
       </div>
 
-      {/* 第二行：AI 洞察（温柔朋友风格） */}
-      <div className="mt-4">
-        <div className="flex items-center gap-1.5 mb-2">
-          <Brain size={16} className="text-cd-green" />
-          <span className="text-xs text-cd-green font-medium uppercase tracking-wider">AI 洞察</span>
-          {!loadingInsight && insight && (
-            <button onClick={() => fetchInsight(true)} className="text-cd-text-tertiary hover:text-cd-text transition" title="刷新">
-              <RefreshCw size={12} />
-            </button>
-          )}
-        </div>
-        {loadingInsight ? (
-          <p className="text-base text-cd-text-tertiary animate-pulse">正在分析今日工作数据...</p>
-        ) : insight ? (
-          <div className="rounded-2xl bg-gradient-to-br from-purple-500/10 via-indigo-500/10 to-blue-500/10 dark:from-[#1E1E2E] dark:to-[#252538] border border-purple-200/30 dark:border-white/5 p-4 shadow-sm">
-            {insight.structured ? (
-              <div className="space-y-4">
-                {/* 顶部：心情 emoji + headline */}
-                <div className="flex items-start gap-2.5">
-                  <span className="text-2xl shrink-0 leading-none mt-0.5">
-                    {insight.structured.mood === 'proud' && '🌟'}
-                    {insight.structured.mood === 'tired' && '😴'}
-                    {insight.structured.mood === 'focused' && '🎯'}
-                    {insight.structured.mood === 'balanced' && '☕'}
-                    {insight.structured.mood === 'scattered' && '🍃'}
-                    {insight.structured.mood === 'excited' && '✨'}
-                    {(!insight.structured.mood || insight.structured.mood === 'warm') && '🌸'}
-                  </span>
-                  <p className="text-xl text-cd-text font-semibold leading-snug">{insight.structured.headline || insight.summary}</p>
-                </div>
 
-                {/* 主体：朋友式小作文，字号加大、行距宽松，数字高亮 */}
-                {insight.structured.story && (
-                  <p className="text-lg text-cd-text-secondary leading-[1.8]">{highlightStory(insight.structured.story)}</p>
-                )}
-
-                {/* 可爱的情绪/关怀标签 */}
-                {insight.structured.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {insight.structured.tags.map((tag, idx) => {
-                      const styles = {
-                        mood: 'text-pink-300 bg-pink-400/10 border-pink-400/20',
-                        care: 'text-orange-300 bg-orange-400/10 border-orange-400/20',
-                        achievement: 'text-green-300 bg-green-400/10 border-green-400/20',
-                        reminder: 'text-sky-300 bg-sky-400/10 border-sky-400/20',
-                      }
-                      return (
-                        <span
-                          key={idx}
-                          className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium border ${styles[tag.type]}`}
-                        >
-                          {tag.text}
-                        </span>
-                      )
-                    })}
-                  </div>
-                )}
-
-                {/* 温柔小建议 */}
-                {insight.structured.tips.length > 0 && (
-                    <div className="flex items-start gap-2.5 pt-2 border-t border-purple-200/30 dark:border-white/5">
-                    <Sparkles size={16} className="shrink-0 mt-1 text-purple-500 dark:text-purple-400" />
-                    <p className="text-base text-purple-700 dark:text-purple-300 leading-relaxed">{insight.structured.tips[0]}</p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-lg text-cd-text leading-relaxed">{insight.summary}</p>
-            )}
-          </div>
-        ) : (
-          <p className="text-base text-cd-text-tertiary">配置 AI 后，这里会基于真实工作数据给出温柔洞察。</p>
-        )}
-      </div>
     </div>
   )
 }

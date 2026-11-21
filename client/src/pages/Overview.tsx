@@ -23,14 +23,12 @@ import {
   type RecentHeatmapDay,
 } from '../api/client'
 import {
-  TrendingUp, CalendarDays,
   Activity as ActivityIcon, Play, ArrowRight,
 } from 'lucide-react'
 import dayjs from 'dayjs'
 import { DATA_REFRESH_MS } from '../config/refresh'
 import { useVisibleInterval } from '../hooks/useVisibleInterval'
 import HeroInfo from '../components/HeroInfo'
-import EmotionalCare from '../components/EmotionalCare'
 import InfoTooltip, { METRIC_EXPLANATIONS } from '../components/InfoTooltip'
 
 function getDisplayAppName(appName: string): string {
@@ -320,22 +318,6 @@ export default function Overview() {
             <p className="text-3xl font-bold text-cd-text font-display tracking-tight">{peakPeriod ? rhythmShort[peakPeriod] || peakPeriod.split(' ')[0] : '-'}</p>
             <p className="text-xs text-cd-text-tertiary mt-0.5">主要分类 · {topCategory}</p>
           </div>
-        </div>
-
-        {/* 快捷入口 */}
-        <div className="flex items-center gap-3 mt-5">
-          <a href="#/timeline" className="text-sm text-cd-green hover:underline flex items-center gap-1">
-            <TrendingUp size={14} /> 查看完整时间线
-          </a>
-          <span className="text-cd-text-tertiary">·</span>
-          <a href="#/week-plan" className="text-sm text-cd-green hover:underline flex items-center gap-1">
-            <CalendarDays size={14} /> 前往周计划
-          </a>
-        </div>
-
-        {/* P8-2：情感化设计 — 每日一句 + 里程碑庆祝 + 低谷关怀 */}
-        <div className="mt-5">
-          <EmotionalCare />
         </div>
 
       </div>
