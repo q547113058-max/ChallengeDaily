@@ -21,18 +21,16 @@ const CLIENT = path.join(__dirname, '..')
 const TOKEN_FILE = path.join(__dirname, '..', '..', '..', 'deploy', 'sync_agent.json')
 const DIST_INDEX = path.join(CLIENT, 'dist', 'index.html')
 // Windows 11 的任务栏通知区域按 exe 路径识别托盘图标。
-// 实测只有 D:\Program Files\ChallengeDaily\ChallengeDaily.exe 在该系统上
-// 有通知区记录（IsPromoted=1），node_modules / runtime 路径均不会被系统接纳。
-// 因此优先使用 Program Files 下的 exe（内容是 electron 运行时，加载源码 app 目录）。
-const ELECTRON_PF = 'D:\\Program Files\\ChallengeDaily\\ChallengeDaily.exe'
+// 本机约定：不运行打包版安装目录，只用项目内的运行时 / node_modules。
+// 优先级：项目 runtime > node_modules（改名版 > 原生 electron.exe）。
+// 注意：曾经优先用 D:\Program Files\ChallengeDaily\ChallengeDaily.exe，但那正是
+// 打包版安装目录 —— 会造成「快捷方式指着源码版、实际却跑打包版」的混淆，已移除。
 const ELECTRON_RUNTIME = path.join(CLIENT, '..', 'runtime', 'ChallengeDaily.exe')
 const ELECTRON_NAMED = path.join(CLIENT, 'node_modules', 'electron', 'dist', 'ChallengeDaily.exe')
 const ELECTRON_DEFAULT = path.join(CLIENT, 'node_modules', 'electron', 'dist', 'electron.exe')
-const ELECTRON = fs.existsSync(ELECTRON_PF)
-  ? ELECTRON_PF
-  : (fs.existsSync(ELECTRON_RUNTIME)
-    ? ELECTRON_RUNTIME
-    : (fs.existsSync(ELECTRON_NAMED) ? ELECTRON_NAMED : ELECTRON_DEFAULT))
+const ELECTRON = fs.existsSync(ELECTRON_RUNTIME)
+  ? ELECTRON_RUNTIME
+  : (fs.existsSync(ELECTRON_NAMED) ? ELECTRON_NAMED : ELECTRON_DEFAULT)
 
 const args = process.argv.slice(2)
 const dryRun = args.includes('--dry-run')

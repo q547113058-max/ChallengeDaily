@@ -74,11 +74,14 @@ jobs:
           CD_BACKEND_TOKEN: ${{ secrets.CD_BACKEND_TOKEN }}
           CD_UPDATES_URL: ${{ secrets.CD_UPDATES_URL }}
         run: |
-          if ($env:CD_BACKEND_URL -and $env:CD_BACKEND_TOKEN) {
+          if ($env:CD_BACKEND_URL) {
+            # 注意：不再把 CD_BACKEND_TOKEN 打进随包默认配置。
+            # 预置 token 会让客户端「已登录」，从而跳过租户登录页。
+            # 从 3.4.17 起改为首次启动强制走租户登录（用户输入 ID+密码换取 token）。
             $cfg = @{
               mode  = 'direct'
               url   = $env:CD_BACKEND_URL.TrimEnd('/')
-              token = $env:CD_BACKEND_TOKEN
+              token = ''
             } | ConvertTo-Json -Depth 5
             # 自建更新源（可选）：客户端从该地址的 latest.yml 检查更新
             if ($env:CD_UPDATES_URL) {

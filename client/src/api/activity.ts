@@ -102,30 +102,38 @@ export function tenantLogout(): void {
  *  - 未登录（401）→ true
  */
 export async function isTenantLoginRequired(): Promise<boolean> {
+  // 唯一的登录凭据是本地会话 cd_tenant_session_v1（用户输入租户 ID+密码后写入）。
+  // 随包 backend-default.json / backend-config.json 里的 token 不再视为已登录，
+  // 避免预置 token 让所有机器「静默登录」、跳过租户登录页。
+  let sessionToken = ''
+  try {
+    const s = JSON.parse(localStorage.getItem('cd_tenant_session_v1') || 'null')
+    if (s && s.token && s.tenant_id) sessionToken = String(s.token).trim()
+  } catch { /* ignore */ }
+  if (!sessionToken) return true   // 没有有效会话 → 必须登录
+
   try {
     await ensureBaseUrl()
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), 8000)
     let res: Response
     try {
-      const token = await getApiToken()
       res = await fetch(resolveApiUrl('/api/tenant/me'), {
-        headers: token ? { 'X-API-Token': token } : {},
+        headers: { 'X-API-Token': sessionToken },
         signal: controller.signal,
       })
     } finally {
       clearTimeout(timer)
     }
-    if (res.status === 404) return false   // 旧服务端无此接口
+    if (res.status === 404) return false          // 旧服务端无此接口，放行
+    if (res.status === 401) return true           // 会话失效 → 重新登录
     if (res.ok) {
       const j = await res.json().catch(() => ({}))
-      // admin 或已登录租户都算通过
       return !(j.role === 'tenant' || j.role === 'admin')
     }
-    if (res.status === 401) return true     // 需要登录
     return false
   } catch {
-    return false   // 网络异常不拦截，交给健康检查处理
+    return false   // 网络异常不拦截
   }
 }
 
