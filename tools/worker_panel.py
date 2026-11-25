@@ -41,6 +41,7 @@ DEFAULT_CFG = {
     "workdir": "",
     "poll_interval": 2,
     "timeout": 300,
+    "auto_start": True,
 }
 
 # 配色
@@ -92,6 +93,10 @@ class WorkerPanel:
 
         self._build_ui()
         self._pump_logs()
+        # 自动启动：配置 auto_start 为真时（开机自启场景）直接开始工作，
+        # 无需用户手动点「启动节点」。
+        if self.cfg.get("auto_start"):
+            self.root.after(600, self.start)
 
     # ─── UI ───────────────────────────────────────────
     def _build_ui(self):
@@ -175,8 +180,56 @@ class WorkerPanel:
                        activebackground=C_BG, activeforeground=C_TEXT,
                        font=("Microsoft YaHei UI", 9)).pack(side="left", padx=(14, 0))
 
-        tk.Label(bot, text="v1.0.0", bg=C_BG, fg="#4b4b5a",
+        self.btn_auto = tk.Button(
+            bot, text="开机自启", command=self.toggle_autostart,
+            bg=C_CARD, fg=C_TEXT, relief="flat", cursor="hand2",
+            font=("Microsoft YaHei UI", 9), padx=12, pady=8,
+            activebackground="#33334a", activeforeground=C_TEXT, bd=0)
+        self.btn_auto.pack(side="left", padx=(10, 0))
+        self._refresh_autostart_label()
+
+        tk.Label(bot, text="v1.0.1", bg=C_BG, fg="#4b4b5a",
                  font=("Consolas", 8)).pack(side="right")
+
+    # ─── 开机自启 ──────────────────────────────────────
+    def _autostart_cmd(self):
+        return 'schtasks /Query /TN "ChallengeWorker" >nul 2>&1'
+
+    def _is_autostart_on(self):
+        try:
+            return subprocess.run(self._autostart_cmd(), shell=True,
+                                  stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL).returncode == 0
+        except Exception:
+            return False
+
+    def _refresh_autostart_label(self):
+        try:
+            on = self._is_autostart_on()
+            self.btn_auto.configure(
+                text="自启:开" if on else "开机自启",
+                bg=C_GREEN if on else C_CARD,
+                fg="#0b1a10" if on else C_TEXT)
+        except Exception:
+            pass
+
+    def toggle_autostart(self):
+        exe = os.path.abspath(sys.argv[0])
+        if self._is_autostart_on():
+            subprocess.run('schtasks /Delete /TN "ChallengeWorker" /F',
+                           shell=True, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
+            self.log_line("已关闭开机自启", "warn")
+        else:
+            tr = '"%s"' % exe
+            r = subprocess.run(
+                'schtasks /Create /TN "ChallengeWorker" /TR %s /SC ONLOGON /RL HIGHEST /F /DELAY 0000:20' % tr,
+                shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            if r.returncode == 0:
+                self.log_line("已开启开机自启（登录后 20 秒自动运行）", "ok")
+            else:
+                self.log_line("自启设置失败，请用管理员身份运行", "err")
+        self._refresh_autostart_label()
 
     # ─── 日志 ──────────────────────────────────────────
     def log_line(self, msg, tag=None):
@@ -293,29 +346,13 @@ class WorkerPanel:
                 cmd = task.get("cmd", "")
                 self.task_count += 1
                 self.log_line("收到任务 #%d: %s" % (self.task_count, cmd), "warn")
-                self._set_status("执行中…", C_YELLOW)
-                self.lbl_stat.configure(text="已完成 %d 个任务" % self.task_count)
 
-                result = self._run_cmd(cmd, workdir, int(task.get("timeout") or timeout))
-                self._api("/api/worker/result", {
-                    "task_id": tid, "worker_id": wid,
-                    "result": result, "ok": result.get("code") == 0,
-                })
-
-                out = (result.get("stdout") or "").strip()
-                if out:
-                    for line in out.splitlines()[:8]:
-                        self.log_line("  │ " + line[:200])
-                if result.get("code") == 0:
-                    self.log_line("  └ 完成 (exit 0)", "ok")
-                else:
-                    self.log_line("  └ 结束 (exit %s)" % result.get("code"), "err")
-                    err = (result.get("stderr") or "").strip()
-                    if err:
-                        for line in err.splitlines()[:4]:
-                            self.log_line("  ! " + line[:200], "err")
-
-                self._set_status("在线 · 等待任务", C_GREEN)
+                # 关键：命令放到独立线程执行，绝不阻塞 poll 循环。
+                # 否则长命令（如启动常驻服务）会占住心跳，节点被判离线。
+                threading.Thread(
+                    target=self._exec_task,
+                    args=(tid, wid, cmd, workdir, int(task.get("timeout") or timeout)),
+                    daemon=True).start()
             except Exception as e:
                 if self.stop_event.is_set():
                     break
@@ -323,6 +360,33 @@ class WorkerPanel:
                 self.log_line("连接异常: " + msg[:120], "dim")
                 self._set_status("连接中断，重试中…", C_RED)
                 time.sleep(max(3, poll))
+
+    def _exec_task(self, tid, wid, cmd, workdir, timeout):
+        """在独立线程里执行任务并回传，不阻塞 poll 心跳循环。"""
+        try:
+            self._set_status("执行中…", C_YELLOW)
+            result = self._run_cmd(cmd, workdir, timeout)
+            self._api("/api/worker/result", {
+                "task_id": tid, "worker_id": wid,
+                "result": result, "ok": result.get("code") == 0,
+            })
+            out = (result.get("stdout") or "").strip()
+            if out:
+                for line in out.splitlines()[:8]:
+                    self.log_line("  │ " + line[:200])
+            if result.get("code") == 0:
+                self.log_line("  └ 完成 (exit 0)", "ok")
+            else:
+                self.log_line("  └ 结束 (exit %s)" % result.get("code"), "err")
+                err = (result.get("stderr") or "").strip()
+                if err:
+                    for line in err.splitlines()[:4]:
+                        self.log_line("  ! " + line[:200], "err")
+            self.lbl_stat.configure(text="已完成 %d 个任务" % self.task_count)
+            self._set_status("在线 · 等待任务", C_GREEN)
+        except Exception as e:
+            self.log_line("任务执行异常: " + str(e)[:120], "err")
+            self._set_status("在线 · 等待任务", C_GREEN)
 
 
 def main():
