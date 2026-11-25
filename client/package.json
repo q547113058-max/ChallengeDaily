@@ -129,6 +129,10 @@
     ],
     "extraResources": [
       {
+        "from": "backend-bin/backend.exe",
+        "to": "backend/backend.exe"
+      },
+      {
         "from": "../main.py",
         "to": "backend/main.py"
       },

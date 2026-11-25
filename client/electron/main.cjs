@@ -337,6 +337,41 @@ async function _waitForTokenFile(timeoutMs = 10000) {
 let _backendStartPromise = null
 
 // ─── 启动 Python 后端 ────────────────────────────
+// 拉起随包内置的采集器 backend.exe（单文件，无需外部 Python）。
+// 仅打包环境有效；用单例锁避免重复启动。
+let _collectorProc = null
+function startEmbeddedCollector() {
+  if (!app.isPackaged) { console.log('[Collector] skip in dev mode'); return }
+  const exe = path.join(process.resourcesPath, 'backend', 'backend.exe')
+  if (!fs.existsSync(exe)) { console.log('[Collector] no embedded backend.exe, skip'); return }
+  // 已运行则跳过
+  try {
+    const out = execFileSync('tasklist', ['/FI', 'IMAGENAME eq backend.exe', '/NH'],
+      { encoding: 'utf8', windowsHide: true, timeout: 5000 })
+    if (/backend\.exe/i.test(out)) { console.log('[Collector] already running'); return }
+  } catch (_) {}
+  const dataDir = path.join(app.getPath('userData'), 'backend-data')
+  try { fs.mkdirSync(dataDir, { recursive: true }) } catch (_) {}
+  const env = { ...process.env,
+    CHALLENGE_DAILY_DATA_DIR: dataDir,
+    PYTHONIOENCODING: 'utf-8', PYTHONUNBUFFERED: '1', PORT: '58888' }
+  _collectorProc = spawn(exe, [], {
+    cwd: path.dirname(exe), env, windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe'] })
+  console.log('[Collector] started embedded backend.exe pid=', _collectorProc.pid)
+  if (_collectorProc.stdout) _collectorProc.stdout.on('data', d => {
+    const t = String(d).toString('utf8')
+    if (/API|HTTP|error|Error|Traceback/i.test(t)) console.log('[Collector]', t.slice(0, 200).trim())
+  })
+  if (_collectorProc.stderr) _collectorProc.stderr.on('data', d => {
+    console.log('[Collector:err]', String(d).toString('utf8').slice(0, 200).trim())
+  })
+  _collectorProc.on('exit', (code) => {
+    console.log('[Collector] exited code=', code)
+    _collectorProc = null
+  })
+}
+
 async function startBackend() {
   console.log('[Main] startBackend() called')
   // 并发调用合并为同一个启动流程，避免 health check 重启与 app ready 同时 spawn
@@ -362,6 +397,15 @@ async function _doStartBackend() {
       await bridgeProxy.start({}, BACKEND_PORT, (...a) => console.log(...a))
     } catch (e) {
       console.error('[Main] bridge proxy failed to start (auto-todo board disabled):', e?.message || e)
+    }
+    // direct 模式此前完全不启动本地采集器，导致「软件内没有采集」。
+    // 从 3.4.18 起：若随包带了内置 backend.exe（PyInstaller 单文件，无需 Python），
+    // 就自动拉起它负责本机采集与云端同步。它监听独立端口（58888），
+    // 不影响渲染层直连云端的 5173/80。
+    try {
+      startEmbeddedCollector()
+    } catch (e) {
+      console.error('[Main] embedded collector start failed:', e?.message || e)
     }
     return
   }

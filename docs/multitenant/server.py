@@ -232,12 +232,12 @@ SETTINGS_KEY = "cd_settings_json"  # 设置持久化到 client-state（按租户
 
 # 设置默认值（与前端 BackendSettings 对齐）
 SETTINGS_DEFAULTS = {
-    "exclude_apps": [], "screenshot_interval_sec": 60,
+    "exclude_apps": ["1password", "bitwarden", "keepass"],
+    "screenshot_interval_sec": 20,
     "work_start_hour": 9, "work_end_hour": 18,
-    "custom_report_instructions": "", "ai_enabled": False,
+    "custom_report_instructions": "", "ai_enabled": True,
     "ai_base_url": "https://open.bigmodel.cn/api/paas/v4",
-    "ai_vision_model": "glm-4.1v-thinking-flash", "ai_text_model": "glm-4-flash",
-    "birthday": "", "life_expectancy": 80,
+    "ai_vision_model": "glm-4.1v-thinking-flash", "ai_text_model": "glm-4.7-flash",
 }
 
 
@@ -623,7 +623,11 @@ class Handler(BaseHTTPRequestHandler):
             if not self._auth():
                 return
             saved = load_saved_settings()
-            return self._json(200, dict(saved, settings=saved), extra=self._no_store())
+            # 安全：绝不回传 ai_api_key 明文，只给「是否已配置」标志
+            safe = dict(saved)
+            safe["ai_api_key_set"] = bool(saved.get("ai_api_key"))
+            safe.pop("ai_api_key", None)
+            return self._json(200, dict(safe, settings=safe), extra=self._no_store())
 
         # server-only 模式：对少数未实现接口返回占位，避免满屏报错
         if path in SERVER_ONLY_DEFAULTS:

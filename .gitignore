@@ -93,3 +93,20 @@ coverage.xml
 # Local electron runtime copy (for Windows tray icon identity)
 runtime/
 
+
+# Worker build outputs
+tools/dist*/
+tools/build*/
+tools/panel-test/
+tools/runtime-tmp/
+tools/panel-release/
+tools/release/
+tools/*.zip
+tools/remote_ps.py
+tools/remote_run.py
+tools/rs.py
+tools/trigger_start.py
+tools/trigger_update.py
+tools/worker_config.json
+start-source.vbs
+
