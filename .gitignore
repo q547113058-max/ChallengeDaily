@@ -110,3 +110,4 @@ tools/trigger_update.py
 tools/worker_config.json
 start-source.vbs
 
+tools/diagnose-client.cmd
